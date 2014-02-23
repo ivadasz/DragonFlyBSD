@@ -42,9 +42,9 @@
 #define AMD0F_STA_SFID(x)		(((x) >> 8) & 0x3f)
 #define AMD0F_STA_MFID(x)		(((x) >> 16) & 0x3f)
 #define AMD0F_STA_PENDING(x)		(((x) >> 31) & 0x01)
-#define AMD0F_STA_CVID(x)		(((x) >> 32) & 0x1f)
-#define AMD0F_STA_SVID(x)		(((x) >> 40) & 0x1f)
-#define AMD0F_STA_MVID(x)		(((x) >> 48) & 0x1f)
+#define AMD0F_STA_CVID(x)		(((x) >> 32) & 0x3f)
+#define AMD0F_STA_SVID(x)		(((x) >> 40) & 0x3f)
+#define AMD0F_STA_MVID(x)		(((x) >> 48) & 0x3f)
 
 #define AMD0F_WRITE_FIDVID(fid, vid, ctrl) \
 	wrmsr(AMD0F_MSR_FIDVID_CTL, \
