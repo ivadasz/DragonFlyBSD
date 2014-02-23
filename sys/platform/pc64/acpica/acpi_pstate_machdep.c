@@ -306,6 +306,7 @@ acpi_pst_amd0f_check_pstates(const struct acpi_pstate *pstates, int npstates)
 
 		fid = AMD0F_PST_CTL_FID(p->st_cval);
 		vid = AMD0F_PST_CTL_VID(p->st_cval);
+		vid |= AMD0F_PST_ST_VID(p->st_sval) & (1 << 5);
 
 		if (i == 0) {
 			if (vid != fv_max.vid) {
@@ -377,6 +378,7 @@ acpi_pst_amd0f_set_pstate(const struct acpi_pst_res *ctrl __unused,
 
 	fv.fid = AMD0F_PST_CTL_FID(pstate->st_cval);
 	fv.vid = AMD0F_PST_CTL_VID(pstate->st_cval);
+	fv.vid |= AMD0F_PST_ST_VID(pstate->st_sval) & (1 << 5);
 
 	xsit.rvo = AMD0F_PST_CTL_RVO(pstate->st_cval);
 	xsit.mvs = AMD0F_PST_CTL_MVS(pstate->st_cval);
