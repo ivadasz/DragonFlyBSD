@@ -154,7 +154,7 @@ sys_linux_signal(struct linux_signal_args *args)
 	error = kern_sigaction(sig, &nsa, &osa);
 
 	bsd_to_linux_sigaction(&osa, &linux_osa);
-	args->sysmsg_result = (int) linux_osa.lsa_handler;
+	args->sysmsg_result = (intptr_t) linux_osa.lsa_handler;
 	return (error);
 }
 

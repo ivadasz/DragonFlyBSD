@@ -41,4 +41,16 @@ struct sysent linux_sysent[] = {
 	{ AS(exit_args), (sy_call_t *)sys_exit },	/* 19 = exit */
 	{ 0, (sy_call_t *)sys_nosys },			/* 20 = writev */
 	{ AS(linux_execve_args), (sy_call_t *)sys_linux_execve },	/* 21 = linux_execve */
+	{ AS(linux_sigreturn_args), (sy_call_t *)sys_linux_sigreturn },	/* 22 = linux_sigreturn */
+	{ AS(linux_rt_sigreturn_args), (sy_call_t *)sys_linux_rt_sigreturn },	/* 23 = linux_rt_sigreturn */
+	{ AS(linux_signal_args), (sy_call_t *)sys_linux_signal },	/* 24 = linux_signal */
+	{ AS(linux_rt_sigaction_args), (sy_call_t *)sys_linux_rt_sigaction },	/* 25 = linux_rt_sigaction */
+	{ AS(linux_sigprocmask_args), (sy_call_t *)sys_linux_sigprocmask },	/* 26 = linux_sigprocmask */
+	{ AS(linux_rt_sigprocmask_args), (sy_call_t *)sys_linux_rt_sigprocmask },	/* 27 = linux_rt_sigprocmask */
+	{ 0, (sy_call_t *)sys_linux_sgetmask },		/* 28 = linux_sgetmask */
+	{ AS(linux_ssetmask_args), (sy_call_t *)sys_linux_ssetmask },	/* 29 = linux_ssetmask */
+	{ AS(linux_sigpending_args), (sy_call_t *)sys_linux_sigpending },	/* 30 = linux_sigpending */
+	{ AS(linux_kill_args), (sy_call_t *)sys_linux_kill },	/* 31 = linux_kill */
+	{ AS(linux_tgkill_args), (sy_call_t *)sys_linux_tgkill },	/* 32 = linux_tgkill */
+	{ AS(linux_tkill_args), (sy_call_t *)sys_linux_tkill },	/* 33 = linux_tkill */
 };

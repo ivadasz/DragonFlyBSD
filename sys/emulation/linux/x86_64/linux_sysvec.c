@@ -102,7 +102,6 @@ static boolean_t linux_trans_osrel(const Elf_Note *note, int32_t *osrel);
 static eventhandler_tag linux_exec_tag;
 static eventhandler_tag linux_exit_tag;
 
-#if 0
 /*
  * Linux syscalls return negative errno's, we do positive and map them
  */
@@ -117,7 +116,6 @@ static int bsd_to_linux_errno[ELAST + 1] = {
 	-116, -66,  -6,  -6,  -6,  -6,  -6, -37, -38,  -9,
   	-6, -6, -43, -42, -75, -6, -84
 };
-#endif
 
 int bsd_to_linux_signal[LINUX_SIGTBLSZ] = {
 	LINUX_SIGHUP, LINUX_SIGINT, LINUX_SIGQUIT, LINUX_SIGILL,
@@ -141,7 +139,6 @@ int linux_to_bsd_signal[LINUX_SIGTBLSZ] = {
 	SIGIO, SIGURG, SIGSYS
 };
 
-#if 0
 #define LINUX_T_UNKNOWN  255
 static int _bsd_to_linux_trapcode[] = {
 	LINUX_T_UNKNOWN,	/* 0 */
@@ -180,13 +177,11 @@ static int _bsd_to_linux_trapcode[] = {
     ((code)<NELEM(_bsd_to_linux_trapcode)? \
      _bsd_to_linux_trapcode[(code)]: \
      LINUX_T_UNKNOWN)
-#endif
 
 /*
  * If FreeBSD & Linux have a difference of opinion about what a trap
  * means, deal with it here.
  */
-#if 0
 static int
 translate_traps(int signal, int trap_code)
 {
@@ -202,9 +197,7 @@ translate_traps(int signal, int trap_code)
 		return signal;
 	}
 }
-#endif
 
-#if 0
 static int
 linux_fixup(register_t **stack_base, struct image_params *imgp)
 {
@@ -220,7 +213,6 @@ linux_fixup(register_t **stack_base, struct image_params *imgp)
 	**stack_base = imgp->args->argc;
 	return 0;
 }
-#endif
 
 static int
 elf_linux_fixup(register_t **stack_base, struct image_params *imgp)
@@ -257,7 +249,6 @@ elf_linux_fixup(register_t **stack_base, struct image_params *imgp)
 extern int _ucodesel, _udatasel;
 extern unsigned long linux_sznonrtsigcode;
 
-#if 0
 static void
 linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 {
@@ -284,7 +275,7 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 		    lp->lwp_sigstk.ss_size - sizeof(struct l_rt_sigframe));
 		lp->lwp_sigstk.ss_flags |= SS_ONSTACK;
 	} else
-		fp = (struct l_rt_sigframe *)regs->tf_esp - 1;
+		fp = (struct l_rt_sigframe *)regs->tf_rsp - 1;
 
 	/*
 	 * grow() will return FALSE if the fp will not fit inside the stack
@@ -342,21 +333,23 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	bsd_to_linux_sigset(mask, &frame.sf_sc.uc_sigmask);
 
 	frame.sf_sc.uc_mcontext.sc_mask   = frame.sf_sc.uc_sigmask.__bits[0];
+#if 0
 	frame.sf_sc.uc_mcontext.sc_gs     = regs->tf_gs;
 	frame.sf_sc.uc_mcontext.sc_fs     = regs->tf_fs;
 	frame.sf_sc.uc_mcontext.sc_es     = regs->tf_es;
 	frame.sf_sc.uc_mcontext.sc_ds     = regs->tf_ds;
-	frame.sf_sc.uc_mcontext.sc_edi    = regs->tf_edi;
-	frame.sf_sc.uc_mcontext.sc_esi    = regs->tf_esi;
-	frame.sf_sc.uc_mcontext.sc_ebp    = regs->tf_ebp;
-	frame.sf_sc.uc_mcontext.sc_ebx    = regs->tf_ebx;
-	frame.sf_sc.uc_mcontext.sc_edx    = regs->tf_edx;
-	frame.sf_sc.uc_mcontext.sc_ecx    = regs->tf_ecx;
-	frame.sf_sc.uc_mcontext.sc_eax    = regs->tf_eax;
-	frame.sf_sc.uc_mcontext.sc_eip    = regs->tf_eip;
+#endif
+	frame.sf_sc.uc_mcontext.sc_rdi    = regs->tf_rdi;
+	frame.sf_sc.uc_mcontext.sc_rsi    = regs->tf_rsi;
+	frame.sf_sc.uc_mcontext.sc_rbp    = regs->tf_rbp;
+	frame.sf_sc.uc_mcontext.sc_rbx    = regs->tf_rbx;
+	frame.sf_sc.uc_mcontext.sc_rdx    = regs->tf_rdx;
+	frame.sf_sc.uc_mcontext.sc_rcx    = regs->tf_rcx;
+	frame.sf_sc.uc_mcontext.sc_rax    = regs->tf_rax;
+	frame.sf_sc.uc_mcontext.sc_rip    = regs->tf_rip;
 	frame.sf_sc.uc_mcontext.sc_cs     = regs->tf_cs;
-	frame.sf_sc.uc_mcontext.sc_eflags = regs->tf_eflags;
-	frame.sf_sc.uc_mcontext.sc_esp_at_signal = regs->tf_esp;
+	frame.sf_sc.uc_mcontext.sc_eflags = regs->tf_rflags;
+	frame.sf_sc.uc_mcontext.sc_rsp_at_signal = regs->tf_rsp;
 	frame.sf_sc.uc_mcontext.sc_ss     = regs->tf_ss;
 	frame.sf_sc.uc_mcontext.sc_err    = regs->tf_err;
 	frame.sf_sc.uc_mcontext.sc_trapno = bsd_to_linux_trapcode(code);
@@ -380,16 +373,17 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	/*
 	 * Build context to run handler in.
 	 */
-	regs->tf_esp = (int)fp;
-	regs->tf_eip = PS_STRINGS - *(p->p_sysent->sv_szsigcode) + 
+	regs->tf_rsp = (intptr_t)fp;
+	regs->tf_rip = PS_STRINGS - *(p->p_sysent->sv_szsigcode) + 
 	    linux_sznonrtsigcode;
 
 	/*
 	 * i386 abi specifies that the direction flag must be cleared
 	 * on function entry
 	 */
-	regs->tf_eflags &= ~(PSL_T | PSL_VM | PSL_D);
+	regs->tf_rflags &= ~(PSL_T | PSL_VM_UNSUPP | PSL_D);
 
+#if 0
 	regs->tf_cs = _ucodesel;
 	regs->tf_ds = _udatasel;
 	regs->tf_es = _udatasel;
@@ -399,6 +393,7 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	regs->tf_gs = _udatasel;
 	*/
 	regs->tf_ss = _udatasel;
+#endif
 	clear_quickret();
 }
 
@@ -448,7 +443,7 @@ linux_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 		    lp->lwp_sigstk.ss_size - sizeof(struct l_sigframe));
 		lp->lwp_sigstk.ss_flags |= SS_ONSTACK;
 	} else
-		fp = (struct l_sigframe *)regs->tf_esp - 1;
+		fp = (struct l_sigframe *)regs->tf_rsp - 1;
 
 	/*
 	 * grow() will return FALSE if the fp will not fit inside the stack
@@ -486,21 +481,23 @@ linux_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	 * Build the signal context to be used by sigreturn.
 	 */
 	frame.sf_sc.sc_mask   = lmask.__bits[0];
+#if 0
 	frame.sf_sc.sc_gs     = regs->tf_gs;
 	frame.sf_sc.sc_fs     = regs->tf_fs;
 	frame.sf_sc.sc_es     = regs->tf_es;
 	frame.sf_sc.sc_ds     = regs->tf_ds;
-	frame.sf_sc.sc_edi    = regs->tf_edi;
-	frame.sf_sc.sc_esi    = regs->tf_esi;
-	frame.sf_sc.sc_ebp    = regs->tf_ebp;
-	frame.sf_sc.sc_ebx    = regs->tf_ebx;
-	frame.sf_sc.sc_edx    = regs->tf_edx;
-	frame.sf_sc.sc_ecx    = regs->tf_ecx;
-	frame.sf_sc.sc_eax    = regs->tf_eax;
-	frame.sf_sc.sc_eip    = regs->tf_eip;
+#endif
+	frame.sf_sc.sc_rdi    = regs->tf_rdi;
+	frame.sf_sc.sc_rsi    = regs->tf_rsi;
+	frame.sf_sc.sc_rbp    = regs->tf_rbp;
+	frame.sf_sc.sc_rbx    = regs->tf_rbx;
+	frame.sf_sc.sc_rdx    = regs->tf_rdx;
+	frame.sf_sc.sc_rcx    = regs->tf_rcx;
+	frame.sf_sc.sc_rax    = regs->tf_rax;
+	frame.sf_sc.sc_rip    = regs->tf_rip;
 	frame.sf_sc.sc_cs     = regs->tf_cs;
-	frame.sf_sc.sc_eflags = regs->tf_eflags;
-	frame.sf_sc.sc_esp_at_signal = regs->tf_esp;
+	frame.sf_sc.sc_eflags = regs->tf_rflags;
+	frame.sf_sc.sc_rsp_at_signal = regs->tf_rsp;
 	frame.sf_sc.sc_ss     = regs->tf_ss;
 	frame.sf_sc.sc_err    = regs->tf_err;
 	frame.sf_sc.sc_trapno = bsd_to_linux_trapcode(code);
@@ -522,18 +519,20 @@ linux_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	/*
 	 * Build context to run handler in.
 	 */
-	regs->tf_esp = (int)fp;
-	regs->tf_eip = PS_STRINGS - *(p->p_sysent->sv_szsigcode);
+	regs->tf_rsp = (intptr_t)fp;
+	regs->tf_rip = PS_STRINGS - *(p->p_sysent->sv_szsigcode);
 
 	/*
 	 * i386 abi specifies that the direction flag must be cleared
 	 * on function entry
 	 */
-	regs->tf_eflags &= ~(PSL_T | PSL_VM | PSL_D);
+	regs->tf_rflags &= ~(PSL_T | PSL_VM_UNSUPP | PSL_D);
 
 	regs->tf_cs = _ucodesel;
+#if 0
 	regs->tf_ds = _udatasel;
 	regs->tf_es = _udatasel;
+#endif
 	/* Allow %fs and %gs to be inherited by the signal handler */
 	/*
 	regs->tf_fs = _udatasel;
@@ -593,7 +592,7 @@ sys_linux_sigreturn(struct linux_sigreturn_args *args)
 	 * bit at worst causes one more or one less debugger trap, so
 	 * allowing it is fairly harmless.
 	 */
-	if (!EFLAGS_SECURE(eflags & ~PSL_RF, regs->tf_eflags & ~PSL_RF)) {
+	if (!EFLAGS_SECURE(eflags & ~PSL_RF, regs->tf_rflags & ~PSL_RF)) {
     		return(EINVAL);
 	}
 
@@ -619,20 +618,22 @@ sys_linux_sigreturn(struct linux_sigreturn_args *args)
 	 * Restore signal context.
 	 */
 	/* %gs was restored by the trampoline. */
+#if 0
 	regs->tf_fs     = frame.sf_sc.sc_fs;
 	regs->tf_es     = frame.sf_sc.sc_es;
 	regs->tf_ds     = frame.sf_sc.sc_ds;
-	regs->tf_edi    = frame.sf_sc.sc_edi;
-	regs->tf_esi    = frame.sf_sc.sc_esi;
-	regs->tf_ebp    = frame.sf_sc.sc_ebp;
-	regs->tf_ebx    = frame.sf_sc.sc_ebx;
-	regs->tf_edx    = frame.sf_sc.sc_edx;
-	regs->tf_ecx    = frame.sf_sc.sc_ecx;
-	regs->tf_eax    = frame.sf_sc.sc_eax;
-	regs->tf_eip    = frame.sf_sc.sc_eip;
+#endif
+	regs->tf_rdi    = frame.sf_sc.sc_rdi;
+	regs->tf_rsi    = frame.sf_sc.sc_rsi;
+	regs->tf_rbp    = frame.sf_sc.sc_rbp;
+	regs->tf_rbx    = frame.sf_sc.sc_rbx;
+	regs->tf_rdx    = frame.sf_sc.sc_rdx;
+	regs->tf_rcx    = frame.sf_sc.sc_rcx;
+	regs->tf_rax    = frame.sf_sc.sc_rax;
+	regs->tf_rip    = frame.sf_sc.sc_rip;
 	regs->tf_cs     = frame.sf_sc.sc_cs;
-	regs->tf_eflags = eflags;
-	regs->tf_esp    = frame.sf_sc.sc_esp_at_signal;
+	regs->tf_rflags = eflags;
+	regs->tf_rsp    = frame.sf_sc.sc_rsp_at_signal;
 	regs->tf_ss     = frame.sf_sc.sc_ss;
 	clear_quickret();
 
@@ -693,7 +694,7 @@ sys_linux_rt_sigreturn(struct linux_rt_sigreturn_args *args)
 	 * bit at worst causes one more or one less debugger trap, so
 	 * allowing it is fairly harmless.
 	 */
-	if (!EFLAGS_SECURE(eflags & ~PSL_RF, regs->tf_eflags & ~PSL_RF)) {
+	if (!EFLAGS_SECURE(eflags & ~PSL_RF, regs->tf_rflags & ~PSL_RF)) {
     		return(EINVAL);
 	}
 
@@ -716,20 +717,22 @@ sys_linux_rt_sigreturn(struct linux_rt_sigreturn_args *args)
 	 * Restore signal context
 	 */
 	/* %gs was restored by the trampoline. */
+#if 0
 	regs->tf_fs     = context->sc_fs;
 	regs->tf_es     = context->sc_es;
 	regs->tf_ds     = context->sc_ds;
-	regs->tf_edi    = context->sc_edi;
-	regs->tf_esi    = context->sc_esi;
-	regs->tf_ebp    = context->sc_ebp;
-	regs->tf_ebx    = context->sc_ebx;
-	regs->tf_edx    = context->sc_edx;
-	regs->tf_ecx    = context->sc_ecx;
-	regs->tf_eax    = context->sc_eax;
-	regs->tf_eip    = context->sc_eip;
+#endif
+	regs->tf_rdi    = context->sc_rdi;
+	regs->tf_rsi    = context->sc_rsi;
+	regs->tf_rbp    = context->sc_rbp;
+	regs->tf_rbx    = context->sc_rbx;
+	regs->tf_rdx    = context->sc_rdx;
+	regs->tf_rcx    = context->sc_rcx;
+	regs->tf_rax    = context->sc_rax;
+	regs->tf_rip    = context->sc_rip;
 	regs->tf_cs     = context->sc_cs;
-	regs->tf_eflags = eflags;
-	regs->tf_esp    = context->sc_esp_at_signal;
+	regs->tf_rflags = eflags;
+	regs->tf_rsp    = context->sc_rsp_at_signal;
 	regs->tf_ss     = context->sc_ss;
 
 	/*
@@ -750,7 +753,6 @@ sys_linux_rt_sigreturn(struct linux_rt_sigreturn_args *args)
 
 	return (EJUSTRETURN);
 }
-#endif
 
 /*
  * Prep arguments.
@@ -802,7 +804,6 @@ exec_linux_imgact_try(struct image_params *imgp)
     return(error);
 }
 
-#if 0
 struct sysentvec linux_sysvec = {
 	.sv_size	= LINUX_SYS_MAXSYSCALL,
 	.sv_table	= linux_sysent,
@@ -813,9 +814,7 @@ struct sysentvec linux_sysvec = {
 	.sv_errtbl	= bsd_to_linux_errno,
 	.sv_transtrap	= translate_traps,
 	.sv_fixup	= linux_fixup,
-#if 0
 	.sv_sendsig	= linux_sendsig,
-#endif
 	.sv_sigcode	= linux_sigcode,
 	.sv_szsigcode	= &linux_szsigcode,
 	.sv_prepsyscall	= linux_prepsyscall,
@@ -824,25 +823,18 @@ struct sysentvec linux_sysvec = {
 	.sv_imgact_try	= exec_linux_imgact_try,
 	.sv_minsigstksz	= LINUX_MINSIGSTKSZ
 };
-#endif
 
 struct sysentvec elf_linux_sysvec = {
 	.sv_size	= LINUX_SYS_MAXSYSCALL,
 	.sv_table	= linux_sysent,
 	.sv_mask	= 0xffffffff,
 	.sv_sigsize	= LINUX_SIGTBLSZ,
-#if 0
 	.sv_sigtbl	= bsd_to_linux_signal,
-#endif
 	.sv_errsize	= ELAST + 1,
-#if 0
 	.sv_errtbl	= bsd_to_linux_errno,
 	.sv_transtrap	= translate_traps,
-#endif
 	.sv_fixup	= elf_linux_fixup,
-#if 0
 	.sv_sendsig	= linux_sendsig,
-#endif
 	.sv_sigcode	= linux_sigcode,
 	.sv_szsigcode	= &linux_szsigcode,
 	.sv_prepsyscall	= linux_prepsyscall,

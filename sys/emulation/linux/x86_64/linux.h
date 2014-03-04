@@ -319,26 +319,30 @@ typedef struct {
 
 /* The Linux sigcontext, pretty much a standard 386 trapframe. */
 struct l_sigcontext {
+#if 0
 	l_int		sc_gs;
 	l_int		sc_fs;
 	l_int		sc_es;
 	l_int		sc_ds;
-	l_int		sc_edi;
-	l_int		sc_esi;
-	l_int		sc_ebp;
-	l_int		sc_esp;
-	l_int		sc_ebx;
-	l_int		sc_edx;
-	l_int		sc_ecx;
-	l_int		sc_eax;
+#endif
+	l_int		sc_rdi;
+	l_int		sc_rsi;
+	l_int		sc_rbp;
+	l_int		sc_rsp;
+	l_int		sc_rbx;
+	l_int		sc_rdx;
+	l_int		sc_rcx;
+	l_int		sc_rax;
 	l_int		sc_trapno;
 	l_int		sc_err;
-	l_int		sc_eip;
+	l_int		sc_rip;
 	l_int		sc_cs;
 	l_int		sc_eflags;
-	l_int		sc_esp_at_signal;
+	l_int		sc_rsp_at_signal;
 	l_int		sc_ss;
+#if 0
 	l_int		sc_387;
+#endif
 	l_int		sc_mask;
 	l_int		sc_cr2;
 };
