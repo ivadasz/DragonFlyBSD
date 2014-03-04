@@ -58,6 +58,7 @@
 #include <arch_linux/linux_proto.h>
 #include "linux_util.h"
 
+#if 0
 /*
  * MPALMOSTSAFE
  */
@@ -83,6 +84,7 @@ sys_linux_creat(struct linux_creat_args *args)
 	linux_free_path(&path);
 	return(error);
 }
+#endif
 
 /*
  * MPALMOSTSAFE
@@ -194,6 +196,7 @@ sys_linux_open(struct linux_open_args *args)
 	return error;
 }
 
+#if 0
 int
 sys_linux_openat(struct linux_openat_args *args)
 {
@@ -1695,3 +1698,4 @@ sys_linux_faccessat(struct linux_faccessat_args *args)
 
 	return error;
 }
+#endif

@@ -19,6 +19,9 @@ SUBDIR= ${MACHINE_ARCH}
 .if ${MACHINE_ARCH} == "i386"
 SRCS+=	linux_ptrace.c linux_uid16.c imgact_linux.c opt_cpu.h
 .endif
+.if ${MACHINE_ARCH} == "x86_64"
+SRCS+=	imgact_linux.c opt_cpu.h
+.endif
 
 CLEANFILES=	linux_assym.h linux_genassym.o
 
