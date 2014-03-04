@@ -1,0 +1,63 @@
+;	@(#)syscalls.master	8.1 (Berkeley) 7/19/93
+; $FreeBSD: src/sys/i386/linux/syscalls.master,v 1.30.2.8 2003/01/02 20:41:33 kan Exp $
+; System call name/number master file (or rather, slave, from LINUX).
+; Processed to create linux_sysent.c, linux_proto.h and linux_syscall.h.
+
+; Columns: number type nargs namespc name alt{name,tag,rtyp}/comments
+;	number	system call number, must be in order
+;	type	one of STD, OBSOL, UNIMPL, COMPAT
+;	name	psuedo-prototype of syscall routine
+;		If one of the following alts is different, then all appear:
+;	altname	name of system call if different
+;	alttag	name of args struct tag if different from [o]`name'"_args"
+;	altrtyp	return type if not int (bogus - syscalls always return int)
+;		for UNIMPL/OBSOL, name continues with comments
+
+; types:
+;	STD	always included
+;	COMPAT	included on COMPAT #ifdef
+;	LIBCOMPAT included on COMPAT #ifdef, and placed in syscall.h
+;	OBSOL	obsolete, not included in system, only specifies name
+;	UNIMPL	not implemented, placeholder only
+
+#include "opt_compat.h"
+#include <sys/param.h>
+#include <sys/sysent.h>
+#include <sys/sysproto.h>
+#include <emulation/linux/linux_sysproto.h>
+#include "linux.h"
+#include "linux_proto.h"
+
+#include <emulation/43bsd/stat.h>
+
+; Isn't pretty, but there seems to be no other way to trap nosys
+#define	nosys	linux_nosys
+
+; #ifdef's, etc. may be included, and are copied to the output files.
+
+0	UNIMPL	read
+1	UNIMPL	write
+2	STD	{ int linux_open(char *path, l_int flags, \
+				l_int mode); }
+3	UNIMPL	close
+4	UNIMPL	stat
+5	UNIMPL	fstat
+6	UNIMPL	lstat
+7	UNIMPL	poll
+8	UNIMPL	lseek
+9	UNIMPL	mmap
+10	UNIMPL	mprotect
+11	UNIMPL	munmap
+12	UNIMPL	brk
+13	UNIMPL	rt_sigaction
+14	UNIMPL	rt_sigprocmask
+15	UNIMPL	rt_sigreturn
+16	UNIMPL	ioctl
+17	UNIMPL	pread64
+18	UNIMPL	pwrite64
+;	XXX Fix
+19	NOPROTO	{ void exit(long rval); }
+20	UNIMPL	writev
+;	XXX Fix
+21	STD	{ int linux_execve(char *path, char **argp, \
+				char **envp); }
