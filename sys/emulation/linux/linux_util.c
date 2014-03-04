@@ -56,7 +56,8 @@ linux_copyin_path(char *uname, char **kname, int flags)
 	struct vattr vat, vatroot;
 	struct vnode *vp, *vproot;
 	char *buf, *cp;
-	int error, length, dummy, byte;
+	size_t dummy;
+	int error, length, byte;
 
 	buf = (char *) kmalloc(MAXPATHLEN, M_TEMP, M_WAITOK);
 	*kname = buf;
@@ -184,7 +185,8 @@ linux_translate_path(char *path, int size)
 {
 	struct nlookupdata nd;
 	char *buf;
-	int error, length, dummy;
+	size_t dummy;
+	int error, length;
 
 	buf = (char *) kmalloc(MAXPATHLEN, M_TEMP, M_WAITOK);
 	length = strlen(linux_emul_path);
