@@ -5,30 +5,16 @@
 #include <machine/asmacros.h>			/* miscellaneous asm macros */
 #include "linux_syscall.h"			/* system call numbers */
 
+/*
+ * The signal trampoline is not used on Linux/amd64: a
+ * libc provided trampoline is always used.
+ * We just provide the symbol so that the kernel builds.
+ */
+
 NON_GPROF_ENTRY(linux_sigcode)
-	call	*LINUX_SIGF_HANDLER(%rsp)
-	leaq	LINUX_SIGF_SC(%rsp),%rbx	/* linux scp */
-	mov	LINUX_SC_GS(%rbx),%gs
-	movq	%rsp, %rbx			/* pass sigframe */
-	push	%rax				/* fake ret addr */
-#if 0
-	movq	$LINUX_SYS_linux_sigreturn,%rax	/* linux_sigreturn() */
-#endif
-	syscall
-0:	jmp	0b
 	ALIGN_TEXT
 /* XXXXX */
 linux_rt_sigcode:
-	call	*LINUX_RT_SIGF_HANDLER(%rsp)
-	leaq	LINUX_RT_SIGF_UC(%rsp),%rbx	/* linux ucp */
-	leaq	LINUX_RT_SIGF_SC(%rbx),%rcx	/* linux sigcontext */
-	mov	LINUX_SC_GS(%rcx),%gs
-	push	%rax				/* fake ret addr */
-#if 0
-	movq	$LINUX_SYS_linux_rt_sigreturn,%rax   /* linux_rt_sigreturn() */
-#endif
-	syscall
-0:	jmp	0b
 	ALIGN_TEXT
 /* XXXXX */
 linux_esigcode:

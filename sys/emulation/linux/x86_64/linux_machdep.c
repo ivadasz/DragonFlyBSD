@@ -1050,6 +1050,7 @@ sys_linux_sigsuspend(struct linux_sigsuspend_args *args)
 
 	return(error);
 }
+#endif
 
 /*
  * MPALMOSTSAFE
@@ -1086,6 +1087,7 @@ sys_linux_rt_sigsuspend(struct linux_rt_sigsuspend_args *uap)
 /*
  * MPALMOSTSAFE
  */
+#if 0
 int
 sys_linux_pause(struct linux_pause_args *args)
 {
