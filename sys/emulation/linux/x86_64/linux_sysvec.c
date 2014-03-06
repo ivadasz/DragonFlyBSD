@@ -246,7 +246,7 @@ elf_linux_fixup(register_t **stack_base, struct image_params *imgp)
 	return 0;
 }
 
-extern int _ucodesel, _udatasel;
+extern long _ucodesel, _udatasel;
 extern unsigned long linux_sznonrtsigcode;
 
 static void
@@ -261,11 +261,13 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	regs = lp->lwp_md.md_regs;
 	oonstack = lp->lwp_sigstk.ss_flags & SS_ONSTACK;
 
-#ifdef DEBUG
-	if (ldebug(rt_sendsig))
+	kprintf("oonstack: %d\n", oonstack);
+
+//#ifdef DEBUG
+//	if (ldebug(rt_sendsig))
 		kprintf(ARGS(rt_sendsig, "%p, %d, %p, %lu"),
 		    catcher, sig, (void*)mask, code);
-#endif
+//#endif
 	/*
 	 * Allocate space for the signal handler context.
 	 */
@@ -275,7 +277,7 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 		    lp->lwp_sigstk.ss_size - sizeof(struct l_rt_sigframe));
 		lp->lwp_sigstk.ss_flags |= SS_ONSTACK;
 	} else
-		fp = (struct l_rt_sigframe *)regs->tf_rsp - 1;
+		fp = (struct l_rt_sigframe *)(regs->tf_rsp - 128);
 
 	/*
 	 * grow() will return FALSE if the fp will not fit inside the stack
@@ -293,11 +295,11 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 		SIGDELSET(p->p_sigignore, SIGILL);
 		SIGDELSET(p->p_sigcatch, SIGILL);
 		SIGDELSET(lp->lwp_sigmask, SIGILL);
-#ifdef DEBUG
-		if (ldebug(rt_sendsig))
+//#ifdef DEBUG
+//		if (ldebug(rt_sendsig))
 			kprintf(LMSG("rt_sendsig: bad stack %p, oonstack=%x"),
 			    fp, oonstack);
-#endif
+//#endif
 		lwpsignal(p, lp, SIGILL);
 		return;
 	}
@@ -354,18 +356,19 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	frame.sf_sc.uc_mcontext.sc_err    = regs->tf_err;
 	frame.sf_sc.uc_mcontext.sc_trapno = bsd_to_linux_trapcode(code);
 
-#ifdef DEBUG
-	if (ldebug(rt_sendsig))
-		kprintf(LMSG("rt_sendsig flags: 0x%x, sp: %p, ss: 0x%x, mask: 0x%x"),
+//#ifdef DEBUG
+//	if (ldebug(rt_sendsig))
+		kprintf(LMSG("rt_sendsig flags: 0x%x, sp: %p, ss: 0x%lx, mask: 0x%lx"),
 		    frame.sf_sc.uc_stack.ss_flags, lp->lwp_sigstk.ss_sp,
 		    lp->lwp_sigstk.ss_size, frame.sf_sc.uc_mcontext.sc_mask);
-#endif
+//#endif
 
 	if (copyout(&frame, fp, sizeof(frame)) != 0) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
 		 */
+		kprintf("Process has trashed its stack\n");
 		sigexit(lp, SIGILL);
 		/* NOTREACHED */
 	}
@@ -373,9 +376,13 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	/*
 	 * Build context to run handler in.
 	 */
-	regs->tf_rsp = (intptr_t)fp;
-	regs->tf_rip = PS_STRINGS - *(p->p_sysent->sv_szsigcode) + 
-	    linux_sznonrtsigcode;
+	regs->tf_rsp = (uintptr_t)fp;
+//	regs->tf_rip = PS_STRINGS - *(p->p_sysent->sv_szsigcode) +
+//	    linux_sznonrtsigcode;
+	regs->tf_rip = (l_ulong)catcher;
+	regs->tf_rdi = (l_ulong)frame.sf_si.lsi_signo;
+
+	kprintf("New rip: %lx, new rsp: %lx\n", regs->tf_rip, regs->tf_rsp);
 
 	/*
 	 * i386 abi specifies that the direction flag must be cleared
@@ -383,8 +390,8 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	 */
 	regs->tf_rflags &= ~(PSL_T | PSL_VM_UNSUPP | PSL_D);
 
-#if 0
 	regs->tf_cs = _ucodesel;
+#if 0
 	regs->tf_ds = _udatasel;
 	regs->tf_es = _udatasel;
 	/* allow %fs and %gs to be inherited by the signal handler */
@@ -392,8 +399,8 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	regs->tf_fs = _udatasel;
 	regs->tf_gs = _udatasel;
 	*/
-	regs->tf_ss = _udatasel;
 #endif
+	regs->tf_ss = _udatasel;
 	clear_quickret();
 }
 
@@ -409,6 +416,7 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
  * specified pc, psl.
  */
 
+#if 0
 static void
 linux_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 {
@@ -519,7 +527,7 @@ linux_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	/*
 	 * Build context to run handler in.
 	 */
-	regs->tf_rsp = (intptr_t)fp;
+	regs->tf_rsp = (uintptr_t)fp;
 	regs->tf_rip = PS_STRINGS - *(p->p_sysent->sv_szsigcode);
 
 	/*
@@ -541,6 +549,7 @@ linux_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	regs->tf_ss = _udatasel;
 	clear_quickret();
 }
+#endif
 
 /*
  * System call to cleanup state after a signal
@@ -567,10 +576,10 @@ sys_linux_rt_sigreturn(struct linux_rt_sigreturn_args *args)
 
 	regs = lp->lwp_md.md_regs;
 
-#ifdef DEBUG
-	if (ldebug(rt_sigreturn))
+//#ifdef DEBUG
+//	if (ldebug(rt_sigreturn))
 		kprintf(ARGS(rt_sigreturn, "%p"), (void *)args->ucp);
-#endif
+//#endif
 	/*
 	 * The trampoline code hands us the ucontext.
 	 * It is unsafe to keep track of it ourselves, in the event that a
@@ -637,6 +646,8 @@ sys_linux_rt_sigreturn(struct linux_rt_sigreturn_args *args)
 	regs->tf_rsp    = context->sc_rsp_at_signal;
 	regs->tf_ss     = context->sc_ss;
 
+	kprintf("New rip: %lx, new rsp: %lx\n", regs->tf_rip, regs->tf_rsp);
+
 	/*
 	 * call sigaltstack & ignore results..
 	 */
@@ -645,11 +656,11 @@ sys_linux_rt_sigreturn(struct linux_rt_sigreturn_args *args)
 	ss.ss_size = lss->ss_size;
 	ss.ss_flags = linux_to_bsd_sigaltstack(lss->ss_flags);
 
-#ifdef DEBUG
-	if (ldebug(rt_sigreturn))
-		kprintf(LMSG("rt_sigret flags: 0x%x, sp: %p, ss: 0x%x, mask: 0x%x"),
+//#ifdef DEBUG
+//	if (ldebug(rt_sigreturn))
+		kprintf(LMSG("rt_sigret flags: 0x%x, sp: %p, ss: 0x%lx, mask: 0x%lx"),
 		    ss.ss_flags, ss.ss_sp, ss.ss_size, context->sc_mask);
-#endif
+//#endif
 	kern_sigaltstack(&ss, NULL);
 	clear_quickret();
 
@@ -716,7 +727,7 @@ struct sysentvec linux_sysvec = {
 	.sv_errtbl	= bsd_to_linux_errno,
 	.sv_transtrap	= translate_traps,
 	.sv_fixup	= linux_fixup,
-	.sv_sendsig	= linux_sendsig,
+	.sv_sendsig	= linux_rt_sendsig,
 	.sv_sigcode	= linux_sigcode,
 	.sv_szsigcode	= &linux_szsigcode,
 	.sv_prepsyscall	= linux_prepsyscall,
@@ -736,7 +747,7 @@ struct sysentvec elf_linux_sysvec = {
 	.sv_errtbl	= bsd_to_linux_errno,
 	.sv_transtrap	= translate_traps,
 	.sv_fixup	= elf_linux_fixup,
-	.sv_sendsig	= linux_sendsig,
+	.sv_sendsig	= linux_rt_sendsig,
 	.sv_sigcode	= linux_sigcode,
 	.sv_szsigcode	= &linux_szsigcode,
 	.sv_prepsyscall	= linux_prepsyscall,

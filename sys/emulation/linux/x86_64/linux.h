@@ -325,26 +325,26 @@ struct l_sigcontext {
 	l_int		sc_es;
 	l_int		sc_ds;
 #endif
-	l_int		sc_rdi;
-	l_int		sc_rsi;
-	l_int		sc_rbp;
-	l_int		sc_rsp;
-	l_int		sc_rbx;
-	l_int		sc_rdx;
-	l_int		sc_rcx;
-	l_int		sc_rax;
-	l_int		sc_trapno;
-	l_int		sc_err;
-	l_int		sc_rip;
-	l_int		sc_cs;
-	l_int		sc_eflags;
-	l_int		sc_rsp_at_signal;
-	l_int		sc_ss;
+	l_ulong		sc_rdi;
+	l_ulong		sc_rsi;
+	l_ulong		sc_rbp;
+	l_ulong		sc_rsp;
+	l_ulong		sc_rbx;
+	l_ulong		sc_rdx;
+	l_ulong		sc_rcx;
+	l_ulong		sc_rax;
+	l_ulong		sc_trapno;
+	l_ulong		sc_err;
+	l_ulong		sc_rip;
+	l_ulong		sc_cs;
+	l_ulong		sc_eflags;
+	l_ulong		sc_rsp_at_signal;
+	l_ulong		sc_ss;
 #if 0
 	l_int		sc_387;
 #endif
-	l_int		sc_mask;
-	l_int		sc_cr2;
+	l_ulong		sc_mask;
+	l_ulong		sc_cr2;
 };
 
 struct l_ucontext {

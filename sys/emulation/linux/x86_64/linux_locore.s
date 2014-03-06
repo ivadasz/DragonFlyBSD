@@ -22,6 +22,6 @@ linux_esigcode:
 	.data
 	.globl	linux_szsigcode, linux_sznonrtsigcode
 linux_szsigcode:
-	.long	linux_esigcode-linux_sigcode
+/*	.long	linux_esigcode-linux_sigcode */
 linux_sznonrtsigcode:
-	.long	linux_rt_sigcode-linux_sigcode
+/*	.long	linux_rt_sigcode-linux_sigcode */
