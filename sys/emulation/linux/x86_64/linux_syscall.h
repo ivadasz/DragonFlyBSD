@@ -15,6 +15,8 @@
 #define	LINUX_SYS_linux_rt_sigaction	13
 #define	LINUX_SYS_linux_rt_sigprocmask	14
 #define	LINUX_SYS_linux_rt_sigreturn	15
+#define	LINUX_SYS_readv	19
+#define	LINUX_SYS_writev	20
 #define	LINUX_SYS_linux_getpid	39
 #define	LINUX_SYS_linux_execve	59
 #define	LINUX_SYS_exit	60
@@ -22,6 +24,7 @@
 #define	LINUX_SYS_linux_newuname	63
 #define	LINUX_SYS_linux_chdir	80
 #define	LINUX_SYS_linux_rt_sigsuspend	130
+#define	LINUX_SYS_linux_arch_prctl	158
 #define	LINUX_SYS_linux_tkill	200
 #define	LINUX_SYS_linux_tgkill	234
 #define	LINUX_SYS_MAXSYSCALL	312

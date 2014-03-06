@@ -24,6 +24,7 @@ union sysunion {
 	struct	linux_newuname_args linux_newuname;
 	struct	linux_chdir_args linux_chdir;
 	struct	linux_rt_sigsuspend_args linux_rt_sigsuspend;
+	struct	linux_arch_prctl_args linux_arch_prctl;
 	struct	linux_tkill_args linux_tkill;
 	struct	linux_tgkill_args linux_tgkill;
 };

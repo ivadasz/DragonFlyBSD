@@ -61,8 +61,10 @@
 16	UNIMPL	ioctl
 17	UNIMPL	pread64
 18	UNIMPL	pwrite64
-19	UNIMPL	readv
-20	UNIMPL	writev
+19	NOPROTO	{ int readv(int fd, struct iovec *iovp, \
+				u_int iovcnt); }
+20	NOPROTO	{ int writev(int fd, struct iovec *iovp, \
+				u_int iovcnt); }
 21	UNIMPL	access
 22	UNIMPL	pipe
 23	UNIMPL	select
@@ -202,7 +204,7 @@
 155	UNIMPL	pivot_root
 156	UNIMPL	sysctl
 157	UNIMPL	prctl
-158	UNIMPL	arch_prctl
+158	STD	{ int linux_arch_prctl(l_int code, l_ulong addr); }
 159	UNIMPL	adjtimex
 160	UNIMPL	setrlimit
 161	UNIMPL	chroot

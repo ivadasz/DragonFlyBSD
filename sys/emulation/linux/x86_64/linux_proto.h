@@ -118,6 +118,13 @@ struct	linux_rt_sigsuspend_args {
 	l_sigset_t *	newset;	char newset_[PAD_(l_sigset_t *)];
 	l_size_t	sigsetsize;	char sigsetsize_[PAD_(l_size_t)];
 };
+struct	linux_arch_prctl_args {
+#ifdef _KERNEL
+	struct sysmsg sysmsg;
+#endif
+	l_int	code;	char code_[PAD_(l_int)];
+	l_ulong	addr;	char addr_[PAD_(l_ulong)];
+};
 struct	linux_tkill_args {
 #ifdef _KERNEL
 	struct sysmsg sysmsg;
@@ -174,6 +181,7 @@ int	sys_linux_kill (struct linux_kill_args *);
 int	sys_linux_newuname (struct linux_newuname_args *);
 int	sys_linux_chdir (struct linux_chdir_args *);
 int	sys_linux_rt_sigsuspend (struct linux_rt_sigsuspend_args *);
+int	sys_linux_arch_prctl (struct linux_arch_prctl_args *);
 int	sys_linux_tkill (struct linux_tkill_args *);
 int	sys_linux_tgkill (struct linux_tgkill_args *);
 
