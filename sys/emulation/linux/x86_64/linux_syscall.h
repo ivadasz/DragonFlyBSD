@@ -10,11 +10,14 @@
 #define	LINUX_SYS_linux_open	2
 #define	LINUX_SYS_close	3
 #define	LINUX_SYS_linux_stat64	4
+#define	LINUX_SYS_linux_fstat64	5
 #define	LINUX_SYS_linux_lseek	8
+#define	LINUX_SYS_linux_mmap2	9
 #define	LINUX_SYS_linux_brk	12
 #define	LINUX_SYS_linux_rt_sigaction	13
 #define	LINUX_SYS_linux_rt_sigprocmask	14
 #define	LINUX_SYS_linux_rt_sigreturn	15
+#define	LINUX_SYS_linux_ioctl	16
 #define	LINUX_SYS_readv	19
 #define	LINUX_SYS_writev	20
 #define	LINUX_SYS_linux_getpid	39

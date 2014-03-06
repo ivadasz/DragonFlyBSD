@@ -490,6 +490,8 @@ sys_linux_lstat64(struct linux_lstat64_args *args)
 	return (error);
 }
 
+#endif /* defined(__i386__) */
+
 /*
  * MPALMOSTSAFE
  */
@@ -511,6 +513,8 @@ sys_linux_fstat64(struct linux_fstat64_args *args)
 		error = stat64_copyout(&buf, args->statbuf);
 	return (error);
 }
+
+#if defined(__i386__)
 
 int
 sys_linux_fstatat64(struct linux_fstatat64_args *args)

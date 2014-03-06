@@ -589,6 +589,7 @@ out:
 
 	return (error);
 }
+#endif
 
 /* XXX move */
 struct l_mmap_argv {
@@ -721,6 +722,7 @@ linux_mmap_common(caddr_t linux_addr, size_t linux_len, int linux_prot,
 	return (error);
 }
 
+#if 0
 /*
  * MPSAFE
  */
@@ -749,6 +751,7 @@ sys_linux_mmap(struct linux_mmap_args *args)
 #endif
 	return(error);
 }
+#endif
 
 /*
  * MPSAFE
@@ -774,6 +777,7 @@ sys_linux_mmap2(struct linux_mmap2_args *args)
 	return (error);
 }
 
+#if 0
 /*
  * MPSAFE
  */
@@ -1306,5 +1310,33 @@ sys_linux_get_thread_area(struct linux_get_thread_area_args *args)
 int
 sys_linux_arch_prctl(struct linux_arch_prctl_args *args)
 {
+	switch(args->code) {
+	case LINUX_ARCH_SET_GS:
+		/* XXX check wheter args->addr is mapped */
+		curthread->td_tls.info[TLS_WHICH_GS].base = (void *)args->addr;
+		set_user_TLS();
+		return 0;
+
+	case LINUX_ARCH_GET_GS:
+		args->sysmsg_result = (l_ulong)curthread->td_tls.info[TLS_WHICH_GS].base;
+		return 0;
+
+	case LINUX_ARCH_SET_FS:
+		/* XXX check wheter args->addr is mapped */
+		curthread->td_tls.info[TLS_WHICH_FS].base = (void *)args->addr;
+		set_user_TLS();
+		return 0;
+
+	case LINUX_ARCH_GET_FS:
+		args->sysmsg_result = (l_ulong)curthread->td_tls.info[TLS_WHICH_FS].base;
+		return 0;
+
+	default:
+#ifdef DEBUG_LINUX
+		kprintf("linux_sys_arch_prctl: unexpected code %d\n",
+		    args->code);
+#endif
+		return EINVAL;
+	}
 	return EINVAL;
 }

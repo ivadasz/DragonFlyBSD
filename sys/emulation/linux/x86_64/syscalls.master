@@ -42,12 +42,15 @@
 3	NOPROTO { int close(int fd); }
 4	STD	{ int linux_stat64(char *filename, \
 				struct l_stat64 *statbuf, l_long flags); }
-5	UNIMPL	fstat
+5	STD	{ int linux_fstat64(l_ulong fd, \
+				struct l_stat64 *statbuf, l_long flags); }
 6	UNIMPL	lstat
 7	UNIMPL	poll
 8	STD	{ int linux_lseek(l_uint fdes, l_off_t off, \
 				l_int whence); }
-9	UNIMPL	mmap
+9	STD	{ int linux_mmap2(l_ulong addr, l_ulong len, \
+				l_ulong prot, l_ulong flags, l_ulong fd, \
+				l_ulong pgoff); }
 10	UNIMPL	mprotect
 11	UNIMPL	munmap
 12	STD	{ int linux_brk(l_ulong dsend); }
@@ -58,7 +61,8 @@
 				l_sigset_t *mask, l_sigset_t *omask, \
 				l_size_t sigsetsize); }
 15	STD	{ int linux_rt_sigreturn(struct l_ucontext *ucp); }
-16	UNIMPL	ioctl
+16	STD	{ int linux_ioctl(l_uint fd, l_uint cmd, \
+				l_ulong arg); }
 17	UNIMPL	pread64
 18	UNIMPL	pwrite64
 19	NOPROTO	{ int readv(int fd, struct iovec *iovp, \

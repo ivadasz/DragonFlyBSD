@@ -40,6 +40,14 @@ struct	linux_stat64_args {
 	struct l_stat64 *	statbuf;	char statbuf_[PAD_(struct l_stat64 *)];
 	l_long	flags;	char flags_[PAD_(l_long)];
 };
+struct	linux_fstat64_args {
+#ifdef _KERNEL
+	struct sysmsg sysmsg;
+#endif
+	l_ulong	fd;	char fd_[PAD_(l_ulong)];
+	struct l_stat64 *	statbuf;	char statbuf_[PAD_(struct l_stat64 *)];
+	l_long	flags;	char flags_[PAD_(l_long)];
+};
 struct	linux_lseek_args {
 #ifdef _KERNEL
 	struct sysmsg sysmsg;
@@ -47,6 +55,17 @@ struct	linux_lseek_args {
 	l_uint	fdes;	char fdes_[PAD_(l_uint)];
 	l_off_t	off;	char off_[PAD_(l_off_t)];
 	l_int	whence;	char whence_[PAD_(l_int)];
+};
+struct	linux_mmap2_args {
+#ifdef _KERNEL
+	struct sysmsg sysmsg;
+#endif
+	l_ulong	addr;	char addr_[PAD_(l_ulong)];
+	l_ulong	len;	char len_[PAD_(l_ulong)];
+	l_ulong	prot;	char prot_[PAD_(l_ulong)];
+	l_ulong	flags;	char flags_[PAD_(l_ulong)];
+	l_ulong	fd;	char fd_[PAD_(l_ulong)];
+	l_ulong	pgoff;	char pgoff_[PAD_(l_ulong)];
 };
 struct	linux_brk_args {
 #ifdef _KERNEL
@@ -77,6 +96,14 @@ struct	linux_rt_sigreturn_args {
 	struct sysmsg sysmsg;
 #endif
 	struct l_ucontext *	ucp;	char ucp_[PAD_(struct l_ucontext *)];
+};
+struct	linux_ioctl_args {
+#ifdef _KERNEL
+	struct sysmsg sysmsg;
+#endif
+	l_uint	fd;	char fd_[PAD_(l_uint)];
+	l_uint	cmd;	char cmd_[PAD_(l_uint)];
+	l_ulong	arg;	char arg_[PAD_(l_ulong)];
 };
 struct	linux_getpid_args {
 #ifdef _KERNEL
@@ -170,11 +197,14 @@ struct	linux_tgkill_args {
 #define	nosys	linux_nosys
 int	sys_linux_open (struct linux_open_args *);
 int	sys_linux_stat64 (struct linux_stat64_args *);
+int	sys_linux_fstat64 (struct linux_fstat64_args *);
 int	sys_linux_lseek (struct linux_lseek_args *);
+int	sys_linux_mmap2 (struct linux_mmap2_args *);
 int	sys_linux_brk (struct linux_brk_args *);
 int	sys_linux_rt_sigaction (struct linux_rt_sigaction_args *);
 int	sys_linux_rt_sigprocmask (struct linux_rt_sigprocmask_args *);
 int	sys_linux_rt_sigreturn (struct linux_rt_sigreturn_args *);
+int	sys_linux_ioctl (struct linux_ioctl_args *);
 int	sys_linux_getpid (struct linux_getpid_args *);
 int	sys_linux_execve (struct linux_execve_args *);
 int	sys_linux_kill (struct linux_kill_args *);

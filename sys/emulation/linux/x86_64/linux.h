@@ -59,11 +59,11 @@ MALLOC_DECLARE(M_LINUX);
  * Provide a separate set of types for the Linux types.
  */
 typedef int		l_int;
-typedef int32_t		l_long;
+typedef int64_t		l_long;
 typedef int64_t		l_longlong;
 typedef short		l_short;
 typedef unsigned int	l_uint;
-typedef uint32_t	l_ulong;
+typedef uint64_t	l_ulong;
 typedef uint64_t	l_ulonglong;
 typedef unsigned short	l_ushort;
 
@@ -80,7 +80,7 @@ typedef l_longlong	l_loff_t;
 typedef l_ushort	l_mode_t;
 typedef l_long		l_off_t;
 typedef l_int		l_pid_t;
-typedef l_uint		l_size_t;
+typedef l_ulonglong	l_size_t;
 typedef l_long		l_suseconds_t;
 typedef l_long		l_time_t;
 typedef l_uint		l_uid_t;
