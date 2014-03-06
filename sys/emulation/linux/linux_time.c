@@ -70,7 +70,7 @@
 #include <machine/limits.h>
 #include <machine/psl.h>
 #include <machine/sysarch.h>
-#ifdef __i386__
+#if defined(__i386__)
 #include <machine/segments.h>
 #endif
 

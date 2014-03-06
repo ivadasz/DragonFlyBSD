@@ -58,7 +58,8 @@
 #include <arch_linux/linux_proto.h>
 #include "linux_util.h"
 
-#if 0
+#if defined(__i386__)
+
 /*
  * MPALMOSTSAFE
  */
@@ -84,7 +85,8 @@ sys_linux_creat(struct linux_creat_args *args)
 	linux_free_path(&path);
 	return(error);
 }
-#endif
+
+#endif	/* defined(__i386__) */
 
 /*
  * MPALMOSTSAFE
@@ -196,7 +198,8 @@ sys_linux_open(struct linux_open_args *args)
 	return error;
 }
 
-#if 0
+#if defined(__i386__)
+
 int
 sys_linux_openat(struct linux_openat_args *args)
 {
@@ -221,6 +224,8 @@ sys_linux_openat(struct linux_openat_args *args)
 	return error;
 }
 
+#endif	/* defined(__i386__) */
+
 /*
  * MPSAFE
  */
@@ -239,6 +244,8 @@ sys_linux_lseek(struct linux_lseek_args *args)
 
 	return error;
 }
+
+#if defined(__i386__)
 
 /*
  * MPSAFE
@@ -646,6 +653,8 @@ sys_linux_unlinkat(struct linux_unlinkat_args *args)
 	return(error);
 }
 
+#endif	/* defined(__i386__) */
+
 /*
  * MPALMOSTSAFE
  */
@@ -673,6 +682,8 @@ sys_linux_chdir(struct linux_chdir_args *args)
 	linux_free_path(&path);
 	return(error);
 }
+
+#if defined(__i386__)
 
 /*
  * MPALMOSTSAFE
@@ -1337,6 +1348,7 @@ bsd_to_linux_flock(struct flock *bsd_flock, struct l_flock *linux_flock)
 }
 
 #if defined(__i386__)
+
 struct l_flock64 {
 	l_short		l_type;
 	l_short		l_whence;
@@ -1393,7 +1405,8 @@ bsd_to_linux_flock64(struct flock *bsd_flock, struct l_flock64 *linux_flock)
 	linux_flock->l_len = (l_loff_t)bsd_flock->l_len;
 	linux_flock->l_pid = (l_pid_t)bsd_flock->l_pid;
 }
-#endif /* __i386__ */
+
+#endif /* defined(__i386__) */
 
 /*
  * MPSAFE
@@ -1541,6 +1554,7 @@ sys_linux_fcntl(struct linux_fcntl_args *args)
 }
 
 #if defined(__i386__)
+
 /*
  * MPSAFE
  */
@@ -1590,7 +1604,8 @@ sys_linux_fcntl64(struct linux_fcntl64_args *args)
 
 	return (error);
 }
-#endif /* __i386__ */
+
+#endif /* defined(__i386__) */
 
 /*
  * MPALMOSTSAFE
@@ -1698,4 +1713,5 @@ sys_linux_faccessat(struct linux_faccessat_args *args)
 
 	return error;
 }
-#endif
+
+#endif	/* defined(__i386__) */

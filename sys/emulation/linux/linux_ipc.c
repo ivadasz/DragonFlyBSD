@@ -690,7 +690,7 @@ linux_shmat(struct linux_shmat_args *args)
     bsd_args.shmflg = args->shmflg;
     if ((error = sys_shmat(&bsd_args)))
 	return error;
-#ifdef __i386__
+#if defined(__i386__)
     if ((error = copyout(&bsd_args.sysmsg_lresult, (caddr_t)args->raddr, sizeof(l_ulong))))
 	return error;
     args->sysmsg_result = 0;

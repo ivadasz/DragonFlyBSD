@@ -74,7 +74,7 @@
 #include <machine/limits.h>
 #include <machine/psl.h>
 #include <machine/sysarch.h>
-#ifdef __i386__
+#if defined(__i386__)
 #include <machine/segments.h>
 #endif
 
@@ -90,6 +90,8 @@
 
 #define BSD_TO_LINUX_SIGNAL(sig)	\
 	(((sig) <= LINUX_SIGTBLSZ) ? bsd_to_linux_signal[_SIG_IDX(sig)] : sig)
+
+#if defined(__i386__)
 
 static unsigned int linux_to_bsd_resource[LINUX_RLIM_NLIMITS] = {
 	RLIMIT_CPU, RLIMIT_FSIZE, RLIMIT_DATA, RLIMIT_STACK,
@@ -230,6 +232,8 @@ sys_linux_alarm(struct linux_alarm_args *args)
 	return 0;
 }
 
+#endif /* defined(__i386__) */
+
 /*
  * MPALMOSTSAFE
  */
@@ -261,6 +265,8 @@ sys_linux_brk(struct linux_brk_args *args)
 
 	return 0;
 }
+
+#if defined(__i386__)
 
 /*
  * MPALMOSTSAFE
@@ -754,6 +760,8 @@ sys_linux_times(struct linux_times_args *args)
 	return 0;
 }
 
+#endif /* defined(__i386__) */
+
 /*
  * MPALMOSTSAFE
  */
@@ -784,6 +792,8 @@ sys_linux_newuname(struct linux_newuname_args *args)
 
 	return (copyout(&utsname, (caddr_t)args->buf, sizeof(utsname)));
 }
+
+#if defined(__i386__)
 
 /* XXX: why would this be i386-only? most of these are wrong! */
 #if defined(__i386__)
@@ -984,7 +994,8 @@ cleanup:
 
 	return (error);
 }
-#endif /* __i386__ */
+
+#endif /* defined(__i386__) */
 
 #define __WCLONE 0x80000000
 
@@ -1639,6 +1650,8 @@ sys_linux_reboot(struct linux_reboot_args *args)
 	return(error);
 }
 
+#endif /* defined(__i386__) */
+
 /*
  * The FreeBSD native getpid(2), getgid(2) and getuid(2) also modify
  * p->p_retval[1] when COMPAT_43 is defined. This
@@ -1671,6 +1684,8 @@ sys_linux_getpid(struct linux_getpid_args *args)
 
 	return (0);
 }
+
+#if defined(__i386__)
 
 /*
  * MPALMOSTSAFE
@@ -1959,3 +1974,5 @@ sys_linux_sethostname(struct linux_sethostname_args *uap)
 	kfree(hostname, M_TEMP);
 	return (error);
 }
+
+#endif /* defined(__i386__) */

@@ -35,20 +35,22 @@
 
 ; #ifdef's, etc. may be included, and are copied to the output files.
 
-0	UNIMPL	read
-1	UNIMPL	write
+0	NOPROTO	{ int read(int fd, char *buf, u_int nbyte); }
+1	NOPROTO	{ int write(int fd, char *buf, u_int nbyte); }
 2	STD	{ int linux_open(char *path, l_int flags, \
 				l_int mode); }
-3	UNIMPL	close
-4	UNIMPL	stat
+3	NOPROTO { int close(int fd); }
+4	STD	{ int linux_stat64(char *filename, \
+				struct l_stat64 *statbuf, l_long flags); }
 5	UNIMPL	fstat
 6	UNIMPL	lstat
 7	UNIMPL	poll
-8	UNIMPL	lseek
+8	STD	{ int linux_lseek(l_uint fdes, l_off_t off, \
+				l_int whence); }
 9	UNIMPL	mmap
 10	UNIMPL	mprotect
 11	UNIMPL	munmap
-12	UNIMPL	brk
+12	STD	{ int linux_brk(l_ulong dsend); }
 13	STD	{ int linux_rt_sigaction(l_int sig, \
 				l_sigaction_t *act, l_sigaction_t *oact, \
 				l_size_t sigsetsize); }
@@ -79,7 +81,7 @@
 36	UNIMPL	getitimer
 37	UNIMPL	alarm
 38	UNIMPL	setitimer
-39	UNIMPL	getpid
+39	STD	{ int linux_getpid(void); }
 40	UNIMPL	sendfile
 41	UNIMPL	socket
 42	UNIMPL	connect
@@ -104,7 +106,7 @@
 60	NOPROTO	{ void exit(long rval); }
 61	UNIMPL	wait4
 62	STD	{ int linux_kill(l_int pid, l_int signum); }
-63	UNIMPL	uname
+63	STD	{ int linux_newuname(struct l_new_utsname *buf); }
 64	UNIMPL	semget
 65	UNIMPL	semop
 66	UNIMPL	semctl
@@ -121,7 +123,7 @@
 77	UNIMPL	ftruncate
 78	UNIMPL	getdents
 79	UNIMPL	getcwd
-80	UNIMPL	chdir
+80	STD	{ int linux_chdir(char *path); }
 81	UNIMPL	fchdir
 82	UNIMPL	rename
 83	UNIMPL	mkdir

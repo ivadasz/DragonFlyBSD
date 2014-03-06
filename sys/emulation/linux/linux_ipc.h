@@ -32,8 +32,7 @@
 #ifndef _LINUX_IPC_H_
 #define _LINUX_IPC_H_
 
-#ifdef __i386__
-
+#if defined(__i386__)
 
 struct l_msginfo {
 	l_int msgpool;
@@ -338,6 +337,7 @@ int linux_shmdt  (struct linux_shmdt_args *);
 int linux_shmget (struct linux_shmget_args *);
 #define	LINUX_MSG_INFO	12
 #define	LINUX_IPC_64	0x0100	/* New version (support 32-bit UIDs, bigger */
-#endif	/* __i386__ */
+
+#endif	/* defined(__i386__) */
 
 #endif /* _LINUX_IPC_H_ */

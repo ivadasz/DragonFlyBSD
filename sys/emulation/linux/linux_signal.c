@@ -126,10 +126,11 @@ bsd_to_linux_sigaction(struct sigaction *bsa, l_sigaction_t *lsa)
 		lsa->lsa_flags |= LINUX_SA_NOMASK;
 }
 
+#if defined(__i386__)
+
 /*
  * MPALMOSTSAFE
  */
-#if defined(__i386__)
 int
 sys_linux_signal(struct linux_signal_args *args)
 {
@@ -158,7 +159,8 @@ sys_linux_signal(struct linux_signal_args *args)
 	args->sysmsg_result = (intptr_t) linux_osa.lsa_handler;
 	return (error);
 }
-#endif	/* __i386__ */
+
+#endif	/* defined(__i386__) */
 
 /*
  * MPALMOSTSAFE
@@ -217,10 +219,11 @@ linux_to_bsd_sigprocmask(int how)
 	}
 }
 
+#if defined(__i386__)
+
 /*
  * MPALMOSTSAFE
  */
-#if defined(__i386__)
 int
 sys_linux_sigprocmask(struct linux_sigprocmask_args *args)
 {
@@ -254,7 +257,8 @@ sys_linux_sigprocmask(struct linux_sigprocmask_args *args)
 	}
 	return (error);
 }
-#endif	/* __i386__ */
+
+#endif	/* defined(__i386__) */
 
 /*
  * MPALMOSTSAFE
@@ -295,10 +299,11 @@ sys_linux_rt_sigprocmask(struct linux_rt_sigprocmask_args *args)
 	return (error);
 }
 
+#if defined(__i386__)
+
 /*
  * MPSAFE
  */
-#if defined(__i386__)
 int
 sys_linux_sgetmask(struct linux_sgetmask_args *args)
 {
@@ -314,12 +319,10 @@ sys_linux_sgetmask(struct linux_sgetmask_args *args)
 	args->sysmsg_result = mask.__bits[0];
 	return (0);
 }
-#endif	/* __i386__ */
 
 /*
  * MPSAFE
  */
-#if defined(__i386__)
 int
 sys_linux_ssetmask(struct linux_ssetmask_args *args)
 {
@@ -343,12 +346,10 @@ sys_linux_ssetmask(struct linux_ssetmask_args *args)
 	crit_exit();
 	return (0);
 }
-#endif	/* __i386__ */
 
 /*
  * MPSAFE
  */
-#if defined(__i386__)
 int
 sys_linux_sigpending(struct linux_sigpending_args *args)
 {
@@ -374,7 +375,8 @@ sys_linux_sigpending(struct linux_sigpending_args *args)
 	}
 	return (error);
 }
-#endif	/* __i386__ */
+
+#endif	/* defined(__i386__) */
 
 int
 sys_linux_kill(struct linux_kill_args *args)

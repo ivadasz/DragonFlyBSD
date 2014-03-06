@@ -54,6 +54,8 @@
 #include <arch_linux/linux_proto.h>
 #include "linux_util.h"
 
+#if defined(__i386__)
+
 static int
 newstat_copyout(struct stat *buf, void *ubuf)
 {
@@ -389,7 +391,7 @@ done:
 	return (error);
 }
 
-#if defined(__i386__)
+#endif	/* defined(__i386__) */
 
 static int
 stat64_copyout(struct stat *buf, void *ubuf)
@@ -454,6 +456,8 @@ sys_linux_stat64(struct linux_stat64_args *args)
 	linux_free_path(&path);
 	return (error);
 }
+
+#if defined(__i386__)
 
 /*
  * MPALMOSTSAFE
@@ -569,4 +573,4 @@ sys_linux_ostat(struct linux_ostat_args *args)
 	return (error);
 }
 
-#endif /* __i386__ */
+#endif /* defined(__i386__) */
