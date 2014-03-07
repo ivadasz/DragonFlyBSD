@@ -388,6 +388,7 @@ sys_linux_fork(struct linux_fork_args *args)
 
 	return (error);
 }
+#endif
 
 /*
  * MPALMOSTSAFE
@@ -437,6 +438,7 @@ sys_linux_exit_group(struct linux_exit_group_args *args)
 	return (0);
 }
 
+#if 0
 /*
  * MPSAFE
  */
@@ -594,11 +596,11 @@ out:
 /* XXX move */
 struct l_mmap_argv {
 	l_caddr_t	addr;
-	l_int		len;
+	l_size_t		len;
 	l_int		prot;
 	l_int		flags;
 	l_int		fd;
-	l_int		pos;
+	l_off_t		pos;
 };
 
 #define STACK_SIZE  (2 * 1024 * 1024)
@@ -615,7 +617,8 @@ linux_mmap_common(caddr_t linux_addr, size_t linux_len, int linux_prot,
 	struct proc *p = td->td_proc;
 	caddr_t addr;
 	void *new;
-	int error, flags, len, prot, fd;
+	size_t len;
+	int error, flags, prot, fd;
 
 	flags = 0;
 	if (linux_flags & LINUX_MAP_SHARED)
@@ -680,6 +683,7 @@ linux_mmap_common(caddr_t linux_addr, size_t linux_len, int linux_prot,
 
 		/* This gives us our maximum stack size */
 		if (linux_len > STACK_SIZE - GUARD_SIZE) {
+			kprintf("maximum stack size!\n");
 			len = linux_len;
 		} else {
 			len = STACK_SIZE - GUARD_SIZE;
@@ -707,15 +711,17 @@ linux_mmap_common(caddr_t linux_addr, size_t linux_len, int linux_prot,
 		fd = linux_fd;
 	}
 	
-#ifdef DEBUG
-	if (ldebug(mmap) || ldebug(mmap2))
-		kprintf("-> (%p, %d, %d, 0x%08x, %d, %lld)\n",
+//#ifdef DEBUG
+//	if (ldebug(mmap) || ldebug(mmap2))
+		kprintf("-> (%p, 0x%lx, %d, 0x%08x, %d, 0x%lx)\n",
 		    addr, len, prot, flags, fd, pos);
-#endif
+//#endif
 	error = kern_mmap(curproc->p_vmspace, addr, len,
 			  prot, flags, fd, pos, &new);
 
 	lwkt_reltoken(&curproc->p_vmspace->vm_map.token);
+
+	kprintf("mmap: error=%d, result=%p\n", error, new);
 
 	if (error == 0)
 		*res = new;
@@ -763,12 +769,13 @@ sys_linux_mmap2(struct linux_mmap2_args *args)
 
 #ifdef DEBUG
 	if (ldebug(mmap2))
-		kprintf(ARGS(mmap2, "%p, %d, %d, 0x%08x, %d, %d"),
+		kprintf(ARGS(mmap2, "%p, %ld, %d, 0x%08x, %d, %ld"),
 		    (void *)args->addr, args->len, args->prot, args->flags,
 		    args->fd, args->pgoff);
 #endif
 	error = linux_mmap_common((void *)args->addr, args->len, args->prot,
-	    args->flags, args->fd, args->pgoff * PAGE_SIZE,
+//	    args->flags, args->fd, args->pgoff * PAGE_SIZE,
+	    args->flags, args->fd, args->pgoff,
 	    &args->sysmsg_resultp);
 #ifdef DEBUG
 	if (ldebug(mmap2))
@@ -1313,6 +1320,7 @@ sys_linux_arch_prctl(struct linux_arch_prctl_args *args)
 	switch(args->code) {
 	case LINUX_ARCH_SET_GS:
 		/* XXX check wheter args->addr is mapped */
+		kprintf("set_gs: addr=0x%lx\n", args->addr);
 		curthread->td_tls.info[TLS_WHICH_GS].base = (void *)args->addr;
 		set_user_TLS();
 		return 0;
@@ -1323,6 +1331,7 @@ sys_linux_arch_prctl(struct linux_arch_prctl_args *args)
 
 	case LINUX_ARCH_SET_FS:
 		/* XXX check wheter args->addr is mapped */
+		kprintf("set_gs: addr=0x%lx\n", args->addr);
 		curthread->td_tls.info[TLS_WHICH_FS].base = (void *)args->addr;
 		set_user_TLS();
 		return 0;

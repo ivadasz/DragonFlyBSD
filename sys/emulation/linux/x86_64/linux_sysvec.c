@@ -310,8 +310,9 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	}
 
 	memset(&frame, 0, sizeof(frame));
-	frame.pretcode = NULL; /* XXX */
-//	frame.pretcode = (void *)0x401070;
+//	frame.pretcode = NULL; /* XXX */
+	frame.pretcode = p->p_sigacts->ps_tramp[_SIG_IDX(sig)];
+	kprintf("ps_tramp: %p\n", frame.pretcode);
 
 	/*
 	 * Build the argument list for the signal handler.

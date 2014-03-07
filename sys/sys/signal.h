@@ -272,6 +272,7 @@ struct	sigaction {
 		void    (*__sa_sigaction) (int, struct __siginfo *, void *);
 	} __sigaction_u;		/* signal handler */
 	int	sa_flags;		/* see signal options below */
+	void	*sa_tramp;		/* For SA_RESTORER in Linux */
 	sigset_t sa_mask;		/* signal mask to apply */
 };
 

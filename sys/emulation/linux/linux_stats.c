@@ -457,7 +457,6 @@ sys_linux_stat64(struct linux_stat64_args *args)
 	return (error);
 }
 
-#if defined(__i386__)
 
 /*
  * MPALMOSTSAFE
@@ -489,8 +488,6 @@ sys_linux_lstat64(struct linux_lstat64_args *args)
 	linux_free_path(&path);
 	return (error);
 }
-
-#endif /* defined(__i386__) */
 
 /*
  * MPALMOSTSAFE

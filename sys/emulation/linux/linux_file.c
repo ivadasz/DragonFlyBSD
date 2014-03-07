@@ -560,6 +560,7 @@ sys_linux_getdents64(struct linux_getdents64_args *args)
 #endif
 	return (getdents_common(args, 1));
 }
+#endif
 
 /*
  * These exist mainly for hooks for doing /compat/linux translation.
@@ -590,6 +591,7 @@ sys_linux_access(struct linux_access_args *args)
 	return(error);
 }
 
+#if 0
 /*
  * MPALMOSTSAFE
  */

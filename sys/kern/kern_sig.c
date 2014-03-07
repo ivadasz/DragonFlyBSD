@@ -239,6 +239,7 @@ kern_sigaction(int sig, struct sigaction *act, struct sigaction *oact)
 	if (oact) {
 		oact->sa_handler = ps->ps_sigact[_SIG_IDX(sig)];
 		oact->sa_mask = ps->ps_catchmask[_SIG_IDX(sig)];
+		oact->sa_tramp = ps->ps_tramp[_SIG_IDX(sig)];
 		oact->sa_flags = 0;
 		if (SIGISMEMBER(ps->ps_sigonstack, sig))
 			oact->sa_flags |= SA_ONSTACK;
@@ -254,6 +255,7 @@ kern_sigaction(int sig, struct sigaction *act, struct sigaction *oact)
 			oact->sa_flags |= SA_NOCLDSTOP;
 		if (sig == SIGCHLD && p->p_sigacts->ps_flag & PS_NOCLDWAIT)
 			oact->sa_flags |= SA_NOCLDWAIT;
+		/* XXX Handle SA_RESTORER for compat_linux */
 	}
 	if (act) {
 		/*
@@ -272,6 +274,8 @@ kern_sigaction(int sig, struct sigaction *act, struct sigaction *oact)
 		 */
 		ps->ps_catchmask[_SIG_IDX(sig)] = act->sa_mask;
 		SIG_CANTMASK(ps->ps_catchmask[_SIG_IDX(sig)]);
+		/* XXX Test for SA_RESTORER flag */
+		ps->ps_tramp[_SIG_IDX(sig)] = act->sa_tramp;
 		if (act->sa_flags & SA_SIGINFO) {
 			ps->ps_sigact[_SIG_IDX(sig)] =
 			    (__sighandler_t *)act->sa_sigaction;

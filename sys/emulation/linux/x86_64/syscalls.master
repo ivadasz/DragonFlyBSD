@@ -35,8 +35,8 @@
 
 ; #ifdef's, etc. may be included, and are copied to the output files.
 
-0	NOPROTO	{ int read(int fd, char *buf, u_int nbyte); }
-1	NOPROTO	{ int write(int fd, char *buf, u_int nbyte); }
+0	NOPROTO	{ ulong read(int fd, char *buf, u_long nbyte); }
+1	NOPROTO	{ ulong write(int fd, char *buf, u_long nbyte); }
 2	STD	{ int linux_open(char *path, l_int flags, \
 				l_int mode); }
 3	NOPROTO { int close(int fd); }
@@ -44,16 +44,18 @@
 				struct l_stat64 *statbuf, l_long flags); }
 5	STD	{ int linux_fstat64(l_ulong fd, \
 				struct l_stat64 *statbuf, l_long flags); }
-6	UNIMPL	lstat
-7	UNIMPL	poll
+6	STD	{ int linux_lstat64(char *filename, \
+				struct l_stat64 *statbuf, l_long flags); }
+7	NOPROTO	{ int poll(struct pollfd*, unsigned int nfds, \
+				int timeout); }
 8	STD	{ int linux_lseek(l_uint fdes, l_off_t off, \
 				l_int whence); }
-9	STD	{ int linux_mmap2(l_ulong addr, l_ulong len, \
-				l_ulong prot, l_ulong flags, l_ulong fd, \
+9	STD	{ ulong linux_mmap2(l_ulong addr, l_ulong len, \
+				l_int prot, l_int flags, l_int fd, \
 				l_ulong pgoff); }
-10	UNIMPL	mprotect
-11	UNIMPL	munmap
-12	STD	{ int linux_brk(l_ulong dsend); }
+10	NOPROTO	{ int mprotect(caddr_t addr, ulong len, int prot); }
+11	NOPROTO	{ int munmap(caddr_t addr, size_t len); }
+12	STD	{ ulong linux_brk(l_ulong dsend); }
 13	STD	{ int linux_rt_sigaction(l_int sig, \
 				l_sigaction_t *act, l_sigaction_t *oact, \
 				l_size_t sigsetsize); }
@@ -61,7 +63,7 @@
 				l_sigset_t *mask, l_sigset_t *omask, \
 				l_size_t sigsetsize); }
 15	STD	{ int linux_rt_sigreturn(struct l_ucontext *ucp); }
-16	STD	{ int linux_ioctl(l_uint fd, l_uint cmd, \
+16	STD	{ int linux_ioctl(l_int fd, l_ulong cmd, \
 				l_ulong arg); }
 17	UNIMPL	pread64
 18	UNIMPL	pwrite64
@@ -69,7 +71,7 @@
 				u_int iovcnt); }
 20	NOPROTO	{ int writev(int fd, struct iovec *iovp, \
 				u_int iovcnt); }
-21	UNIMPL	access
+21	STD	{ int linux_access(char *path, l_int flags); }
 22	UNIMPL	pipe
 23	UNIMPL	select
 24	UNIMPL	sched_yield
@@ -109,7 +111,7 @@
 58	UNIMPL	vfork
 59	STD	{ int linux_execve(char *path, char **argp, \
 				char **envp); }
-60	NOPROTO	{ void exit(long rval); }
+60	NOPROTO	{ void exit(l_int rval); }
 61	UNIMPL	wait4
 62	STD	{ int linux_kill(l_int pid, l_int signum); }
 63	STD	{ int linux_newuname(struct l_new_utsname *buf); }
@@ -281,7 +283,7 @@
 228	UNIMPL	clock_gettime
 229	UNIMPL	clock_getres
 230	UNIMPL	clock_nanosleep
-231	UNIMPL	exit_group
+231	STD	{ void linux_exit_group(int rval); }
 232	UNIMPL	epoll_wait
 233	UNIMPL	epoll_ctl
 234	STD	{ int linux_tgkill(int tgid, int pid, int sig); }

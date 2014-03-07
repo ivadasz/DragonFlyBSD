@@ -48,6 +48,14 @@ struct	linux_fstat64_args {
 	struct l_stat64 *	statbuf;	char statbuf_[PAD_(struct l_stat64 *)];
 	l_long	flags;	char flags_[PAD_(l_long)];
 };
+struct	linux_lstat64_args {
+#ifdef _KERNEL
+	struct sysmsg sysmsg;
+#endif
+	char *	filename;	char filename_[PAD_(char *)];
+	struct l_stat64 *	statbuf;	char statbuf_[PAD_(struct l_stat64 *)];
+	l_long	flags;	char flags_[PAD_(l_long)];
+};
 struct	linux_lseek_args {
 #ifdef _KERNEL
 	struct sysmsg sysmsg;
@@ -62,9 +70,9 @@ struct	linux_mmap2_args {
 #endif
 	l_ulong	addr;	char addr_[PAD_(l_ulong)];
 	l_ulong	len;	char len_[PAD_(l_ulong)];
-	l_ulong	prot;	char prot_[PAD_(l_ulong)];
-	l_ulong	flags;	char flags_[PAD_(l_ulong)];
-	l_ulong	fd;	char fd_[PAD_(l_ulong)];
+	l_int	prot;	char prot_[PAD_(l_int)];
+	l_int	flags;	char flags_[PAD_(l_int)];
+	l_int	fd;	char fd_[PAD_(l_int)];
 	l_ulong	pgoff;	char pgoff_[PAD_(l_ulong)];
 };
 struct	linux_brk_args {
@@ -101,9 +109,16 @@ struct	linux_ioctl_args {
 #ifdef _KERNEL
 	struct sysmsg sysmsg;
 #endif
-	l_uint	fd;	char fd_[PAD_(l_uint)];
-	l_uint	cmd;	char cmd_[PAD_(l_uint)];
+	l_int	fd;	char fd_[PAD_(l_int)];
+	l_ulong	cmd;	char cmd_[PAD_(l_ulong)];
 	l_ulong	arg;	char arg_[PAD_(l_ulong)];
+};
+struct	linux_access_args {
+#ifdef _KERNEL
+	struct sysmsg sysmsg;
+#endif
+	char *	path;	char path_[PAD_(char *)];
+	l_int	flags;	char flags_[PAD_(l_int)];
 };
 struct	linux_getpid_args {
 #ifdef _KERNEL
@@ -159,6 +174,12 @@ struct	linux_tkill_args {
 	int	tid;	char tid_[PAD_(int)];
 	int	sig;	char sig_[PAD_(int)];
 };
+struct	linux_exit_group_args {
+#ifdef _KERNEL
+	struct sysmsg sysmsg;
+#endif
+	int	rval;	char rval_[PAD_(int)];
+};
 struct	linux_tgkill_args {
 #ifdef _KERNEL
 	struct sysmsg sysmsg;
@@ -198,6 +219,7 @@ struct	linux_tgkill_args {
 int	sys_linux_open (struct linux_open_args *);
 int	sys_linux_stat64 (struct linux_stat64_args *);
 int	sys_linux_fstat64 (struct linux_fstat64_args *);
+int	sys_linux_lstat64 (struct linux_lstat64_args *);
 int	sys_linux_lseek (struct linux_lseek_args *);
 int	sys_linux_mmap2 (struct linux_mmap2_args *);
 int	sys_linux_brk (struct linux_brk_args *);
@@ -205,6 +227,7 @@ int	sys_linux_rt_sigaction (struct linux_rt_sigaction_args *);
 int	sys_linux_rt_sigprocmask (struct linux_rt_sigprocmask_args *);
 int	sys_linux_rt_sigreturn (struct linux_rt_sigreturn_args *);
 int	sys_linux_ioctl (struct linux_ioctl_args *);
+int	sys_linux_access (struct linux_access_args *);
 int	sys_linux_getpid (struct linux_getpid_args *);
 int	sys_linux_execve (struct linux_execve_args *);
 int	sys_linux_kill (struct linux_kill_args *);
@@ -213,6 +236,7 @@ int	sys_linux_chdir (struct linux_chdir_args *);
 int	sys_linux_rt_sigsuspend (struct linux_rt_sigsuspend_args *);
 int	sys_linux_arch_prctl (struct linux_arch_prctl_args *);
 int	sys_linux_tkill (struct linux_tkill_args *);
+int	sys_linux_exit_group (struct linux_exit_group_args *);
 int	sys_linux_tgkill (struct linux_tgkill_args *);
 
 #endif /* !_LINUX_SYSPROTO_H_ */

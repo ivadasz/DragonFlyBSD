@@ -86,6 +86,7 @@ linux_to_bsd_sigaction(l_sigaction_t *lsa, struct sigaction *bsa)
 	linux_to_bsd_sigset(&lsa->lsa_mask, &bsa->sa_mask);
 	bsa->sa_handler = lsa->lsa_handler;
 	bsa->sa_flags = 0;
+	bsa->sa_tramp = lsa->lsa_restorer;
 	if (lsa->lsa_flags & LINUX_SA_NOCLDSTOP)
 		bsa->sa_flags |= SA_NOCLDSTOP;
 	if (lsa->lsa_flags & LINUX_SA_NOCLDWAIT)
@@ -108,7 +109,7 @@ bsd_to_linux_sigaction(struct sigaction *bsa, l_sigaction_t *lsa)
 
 	bsd_to_linux_sigset(&bsa->sa_mask, &lsa->lsa_mask);
 	lsa->lsa_handler = bsa->sa_handler;
-	lsa->lsa_restorer = NULL;	/* unsupported */
+	lsa->lsa_restorer = bsa->sa_tramp;
 	lsa->lsa_flags = 0;
 	if (bsa->sa_flags & SA_NOCLDSTOP)
 		lsa->lsa_flags |= LINUX_SA_NOCLDSTOP;
@@ -172,12 +173,14 @@ sys_linux_rt_sigaction(struct linux_rt_sigaction_args *args)
 	struct sigaction nsa, osa;
 	int error, sig;
 
-#ifdef DEBUG
-	if (ldebug(rt_sigaction))
+//#ifdef DEBUG
+//	if (ldebug(rt_sigaction))
 		kprintf(ARGS(rt_sigaction, "%ld, %p, %p, %ld"),
 		    (long)args->sig, (void *)args->act,
 		    (void *)args->oact, (long)args->sigsetsize);
-#endif
+//#endif
+	kprintf("args->sigsetsize: %ld, sizeof(l_sigset_t): %ld\n",
+	    args->sigsetsize, sizeof(l_sigset_t));
 	if (args->sigsetsize != sizeof(l_sigset_t))
 		return (EINVAL);
 
@@ -187,11 +190,14 @@ sys_linux_rt_sigaction(struct linux_rt_sigaction_args *args)
 			return (error);
 		linux_to_bsd_sigaction(&linux_nsa, &nsa);
 	}
+	kprintf("args->sig: %d\n", args->sig);
 	if (args->sig <= LINUX_SIGTBLSZ) {
 		sig = linux_to_bsd_signal[_SIG_IDX(args->sig)];
 	} else {
 		sig = args->sig;
 	}
+
+	kprintf("args->lsa_restorer = 0x%p\n", linux_nsa.lsa_restorer);
 
 	error = kern_sigaction(sig, args->act ? &nsa : NULL,
 			       args->oact ? &osa : NULL);
