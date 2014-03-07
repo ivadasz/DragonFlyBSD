@@ -257,8 +257,17 @@ struct l_new_utsname {
 #define	LINUX_SIGSYS		31
 
 #define	LINUX_SIGTBLSZ		31
+#if defined(__i386__)
 #define	LINUX_NSIG_WORDS	2
+#else
+//#define	LINUX_NSIG_WORDS	16
+#define	LINUX_NSIG_WORDS	1
+#endif
+#if defined(__i386__)
 #define	LINUX_NBPW		32
+#else
+#define	LINUX_NBPW		64
+#endif
 #define	LINUX_NSIG		(LINUX_NBPW * LINUX_NSIG_WORDS)
 
 /* sigaction flags */
@@ -294,28 +303,56 @@ typedef void	(*l_handler_t)(l_int);
 typedef l_ulong	l_osigset_t;
 
 typedef struct {
-	l_uint	__bits[LINUX_NSIG_WORDS];
+	l_ulong	__bits[LINUX_NSIG_WORDS];
 } l_sigset_t;
 
+#if 0
 typedef struct {
 	l_handler_t	lsa_handler;
+#if defined(__i386__)
 	l_osigset_t	lsa_mask;
+#else
+	l_sigset_t	lsa_mask;
+#endif
 	l_ulong		lsa_flags;
 	void	(*lsa_restorer)(void);
+#if defined(__i386__)
 } l_osigaction_t;
+#else
+} l_sigaction_t;
+#endif
+#endif
 
+//#if defined(__i386__)
 typedef struct {
 	l_handler_t	lsa_handler;
-	l_ulong		lsa_flags;
+	l_int		lsa_flags;
 	void	(*lsa_restorer)(void);
 	l_sigset_t	lsa_mask;
 } l_sigaction_t;
+//#endif
 
 typedef struct {
 	void		*ss_sp;
 	l_int		ss_flags;
 	l_size_t	ss_size;
 } l_stack_t;
+
+/* Matches the cpu's fxsave format */
+struct linux__fpstate {
+	u_int16_t cwd;
+	u_int16_t swd;
+	u_int16_t twd;
+	u_int16_t fop;
+	u_int64_t rip;
+	u_int64_t rdp;
+	u_int32_t mxcsr;
+	u_int32_t mxcsr_mask;
+	u_int32_t st_space[32];
+	u_int32_t xmm_space[64];
+	u_int32_t reserved2[24];
+};
+//__CTASSERT(sizeof (struct linux__fpstate) == 512);
 
 /* The Linux sigcontext, pretty much a standard 386 trapframe. */
 struct l_sigcontext {
@@ -325,26 +362,40 @@ struct l_sigcontext {
 	l_int		sc_es;
 	l_int		sc_ds;
 #endif
+	u_int64_t	sc_r8;
+	u_int64_t	sc_r9;
+	u_int64_t	sc_r10;
+	u_int64_t	sc_r11;
+	u_int64_t	sc_r12;
+	u_int64_t	sc_r13;
+	u_int64_t	sc_r14;
+	u_int64_t	sc_r15;
 	l_ulong		sc_rdi;
 	l_ulong		sc_rsi;
 	l_ulong		sc_rbp;
-	l_ulong		sc_rsp;
 	l_ulong		sc_rbx;
 	l_ulong		sc_rdx;
-	l_ulong		sc_rcx;
 	l_ulong		sc_rax;
-	l_ulong		sc_trapno;
-	l_ulong		sc_err;
+	l_ulong		sc_rcx;
 	l_ulong		sc_rip;
-	l_ulong		sc_cs;
 	l_ulong		sc_eflags;
 	l_ulong		sc_rsp_at_signal;
-	l_ulong		sc_ss;
-#if 0
-	l_int		sc_387;
-#endif
+	uint16_t	sc_cs;
+	uint16_t	sc_fs;
+	uint16_t	sc_gs;
+	uint16_t	pad0;
+	l_ulong		sc_err;
+	l_ulong		sc_trapno;
 	l_ulong		sc_mask;
 	l_ulong		sc_cr2;
+	struct linux__fpstate *fpstate;
+	u_int64_t reserved1[8];
+#if 0
+	l_ulong		sc_cs;
+	l_ulong		sc_rsp_at_signal;
+	l_ulong		sc_ss;
+	l_int		sc_387;
+#endif
 };
 
 struct l_ucontext {
@@ -464,12 +515,17 @@ struct l_sigframe {
 };
 
 struct l_rt_sigframe {
+#if 0
 	l_int			sf_sig;
 	l_siginfo_t 		*sf_siginfo;
 	struct l_ucontext	*sf_ucontext;
-	l_siginfo_t		sf_si;
+#endif
+	char			*pretcode;
 	struct l_ucontext 	sf_sc;
+	l_siginfo_t		sf_si;
+#if 0
 	l_handler_t 		sf_handler;
+#endif
 };
 
 extern int bsd_to_linux_signal[];

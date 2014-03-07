@@ -257,11 +257,12 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	struct trapframe *regs;
 	struct l_rt_sigframe *fp, frame;
 	int oonstack;
+//	struct linux__fpstate *fps;
 
 	regs = lp->lwp_md.md_regs;
 	oonstack = lp->lwp_sigstk.ss_flags & SS_ONSTACK;
 
-	kprintf("oonstack: %d\n", oonstack);
+//	kprintf("oonstack: %d\n", oonstack);
 
 //#ifdef DEBUG
 //	if (ldebug(rt_sendsig))
@@ -278,6 +279,10 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 		lp->lwp_sigstk.ss_flags |= SS_ONSTACK;
 	} else
 		fp = (struct l_rt_sigframe *)(regs->tf_rsp - 128);
+//	fp = (char *) (((long)fp - sizeof (*fps)) & ~0xfUL);
+//	fps = fp;
+	fp = (struct l_rt_sigframe *)
+	    ((((long)fp - sizeof(struct l_rt_sigframe)) & ~0xfUL) - 8);
 
 	/*
 	 * grow() will return FALSE if the fp will not fit inside the stack
@@ -295,14 +300,18 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 		SIGDELSET(p->p_sigignore, SIGILL);
 		SIGDELSET(p->p_sigcatch, SIGILL);
 		SIGDELSET(lp->lwp_sigmask, SIGILL);
-//#ifdef DEBUG
-//		if (ldebug(rt_sendsig))
+#ifdef DEBUG
+		if (ldebug(rt_sendsig))
 			kprintf(LMSG("rt_sendsig: bad stack %p, oonstack=%x"),
 			    fp, oonstack);
-//#endif
+#endif
 		lwpsignal(p, lp, SIGILL);
 		return;
 	}
+
+	memset(&frame, 0, sizeof(frame));
+	frame.pretcode = NULL; /* XXX */
+//	frame.pretcode = (void *)0x401070;
 
 	/*
 	 * Build the argument list for the signal handler.
@@ -311,10 +320,10 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 		if (sig <= p->p_sysent->sv_sigsize)
 			sig = p->p_sysent->sv_sigtbl[_SIG_IDX(sig)];
 
-	frame.sf_handler = catcher;
-	frame.sf_sig = sig;
-	frame.sf_siginfo = &fp->sf_si;
-	frame.sf_ucontext = &fp->sf_sc;
+//	frame.sf_handler = catcher;
+//	frame.sf_sig = sig;
+//	frame.sf_siginfo = &fp->sf_si;
+//	frame.sf_ucontext = &fp->sf_sc;
 
 	/* Fill siginfo structure. */
 	frame.sf_si.lsi_signo = sig;
@@ -341,6 +350,14 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	frame.sf_sc.uc_mcontext.sc_es     = regs->tf_es;
 	frame.sf_sc.uc_mcontext.sc_ds     = regs->tf_ds;
 #endif
+	frame.sf_sc.uc_mcontext.sc_r8    = regs->tf_r8;
+	frame.sf_sc.uc_mcontext.sc_r9    = regs->tf_r9;
+	frame.sf_sc.uc_mcontext.sc_r10    = regs->tf_r10;
+	frame.sf_sc.uc_mcontext.sc_r11    = regs->tf_r11;
+	frame.sf_sc.uc_mcontext.sc_r12    = regs->tf_r12;
+	frame.sf_sc.uc_mcontext.sc_r13    = regs->tf_r13;
+	frame.sf_sc.uc_mcontext.sc_r14    = regs->tf_r14;
+	frame.sf_sc.uc_mcontext.sc_r15    = regs->tf_r15;
 	frame.sf_sc.uc_mcontext.sc_rdi    = regs->tf_rdi;
 	frame.sf_sc.uc_mcontext.sc_rsi    = regs->tf_rsi;
 	frame.sf_sc.uc_mcontext.sc_rbp    = regs->tf_rbp;
@@ -352,7 +369,9 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	frame.sf_sc.uc_mcontext.sc_cs     = regs->tf_cs;
 	frame.sf_sc.uc_mcontext.sc_eflags = regs->tf_rflags;
 	frame.sf_sc.uc_mcontext.sc_rsp_at_signal = regs->tf_rsp;
+#if 0
 	frame.sf_sc.uc_mcontext.sc_ss     = regs->tf_ss;
+#endif
 	frame.sf_sc.uc_mcontext.sc_err    = regs->tf_err;
 	frame.sf_sc.uc_mcontext.sc_trapno = bsd_to_linux_trapcode(code);
 
@@ -377,10 +396,11 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	 * Build context to run handler in.
 	 */
 	regs->tf_rsp = (uintptr_t)fp;
-//	regs->tf_rip = PS_STRINGS - *(p->p_sysent->sv_szsigcode) +
-//	    linux_sznonrtsigcode;
 	regs->tf_rip = (l_ulong)catcher;
-	regs->tf_rdi = (l_ulong)frame.sf_si.lsi_signo;
+	regs->tf_rdi = (l_ulong)sig;
+	regs->tf_rsi = (l_ulong)&fp->sf_si;
+	regs->tf_rdx = (l_ulong)&fp->sf_sc;
+	regs->tf_rax = 0;
 
 	kprintf("New rip: %lx, new rsp: %lx\n", regs->tf_rip, regs->tf_rsp);
 
@@ -388,7 +408,7 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	 * i386 abi specifies that the direction flag must be cleared
 	 * on function entry
 	 */
-	regs->tf_rflags &= ~(PSL_T | PSL_VM_UNSUPP | PSL_D);
+	regs->tf_rflags &= ~(PSL_T | PSL_VM_UNSUPP | PSL_AC | PSL_D);
 
 	regs->tf_cs = _ucodesel;
 #if 0
@@ -567,8 +587,11 @@ int
 sys_linux_rt_sigreturn(struct linux_rt_sigreturn_args *args)
 {
 	struct lwp *lp = curthread->td_lwp;
+#if 0
 	struct l_ucontext uc;
+#endif
 	struct l_sigcontext *context;
+	struct l_rt_sigframe *fp, frame;
 	l_stack_t *lss;
 	stack_t ss;
 	struct trapframe *regs;
@@ -576,19 +599,30 @@ sys_linux_rt_sigreturn(struct linux_rt_sigreturn_args *args)
 
 	regs = lp->lwp_md.md_regs;
 
-//#ifdef DEBUG
-//	if (ldebug(rt_sigreturn))
+	fp = (struct l_rt_sigframe *)(regs->tf_rsp - 8);
+
+#ifdef DEBUG
+	if (ldebug(rt_sigreturn))
 		kprintf(ARGS(rt_sigreturn, "%p"), (void *)args->ucp);
-//#endif
+#endif
+
+#if 0
 	/*
 	 * The trampoline code hands us the ucontext.
 	 * It is unsafe to keep track of it ourselves, in the event that a
 	 * program jumps out of a signal handler.
 	 */
-	if (copyin((caddr_t)args->ucp, &uc, sizeof(uc)) != 0)
+	if (copyin((caddr_t)args->ucp, &uc, sizeof(uc)) != 0) {
+		kprintf("Fault, while trying to get ucontext\n");
 		return (EFAULT);
+	}
+#endif
+	if (copyin(fp, &frame, sizeof(frame)) != 0) {
+		kprintf("Fault, while trying to get sigframe\n");
+		return (EFAULT);
+	}
 
-	context = &uc.uc_mcontext;
+	context = &frame.sf_sc.uc_mcontext;
 
 	/*
 	 * Check for security violations.
@@ -606,6 +640,7 @@ sys_linux_rt_sigreturn(struct linux_rt_sigreturn_args *args)
 	 * allowing it is fairly harmless.
 	 */
 	if (!EFLAGS_SECURE(eflags & ~PSL_RF, regs->tf_rflags & ~PSL_RF)) {
+		kprintf("eflags not secure\n");
     		return(EINVAL);
 	}
 
@@ -616,12 +651,14 @@ sys_linux_rt_sigreturn(struct linux_rt_sigreturn_args *args)
 	 */
 #define	CS_SECURE(cs)	(ISPL(cs) == SEL_UPL)
 	if (!CS_SECURE(context->sc_cs)) {
+		kprintf("invalid cs register\n");
 		trapsignal(lp, SIGBUS, T_PROTFLT);
 		return(EINVAL);
 	}
 
-	lp->lwp_sigstk.ss_flags &= ~SS_ONSTACK;
-	linux_to_bsd_sigset(&uc.uc_sigmask, &lp->lwp_sigmask);
+//	lp->lwp_sigstk.ss_flags &= ~SS_ONSTACK;
+	lp->lwp_sigstk.ss_flags |= SS_ONSTACK;
+	linux_to_bsd_sigset(&frame.sf_sc.uc_sigmask, &lp->lwp_sigmask);
 	SIG_CANTMASK(lp->lwp_sigmask);
 
 	/*
@@ -633,6 +670,14 @@ sys_linux_rt_sigreturn(struct linux_rt_sigreturn_args *args)
 	regs->tf_es     = context->sc_es;
 	regs->tf_ds     = context->sc_ds;
 #endif
+	regs->tf_r8    = context->sc_r8;
+	regs->tf_r9    = context->sc_r9;
+	regs->tf_r10    = context->sc_r10;
+	regs->tf_r11    = context->sc_r11;
+	regs->tf_r12    = context->sc_r12;
+	regs->tf_r13    = context->sc_r13;
+	regs->tf_r14    = context->sc_r14;
+	regs->tf_r15    = context->sc_r15;
 	regs->tf_rdi    = context->sc_rdi;
 	regs->tf_rsi    = context->sc_rsi;
 	regs->tf_rbp    = context->sc_rbp;
@@ -644,14 +689,16 @@ sys_linux_rt_sigreturn(struct linux_rt_sigreturn_args *args)
 	regs->tf_cs     = context->sc_cs;
 	regs->tf_rflags = eflags;
 	regs->tf_rsp    = context->sc_rsp_at_signal;
+#if 0
 	regs->tf_ss     = context->sc_ss;
+#endif
 
 	kprintf("New rip: %lx, new rsp: %lx\n", regs->tf_rip, regs->tf_rsp);
 
 	/*
 	 * call sigaltstack & ignore results..
 	 */
-	lss = &uc.uc_stack;
+	lss = &frame.sf_sc.uc_stack;
 	ss.ss_sp = lss->ss_sp;
 	ss.ss_size = lss->ss_size;
 	ss.ss_flags = linux_to_bsd_sigaltstack(lss->ss_flags);
