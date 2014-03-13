@@ -30,7 +30,13 @@
 #define	LINUX_SYS_exit	60
 #define	LINUX_SYS_linux_kill	62
 #define	LINUX_SYS_linux_newuname	63
+#define	LINUX_SYS_linux_getcwd	79
 #define	LINUX_SYS_linux_chdir	80
+#define	LINUX_SYS_linux_getuid	102
+#define	LINUX_SYS_linux_getgid	104
+#define	LINUX_SYS_geteuid	107
+#define	LINUX_SYS_getegid	108
+#define	LINUX_SYS_linux_getppid	110
 #define	LINUX_SYS_linux_rt_sigsuspend	130
 #define	LINUX_SYS_linux_arch_prctl	158
 #define	LINUX_SYS_linux_tkill	200

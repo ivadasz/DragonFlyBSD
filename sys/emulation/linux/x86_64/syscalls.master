@@ -130,7 +130,7 @@
 76	UNIMPL	truncate
 77	UNIMPL	ftruncate
 78	UNIMPL	getdents
-79	UNIMPL	getcwd
+79	STD	{ int linux_getcwd(char *buf, l_ulong bufsize); }
 80	STD	{ int linux_chdir(char *path); }
 81	UNIMPL	fchdir
 82	UNIMPL	rename
@@ -153,15 +153,15 @@
 99	UNIMPL	sysinfo
 100	UNIMPL	times
 101	UNIMPL	ptrace
-102	UNIMPL	getuid
+102	STD	{ int linux_getuid(void); }
 103	UNIMPL	syslog
-104	UNIMPL	getgid
+104	STD	{ int linux_getgid(void); }
 105	UNIMPL	setuid
 106	UNIMPL	setgid
-107	UNIMPL	geteuid
-108	UNIMPL	getegid
+107	NOPROTO	{ int geteuid(void); }
+108	NOPROTO	{ int getegid(void); }
 109	UNIMPL	setpgid
-110	UNIMPL	getppid
+110	STD	{ int linux_getppid(void); }
 111	UNIMPL	getpgrp
 112	UNIMPL	setsid
 113	UNIMPL	setreuid

@@ -147,11 +147,36 @@ struct	linux_newuname_args {
 #endif
 	struct l_new_utsname *	buf;	char buf_[PAD_(struct l_new_utsname *)];
 };
+struct	linux_getcwd_args {
+#ifdef _KERNEL
+	struct sysmsg sysmsg;
+#endif
+	char *	buf;	char buf_[PAD_(char *)];
+	l_ulong	bufsize;	char bufsize_[PAD_(l_ulong)];
+};
 struct	linux_chdir_args {
 #ifdef _KERNEL
 	struct sysmsg sysmsg;
 #endif
 	char *	path;	char path_[PAD_(char *)];
+};
+struct	linux_getuid_args {
+#ifdef _KERNEL
+	struct sysmsg sysmsg;
+#endif
+	register_t dummy;
+};
+struct	linux_getgid_args {
+#ifdef _KERNEL
+	struct sysmsg sysmsg;
+#endif
+	register_t dummy;
+};
+struct	linux_getppid_args {
+#ifdef _KERNEL
+	struct sysmsg sysmsg;
+#endif
+	register_t dummy;
 };
 struct	linux_rt_sigsuspend_args {
 #ifdef _KERNEL
@@ -232,7 +257,11 @@ int	sys_linux_getpid (struct linux_getpid_args *);
 int	sys_linux_execve (struct linux_execve_args *);
 int	sys_linux_kill (struct linux_kill_args *);
 int	sys_linux_newuname (struct linux_newuname_args *);
+int	sys_linux_getcwd (struct linux_getcwd_args *);
 int	sys_linux_chdir (struct linux_chdir_args *);
+int	sys_linux_getuid (struct linux_getuid_args *);
+int	sys_linux_getgid (struct linux_getgid_args *);
+int	sys_linux_getppid (struct linux_getppid_args *);
 int	sys_linux_rt_sigsuspend (struct linux_rt_sigsuspend_args *);
 int	sys_linux_arch_prctl (struct linux_arch_prctl_args *);
 int	sys_linux_tkill (struct linux_tkill_args *);

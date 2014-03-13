@@ -1685,8 +1685,6 @@ sys_linux_getpid(struct linux_getpid_args *args)
 	return (0);
 }
 
-#if defined(__i386__)
-
 /*
  * MPALMOSTSAFE
  */
@@ -1747,6 +1745,8 @@ sys_linux_getuid(struct linux_getuid_args *args)
 	args->sysmsg_result = td->td_ucred->cr_ruid;
 	return (0);
 }
+
+#if defined(__i386__)
 
 /*
  * MPSAFE

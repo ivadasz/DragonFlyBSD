@@ -27,7 +27,11 @@ union sysunion {
 	struct	linux_execve_args linux_execve;
 	struct	linux_kill_args linux_kill;
 	struct	linux_newuname_args linux_newuname;
+	struct	linux_getcwd_args linux_getcwd;
 	struct	linux_chdir_args linux_chdir;
+	struct	linux_getuid_args linux_getuid;
+	struct	linux_getgid_args linux_getgid;
+	struct	linux_getppid_args linux_getppid;
 	struct	linux_rt_sigsuspend_args linux_rt_sigsuspend;
 	struct	linux_arch_prctl_args linux_arch_prctl;
 	struct	linux_tkill_args linux_tkill;
