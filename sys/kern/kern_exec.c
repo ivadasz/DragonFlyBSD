@@ -342,6 +342,23 @@ interpret:
 			0) != 0))
 		imgp->execpath = args->fname;
 
+	int dist = strlen(imgp->execpath) + 3;
+	if (imgp->args->space >= dist) {
+		char *ch;
+		imgp->args->space -= dist;
+		imgp->args->envc++;
+		imgp->args->endp += dist;
+		for (ch = imgp->args->endp - 1; ch >= imgp->args->begin_envv + dist; ch--)
+			*ch = *(ch - dist);
+		imgp->args->begin_envv[0] = '_';
+		imgp->args->begin_envv[1] = '=';
+		for (i = 0; i < strlen(imgp->execpath); i++)
+			imgp->args->begin_envv[i + 2] = imgp->execpath[i];
+		imgp->args->begin_envv[dist - 1] = '\0';
+	} else {
+		kprintf("no room to insert execpath string into env\n");
+	}
+
 	/*
 	 * Copy out strings (args and env) and initialize stack base
 	 */
@@ -946,6 +963,8 @@ exec_copyin_args(struct image_args *args, char *fname,
 					error = E2BIG;
 				break;
 			}
+			if (args->endp[0] == '_' && args->endp[1] == '=')
+				continue;
 			args->space -= length;
 			args->endp += length;
 			args->envc++;
@@ -1051,6 +1070,8 @@ exec_copyout_strings(struct image_params *imgp)
 	 */
 	vectp = (char **)destp - (AT_COUNT * 2);
 	vectp -= imgp->args->argc + imgp->args->envc + 2;
+	if (((uintptr_t)vectp) & 0x8)
+	vectp--;
 
 	stack_base = (register_t *)vectp;
 

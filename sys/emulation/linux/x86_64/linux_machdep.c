@@ -1323,6 +1323,7 @@ sys_linux_arch_prctl(struct linux_arch_prctl_args *args)
 		kprintf("set_gs: addr=0x%lx\n", args->addr);
 		curthread->td_tls.info[TLS_WHICH_GS].base = (void *)args->addr;
 		set_user_TLS();
+		args->sysmsg_result = 0;
 		return 0;
 
 	case LINUX_ARCH_GET_GS:
@@ -1331,9 +1332,10 @@ sys_linux_arch_prctl(struct linux_arch_prctl_args *args)
 
 	case LINUX_ARCH_SET_FS:
 		/* XXX check wheter args->addr is mapped */
-		kprintf("set_gs: addr=0x%lx\n", args->addr);
+		kprintf("set_fs: addr=0x%lx\n", args->addr);
 		curthread->td_tls.info[TLS_WHICH_FS].base = (void *)args->addr;
 		set_user_TLS();
+		args->sysmsg_result = 0;
 		return 0;
 
 	case LINUX_ARCH_GET_FS:
