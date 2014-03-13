@@ -85,10 +85,8 @@ extern int linux_szsigcode;
 
 extern struct sysent linux_sysent[LINUX_SYS_MAXSYSCALL];
 
-#if 0
 static int	linux_fixup (register_t **stack_base,
 				 struct image_params *iparams);
-#endif
 static int	elf_linux_fixup (register_t **stack_base,
 				     struct image_params *iparams);
 static void	linux_prepsyscall (struct trapframe *tf, int *args,
@@ -218,9 +216,11 @@ static int
 elf_linux_fixup(register_t **stack_base, struct image_params *imgp)
 {
 	Elf64_Auxargs *args = (Elf64_Auxargs *)imgp->auxargs;
+	Elf_Addr *base;
 	register_t *pos;
-             
-	pos = *stack_base + (imgp->args->argc + imgp->args->envc + 2);  
+
+	base = (Elf_Addr *)*stack_base;
+	pos = base + (imgp->args->argc + imgp->args->envc + 2);  
     
 	if (args->execfd != -1) {
 		AUXARGS_ENTRY(pos, AT_EXECFD, args->execfd);
@@ -241,9 +241,10 @@ elf_linux_fixup(register_t **stack_base, struct image_params *imgp)
 	kfree(imgp->auxargs, M_TEMP);      
 	imgp->auxargs = NULL;
 
-	(*stack_base)--;
-	**stack_base = (long)imgp->args->argc;
-	return 0;
+	base--;
+	suword(base, (long)imgp->args->argc);
+	*stack_base = (register_t *)base;
+	return (0);
 }
 
 extern long _ucodesel, _udatasel;
