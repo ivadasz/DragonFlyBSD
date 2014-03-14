@@ -54,6 +54,7 @@ options 	MSDOSFS			#MSDOS Filesystem
 options 	CD9660			#ISO 9660 Filesystem
 options 	PROCFS			#Process filesystem
 #options 	COMPAT_43		#Compatible with BSD 4.3
+options 	COMPAT_LINUX		#Compatible with Linux 2.6
 options 	UCONSOLE		#Allow users to grab the console
 options 	KTRACE			#ktrace(1) support
 options 	SYSVSHM			#SYSV-style shared memory
