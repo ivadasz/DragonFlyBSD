@@ -597,16 +597,6 @@ out:
 }
 #endif
 
-/* XXX move */
-struct l_mmap_argv {
-	l_caddr_t	addr;
-	l_size_t		len;
-	l_int		prot;
-	l_int		flags;
-	l_int		fd;
-	l_off_t		pos;
-};
-
 #define STACK_SIZE  (2 * 1024 * 1024)
 #define GUARD_SIZE  (4 * PAGE_SIZE)
 
@@ -715,11 +705,11 @@ linux_mmap_common(caddr_t linux_addr, size_t linux_len, int linux_prot,
 		fd = linux_fd;
 	}
 	
-//#ifdef DEBUG
-//	if (ldebug(mmap) || ldebug(mmap2))
+#ifdef DEBUG
+	if (ldebug(mmap) || ldebug(mmap2))
 		kprintf("-> (%p, 0x%lx, %d, 0x%08x, %d, 0x%lx)\n",
 		    addr, len, prot, flags, fd, pos);
-//#endif
+#endif
 	error = kern_mmap(curproc->p_vmspace, addr, len,
 			  prot, flags, fd, pos, &new);
 
@@ -731,37 +721,6 @@ linux_mmap_common(caddr_t linux_addr, size_t linux_len, int linux_prot,
 		*res = new;
 	return (error);
 }
-
-#if 0
-/*
- * MPSAFE
- */
-int
-sys_linux_mmap(struct linux_mmap_args *args)
-{
-	struct l_mmap_argv linux_args;
-	int error;
-
-	error = copyin((caddr_t)args->ptr, &linux_args, sizeof(linux_args));
-	if (error)
-		return (error);
-
-#ifdef DEBUG
-	if (ldebug(mmap))
-		kprintf(ARGS(mmap, "%p, %d, %d, 0x%08x, %d, %d"),
-		    (void *)linux_args.addr, linux_args.len, linux_args.prot,
-		    linux_args.flags, linux_args.fd, linux_args.pos);
-#endif
-	error = linux_mmap_common(linux_args.addr, linux_args.len,
-	    linux_args.prot, linux_args.flags, linux_args.fd,
-	    linux_args.pos, &args->sysmsg_resultp);
-#ifdef DEBUG
-	if (ldebug(mmap))
-		kprintf("-> %p\n", args->sysmsg_resultp);
-#endif
-	return(error);
-}
-#endif
 
 /*
  * MPSAFE
@@ -778,7 +737,6 @@ sys_linux_mmap2(struct linux_mmap2_args *args)
 		    args->fd, args->pgoff);
 #endif
 	error = linux_mmap_common((void *)args->addr, args->len, args->prot,
-//	    args->flags, args->fd, args->pgoff * PAGE_SIZE,
 	    args->flags, args->fd, args->pgoff,
 	    &args->sysmsg_resultp);
 #ifdef DEBUG
