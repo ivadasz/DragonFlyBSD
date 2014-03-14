@@ -342,23 +342,6 @@ interpret:
 			0) != 0))
 		imgp->execpath = args->fname;
 
-	int dist = strlen(imgp->execpath) + 3;
-	if (imgp->args->space >= dist) {
-		char *ch;
-		imgp->args->space -= dist;
-		imgp->args->envc++;
-		imgp->args->endp += dist;
-		for (ch = imgp->args->endp - 1; ch >= imgp->args->begin_envv + dist; ch--)
-			*ch = *(ch - dist);
-		imgp->args->begin_envv[0] = '_';
-		imgp->args->begin_envv[1] = '=';
-		for (i = 0; i < strlen(imgp->execpath); i++)
-			imgp->args->begin_envv[i + 2] = imgp->execpath[i];
-		imgp->args->begin_envv[dist - 1] = '\0';
-	} else {
-		kprintf("no room to insert execpath string into env\n");
-	}
-
 	/*
 	 * Copy out strings (args and env) and initialize stack base
 	 */
@@ -650,8 +633,10 @@ sys_execve(struct execve_args *uap)
 	 * Linux will register %edx as an atexit function and we must be
 	 * sure to set it to 0.  XXX
 	 */
-	if (error == 0)
+	if (error == 0) {
 		uap->sysmsg_result64 = 0;
+		uap->sysmsg_fds[1] = 0;
+	}
 
 	return (error);
 }
@@ -963,8 +948,6 @@ exec_copyin_args(struct image_args *args, char *fname,
 					error = E2BIG;
 				break;
 			}
-			if (args->endp[0] == '_' && args->endp[1] == '=')
-				continue;
 			args->space -= length;
 			args->endp += length;
 			args->envc++;

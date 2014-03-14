@@ -115,10 +115,13 @@ sys_linux_execve(struct linux_execve_args *args)
 {
 	struct nlookupdata nd;
 	struct image_args exec_args;
+	struct lwp *lp = curthread->td_lwp;
+        struct trapframe *regs;
 	char *path;
 	int error;
 
 	kprintf("%s running, line: %d\n", __func__, __LINE__);
+        regs = lp->lwp_md.md_regs;
 	error = linux_copyin_path(args->path, &path, LINUX_PATH_EXISTS);
 	if (error)
 		return (error);
@@ -143,6 +146,7 @@ sys_linux_execve(struct linux_execve_args *args)
 	 * sure to set it to 0.  XXX
 	 */
 	if (error == 0) {
+		args->sysmsg_fds[1] = 0;
 		args->sysmsg_result64 = 0;
 		if (curproc->p_sysent == &elf_linux_sysvec)
    		  	error = emuldata_init(curproc, NULL, 0);
