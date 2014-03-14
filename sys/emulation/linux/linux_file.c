@@ -560,7 +560,8 @@ sys_linux_getdents64(struct linux_getdents64_args *args)
 #endif
 	return (getdents_common(args, 1));
 }
-#endif
+
+#endif	/* defined(__i386__) */
 
 /*
  * These exist mainly for hooks for doing /compat/linux translation.
@@ -591,7 +592,8 @@ sys_linux_access(struct linux_access_args *args)
 	return(error);
 }
 
-#if 0
+#if defined(__i386__)
+
 /*
  * MPALMOSTSAFE
  */
@@ -1289,6 +1291,8 @@ sys_linux_umount(struct linux_umount_args *args)
 	return(error);
 }
 
+#endif /* defined(__i386__) */
+
 /*
  * fcntl family of syscalls
  */
@@ -1349,8 +1353,6 @@ bsd_to_linux_flock(struct flock *bsd_flock, struct l_flock *linux_flock)
 	linux_flock->l_pid = (l_pid_t)bsd_flock->l_pid;
 }
 
-#if defined(__i386__)
-
 struct l_flock64 {
 	l_short		l_type;
 	l_short		l_whence;
@@ -1407,8 +1409,6 @@ bsd_to_linux_flock64(struct flock *bsd_flock, struct l_flock64 *linux_flock)
 	linux_flock->l_len = (l_loff_t)bsd_flock->l_len;
 	linux_flock->l_pid = (l_pid_t)bsd_flock->l_pid;
 }
-
-#endif /* defined(__i386__) */
 
 /*
  * MPSAFE
@@ -1532,6 +1532,8 @@ linux_fcntl_common(struct linux_fcntl64_args *args)
 	return(error);
 }
 
+#if defined(__i386__)
+
 /*
  * MPSAFE
  */
@@ -1555,7 +1557,7 @@ sys_linux_fcntl(struct linux_fcntl_args *args)
 	return(error);
 }
 
-#if defined(__i386__)
+#endif /* defined(__i386__) */
 
 /*
  * MPSAFE
@@ -1607,7 +1609,7 @@ sys_linux_fcntl64(struct linux_fcntl64_args *args)
 	return (error);
 }
 
-#endif /* defined(__i386__) */
+#if defined(__i386__)
 
 /*
  * MPALMOSTSAFE

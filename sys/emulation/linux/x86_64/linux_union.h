@@ -24,9 +24,12 @@ union sysunion {
 	struct	linux_ioctl_args linux_ioctl;
 	struct	linux_access_args linux_access;
 	struct	linux_getpid_args linux_getpid;
+	struct	linux_clone_args linux_clone;
 	struct	linux_execve_args linux_execve;
+	struct	linux_wait4_args linux_wait4;
 	struct	linux_kill_args linux_kill;
 	struct	linux_newuname_args linux_newuname;
+	struct	linux_fcntl64_args linux_fcntl64;
 	struct	linux_getcwd_args linux_getcwd;
 	struct	linux_chdir_args linux_chdir;
 	struct	linux_getuid_args linux_getuid;
@@ -35,6 +38,9 @@ union sysunion {
 	struct	linux_rt_sigsuspend_args linux_rt_sigsuspend;
 	struct	linux_arch_prctl_args linux_arch_prctl;
 	struct	linux_tkill_args linux_tkill;
+	struct	linux_sys_futex_args linux_sys_futex;
 	struct	linux_exit_group_args linux_exit_group;
 	struct	linux_tgkill_args linux_tgkill;
+	struct	linux_set_robust_list_args linux_set_robust_list;
+	struct	linux_get_robust_list_args linux_get_robust_list;
 };

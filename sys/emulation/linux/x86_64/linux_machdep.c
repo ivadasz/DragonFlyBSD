@@ -469,6 +469,7 @@ sys_linux_vfork(struct linux_vfork_args *args)
 
 	return (error);
 }
+#endif
 
 /*
  * MPALMOSTSAFE
@@ -476,10 +477,12 @@ sys_linux_vfork(struct linux_vfork_args *args)
 int
 sys_linux_clone(struct linux_clone_args *args)
 {
+#ifdef notyet
 	struct segment_descriptor *desc;
 	struct l_user_desc info;
 	int idx;
 	int a[2];
+#endif
 
 	struct lwp *lp = curthread->td_lwp;
 	int error, ff = RFPROC;
@@ -543,14 +546,16 @@ sys_linux_clone(struct linux_clone_args *args)
 
 	p2->p_sigparent = exit_signal;
 	if (args->stack) {
-		ONLY_LWP_IN_PROC(p2)->lwp_md.md_regs->tf_esp =
+		ONLY_LWP_IN_PROC(p2)->lwp_md.md_regs->tf_rsp =
 					(unsigned long)args->stack;
 	}
 
 	if (args->flags & LINUX_CLONE_SETTLS) {
-		error = copyin((void *)curthread->td_lwp->lwp_md.md_regs->tf_esi, &info, sizeof(struct l_user_desc));
+		kprintf("Can't deal with LINUX_CLONE_SETTLS yet\n");
+#ifdef notyet
+		error = copyin((void *)curthread->td_lwp->lwp_md.md_regs->tf_rsi, &info, sizeof(struct l_user_desc));
 		if (error) {
-			kprintf("copyin of tf_esi to info failed\n");
+			kprintf("copyin of tf_rsi to info failed\n");
 		} else {
 			idx = info.entry_number;
 			/*
@@ -581,8 +586,11 @@ sys_linux_clone(struct linux_clone_args *args)
 				kprintf("linux_clone... we don't have a p2\n");
 			}
 		}
+#endif
 	}
+#ifdef notyet
 out:
+#endif
 	if (p2)
 		start_forked_proc(lp, p2);
 
@@ -595,7 +603,6 @@ out:
 
 	return (error);
 }
-#endif
 
 #define STACK_SIZE  (2 * 1024 * 1024)
 #define GUARD_SIZE  (4 * PAGE_SIZE)

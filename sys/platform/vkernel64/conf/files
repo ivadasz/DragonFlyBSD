@@ -16,7 +16,7 @@ linux_assym.h			optional	compat_linux		\
 emulation/linux/linux_emuldata.c	optional	compat_linux
 #emulation/linux/linux_epoll.c	optional	compat_linux
 emulation/linux/linux_file.c	optional	compat_linux
-#emulation/linux/linux_futex.c	optional	compat_linux
+emulation/linux/linux_futex.c	optional	compat_linux
 emulation/linux/linux_getcwd.c	optional	compat_linux
 emulation/linux/linux_ioctl.c	optional	compat_linux
 #emulation/linux/linux_ipc.c	optional	compat_linux

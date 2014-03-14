@@ -59,8 +59,13 @@
 #include <machine/cpu.h>
 #include <machine/limits.h>
 
+#if defined(__i386__)
 #include "i386/linux.h"
 #include "i386/linux_proto.h"
+#else
+#include "x86_64/linux.h"
+#include "x86_64/linux_proto.h"
+#endif
 #include "linux_signal.h"
 #include "linux_util.h"
 #include "linux_emuldata.h"

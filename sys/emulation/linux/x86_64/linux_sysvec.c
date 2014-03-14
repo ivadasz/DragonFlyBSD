@@ -739,9 +739,7 @@ linux_elf_modevent(module_t mod, int type, void *data)
 			kprintf("cannot insert Linux ELF brand handler\n");
 		}
 		EMUL_LOCKINIT();
-#if 0
 		lockinit(&futex_mtx, "linftxs", 0, LK_CANRECURSE);
-#endif
 		linux_exec_tag = EVENTHANDLER_REGISTER(process_exec, linux_proc_transition,
 		    NULL, 1000);
 		linux_exit_tag = EVENTHANDLER_REGISTER(process_exit, emuldata_exit,
@@ -766,9 +764,7 @@ linux_elf_modevent(module_t mod, int type, void *data)
 		}
 		EVENTHANDLER_DEREGISTER(process_exec, linux_exec_tag);
 		EVENTHANDLER_DEREGISTER(process_exit, linux_exit_tag);
-#if 0
 		lockuninit(&futex_mtx);
-#endif
 		EMUL_LOCKUNINIT();
 		break;
 	default:

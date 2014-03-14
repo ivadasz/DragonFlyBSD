@@ -796,7 +796,6 @@ sys_linux_newuname(struct linux_newuname_args *args)
 #if defined(__i386__)
 
 /* XXX: why would this be i386-only? most of these are wrong! */
-#if defined(__i386__)
 struct l_utimbuf {
 	l_time_t l_actime;
 	l_time_t l_modtime;
@@ -999,6 +998,8 @@ cleanup:
 
 #define __WCLONE 0x80000000
 
+#if defined(__i386__)
+
 /*
  * MPALMOSTSAFE
  */
@@ -1033,6 +1034,8 @@ sys_linux_waitpid(struct linux_waitpid_args *args)
 
 	return (error);
 }
+
+#endif /* defined(__i386__) */
 
 /*
  * MPALMOSTSAFE
@@ -1080,6 +1083,8 @@ sys_linux_wait4(struct linux_wait4_args *args)
 
 	return (error);
 }
+
+#if defined(__i386__)
 
 /*
  * MPALMOSTSAFE

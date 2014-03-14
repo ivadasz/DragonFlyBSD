@@ -106,13 +106,15 @@
 53	UNIMPL	socketpair
 54	UNIMPL	setsockopt
 55	UNIMPL	getsockopt
-56	UNIMPL	clone
+56	STD	{ int linux_clone(l_int flags, void *stack, \
+				void *parent_tidptr, int dummy, void *child_tidptr); }
 57	UNIMPL	fork
 58	UNIMPL	vfork
 59	STD	{ int linux_execve(char *path, char **argp, \
 				char **envp); }
 60	NOPROTO	{ void exit(l_int rval); }
-61	UNIMPL	wait4
+61	STD	{ int linux_wait4(l_pid_t pid, l_uint *status, \
+				l_int options, struct l_rusage *rusage); }
 62	STD	{ int linux_kill(l_int pid, l_int signum); }
 63	STD	{ int linux_newuname(struct l_new_utsname *buf); }
 64	UNIMPL	semget
@@ -123,7 +125,8 @@
 69	UNIMPL	msgsnd
 70	UNIMPL	msgrcv
 71	UNIMPL	msgctl
-72	UNIMPL	fcntl
+72	STD	{ int linux_fcntl64(l_uint fd, l_uint cmd, \
+				l_ulong arg); }
 73	UNIMPL	flock
 74	UNIMPL	fsync
 75	UNIMPL	fdatasync
@@ -160,10 +163,10 @@
 106	UNIMPL	setgid
 107	NOPROTO	{ int geteuid(void); }
 108	NOPROTO	{ int getegid(void); }
-109	UNIMPL	setpgid
+109	NOPROTO	{ int setpgid(int pid, int pgid); }
 110	STD	{ int linux_getppid(void); }
-111	UNIMPL	getpgrp
-112	UNIMPL	setsid
+111	NOPROTO	{ int getpgrp(void); }
+112	NOPROTO	{ int setsid(void); }
 113	UNIMPL	setreuid
 114	UNIMPL	setregid
 115	UNIMPL	getgroups
@@ -254,7 +257,8 @@
 199	UNIMPL	fremovexattr
 200	STD	{ int linux_tkill(int tid, int sig); }
 201	UNIMPL	time
-202	UNIMPL	futex
+202	STD	{ int linux_sys_futex(void *uaddr, int op, int val, \
+					struct l_timespec *timeout, void *uaddr2, int val3); }
 203	UNIMPL	sched_setaffinity
 204	UNIMPL	sched_getaffinity
 205	UNIMPL	set_thread_area
@@ -325,8 +329,10 @@
 270	UNIMPL	pselect6
 271	UNIMPL	ppoll
 272	UNIMPL	unshare
-273	UNIMPL	set_robust_list
-274	UNIMPL	get_robust_list
+273	STD	{ int linux_set_robust_list(struct linux_robust_list_head *head, \
+					l_size_t len); }
+274	STD	{ int linux_get_robust_list(l_int pid, struct linux_robust_list_head **head, \
+					l_size_t *len); }
 275	UNIMPL	splice
 276	UNIMPL	tee
 277	UNIMPL	sync_file_range
