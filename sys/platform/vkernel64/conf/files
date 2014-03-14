@@ -30,7 +30,7 @@ emulation/linux/linux_stats.c	optional	compat_linux
 #emulation/linux/linux_uid16.c	optional	compat_linux
 emulation/linux/linux_util.c	optional	compat_linux
 #
-emulation/linux/x86_64/imgact_linux.c	optional	compat_linux
+#emulation/linux/x86_64/imgact_linux.c	optional	compat_linux
 #emulation/linux/x86_64/linux_dummy.c	optional	compat_linux
 emulation/linux/x86_64/linux_locore.s	optional	compat_linux	\
 	dependency	"linux_assym.h"

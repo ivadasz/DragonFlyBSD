@@ -157,26 +157,6 @@ struct l_timespec {
  	l_long		tv_nsec;
 };
 
-struct l_newstat {
-	l_ushort	st_dev;
-	l_ushort	__pad1;
-	l_ulong		st_ino;
-	l_ushort	st_mode;
-	l_ushort	st_nlink;
-	l_ushort	st_uid;
-	l_ushort	st_gid;
-	l_ushort	st_rdev;
-	l_ushort	__pad2;
-	l_ulong		st_size;
-	l_ulong		st_blksize;
-	l_ulong		st_blocks;
-	struct l_timespec	st_atimespec;
-	struct l_timespec	st_mtimespec;
-	struct l_timespec	st_ctimespec;
-	l_ulong		__unused4;
-	l_ulong		__unused5;
-};
-
 struct l_stat64 {
 	l_ushort	st_dev;
 	u_char		__pad0[10];
@@ -306,31 +286,12 @@ typedef struct {
 	l_ulong	__bits[LINUX_NSIG_WORDS];
 } l_sigset_t;
 
-#if 0
-typedef struct {
-	l_handler_t	lsa_handler;
-#if defined(__i386__)
-	l_osigset_t	lsa_mask;
-#else
-	l_sigset_t	lsa_mask;
-#endif
-	l_ulong		lsa_flags;
-	void	(*lsa_restorer)(void);
-#if defined(__i386__)
-} l_osigaction_t;
-#else
-} l_sigaction_t;
-#endif
-#endif
-
-//#if defined(__i386__)
 typedef struct {
 	l_handler_t	lsa_handler;
 	l_int		lsa_flags;
 	void	(*lsa_restorer)(void);
 	l_sigset_t	lsa_mask;
 } l_sigaction_t;
-//#endif
 
 typedef struct {
 	void		*ss_sp;
@@ -356,12 +317,6 @@ struct linux__fpstate {
 
 /* The Linux sigcontext, pretty much a standard 386 trapframe. */
 struct l_sigcontext {
-#if 0
-	l_int		sc_gs;
-	l_int		sc_fs;
-	l_int		sc_es;
-	l_int		sc_ds;
-#endif
 	u_int64_t	sc_r8;
 	u_int64_t	sc_r9;
 	u_int64_t	sc_r10;
@@ -390,12 +345,6 @@ struct l_sigcontext {
 	l_ulong		sc_cr2;
 	struct linux__fpstate *fpstate;
 	u_int64_t reserved1[8];
-#if 0
-	l_ulong		sc_cs;
-	l_ulong		sc_rsp_at_signal;
-	l_ulong		sc_ss;
-	l_int		sc_387;
-#endif
 };
 
 struct l_ucontext {
@@ -500,32 +449,10 @@ struct l_fpstate {
 	u_int32_t		padding[56];
 };
 
-/*
- * We make the stack look like Linux expects it when calling a signal
- * handler, but use the BSD way of calling the handler and sigreturn().
- * This means that we need to pass the pointer to the handler too.
- * It is appended to the frame to not interfere with the rest of it.
- */
-struct l_sigframe {
-	l_int			sf_sig;
-	struct l_sigcontext	sf_sc;
-	struct l_fpstate	sf_fpstate;
-	l_uint			sf_extramask[LINUX_NSIG_WORDS-1];
-	l_handler_t		sf_handler;
-};
-
 struct l_rt_sigframe {
-#if 0
-	l_int			sf_sig;
-	l_siginfo_t 		*sf_siginfo;
-	struct l_ucontext	*sf_ucontext;
-#endif
 	char			*pretcode;
 	struct l_ucontext 	sf_sc;
 	l_siginfo_t		sf_si;
-#if 0
-	l_handler_t 		sf_handler;
-#endif
 };
 
 extern int bsd_to_linux_signal[];
@@ -780,6 +707,7 @@ struct l_desc_struct {
 };
 
 
+#if 0
 #define	LINUX_LOWERWORD	0x0000ffff
 
 /*
@@ -844,6 +772,7 @@ struct l_desc_struct {
 	(((desc)->b >> LINUX_ENTRY_B_SEG_NOT_PRESENT) & 1)
 #define	LINUX_GET_USEABLE(desc)		\
 	(((desc)->b >> LINUX_ENTRY_B_USEABLE) & 1)
+#endif
 
 #define	LINUX_CLOCK_REALTIME		0
 #define	LINUX_CLOCK_MONOTONIC		1

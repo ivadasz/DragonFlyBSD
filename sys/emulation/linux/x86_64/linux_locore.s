@@ -13,10 +13,8 @@
 
 NON_GPROF_ENTRY(linux_sigcode)
 	ALIGN_TEXT
-/* XXXXX */
 linux_rt_sigcode:
 	ALIGN_TEXT
-/* XXXXX */
 linux_esigcode:
 
 	.data

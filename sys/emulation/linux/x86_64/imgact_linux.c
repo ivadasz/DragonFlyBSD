@@ -225,11 +225,8 @@ exec_linux_imgact(struct image_params *imgp)
     /* Fill in image_params */
     imgp->interpreted = 0;
     imgp->entry_addr = a_out->a_entry;
-    
-    panic("Hello World!\n");
-#if 0
     imgp->proc->p_sysent = &linux_sysvec;
-#endif
+
     return (0);
 }
 
