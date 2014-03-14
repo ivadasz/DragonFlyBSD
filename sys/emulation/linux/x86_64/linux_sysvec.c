@@ -85,6 +85,7 @@ extern int linux_szsigcode;
 
 extern struct sysent linux_sysent[LINUX_SYS_MAXSYSCALL];
 
+/* XXX linux_fixup is broken */
 #if 0
 static int	linux_fixup (register_t **stack_base,
 				 struct image_params *iparams);
@@ -251,6 +252,7 @@ elf_linux_fixup(register_t **stack_base, struct image_params *imgp)
 extern long _ucodesel, _udatasel;
 extern unsigned long linux_sznonrtsigcode;
 
+/* XXX No FP-state is stored for now. Only tested with a simple example. */
 static void
 linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 {
@@ -269,6 +271,8 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 		kprintf(ARGS(rt_sendsig, "%p, %d, %p, %lu"),
 		    catcher, sig, (void*)mask, code);
 #endif
+
+	/* XXX I don't understand this part properly at the moment */
 	/*
 	 * Allocate space for the signal handler context.
 	 */
@@ -277,10 +281,14 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 		fp = (struct l_rt_sigframe *)(lp->lwp_sigstk.ss_sp +
 		    lp->lwp_sigstk.ss_size - sizeof(struct l_rt_sigframe));
 		lp->lwp_sigstk.ss_flags |= SS_ONSTACK;
-	} else
+	} else {
 		fp = (struct l_rt_sigframe *)(regs->tf_rsp - 128);
+	}
+	/* XXX not needed, since the fpstate is part of the sigframe struct */
 //	fp = (char *) (((long)fp - sizeof (*fps)) & ~0xfUL);
 //	fps = fp;
+
+	/* XXX Do we still need to subtract sizeof(struct l_rt_sigframe) here? */
 	fp = (struct l_rt_sigframe *)
 	    ((((long)fp - sizeof(struct l_rt_sigframe)) & ~0xfUL) - 8);
 
@@ -311,8 +319,9 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 
 	memset(&frame, 0, sizeof(frame));
 //	frame.pretcode = NULL; /* XXX */
+	/* XXX Assuming SA_RESTORER flag (should check of course) */
 	frame.pretcode = p->p_sigacts->ps_tramp[_SIG_IDX(sig)];
-	kprintf("ps_tramp: %p\n", frame.pretcode);
+//	kprintf("ps_tramp: %p\n", frame.pretcode);
 
 	/*
 	 * Build the argument list for the signal handler.
@@ -394,8 +403,9 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	regs->tf_rdx = (l_ulong)&fp->sf_sc;
 	regs->tf_rax = 0;
 
-	kprintf("New rip: %lx, new rsp: %lx\n", regs->tf_rip, regs->tf_rsp);
+//	kprintf("New rip: %lx, new rsp: %lx\n", regs->tf_rip, regs->tf_rsp);
 
+	/* XXX Compare with NetBSD code again */
 	/*
 	 * i386 abi specifies that the direction flag must be cleared
 	 * on function entry
@@ -575,6 +585,7 @@ exec_linux_imgact_try(struct image_params *imgp)
     return(error);
 }
 
+/* XXX Disabled for now, because the linux_fixup function is broken */
 #if 0
 struct sysentvec linux_sysvec = {
 	.sv_size	= LINUX_SYS_MAXSYSCALL,
@@ -610,7 +621,7 @@ struct sysentvec elf_linux_sysvec = {
 	.sv_fixup	= elf_linux_fixup,
 	.sv_sendsig	= linux_rt_sendsig,
 //	.sv_sigcode	= linux_sigcode,
-	.sv_sigcode	= NULL,
+	.sv_sigcode	= NULL,	/* XXX Should not matter */
 	.sv_szsigcode	= &linux_szsigcode,
 	.sv_prepsyscall	= linux_prepsyscall,
 	.sv_name	= "Linux ELF64",
