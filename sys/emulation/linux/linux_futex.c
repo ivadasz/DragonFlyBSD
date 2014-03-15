@@ -139,11 +139,13 @@ struct lock futex_mtx;			/* protects the futex list */
 					 */
 
 /* support.s */
+#if defined(__i386__)
 int futex_xchgl(int oparg, uint32_t *uaddr, int *oldval);
 int futex_addl(int oparg, uint32_t *uaddr, int *oldval);
 int futex_orl(int oparg, uint32_t *uaddr, int *oldval);
 int futex_andl(int oparg, uint32_t *uaddr, int *oldval);
 int futex_xorl(int oparg, uint32_t *uaddr, int *oldval);
+#endif /* defined(__i386__) */
 
 static void
 futex_put(struct futex *f, struct waiting_proc *wp)
@@ -398,6 +400,7 @@ futex_atomic_op(struct proc *p, int encoded_op, uint32_t *uaddr)
 #endif
 	/* XXX: linux verifies access here and returns EFAULT */
 
+#if defined(__i386__)
 	switch (op) {
 	case FUTEX_OP_SET:
 		ret = futex_xchgl(oparg, uaddr, &oldval);
@@ -418,6 +421,45 @@ futex_atomic_op(struct proc *p, int encoded_op, uint32_t *uaddr)
 		ret = -ENOSYS;
 		break;
 	}
+#else
+	long w;
+	int cval;
+
+	if ((w = fuword(uaddr)) == -1)
+		return -EFAULT;
+	cval = w;
+
+	for (;;) {
+		int nval;
+
+		switch (op) {
+		case FUTEX_OP_SET:
+			nval = oparg;
+			break;
+		case FUTEX_OP_ADD:
+			nval = cval + oparg;
+			break;
+		case FUTEX_OP_OR:
+			nval = cval | oparg;
+			break;
+		case FUTEX_OP_ANDN:
+			nval = cval & ~oparg;
+			break;
+		case FUTEX_OP_XOR:
+			nval = cval ^ oparg;
+			break;
+		default:
+			return -ENOSYS;
+		}
+
+		oldval = casuword32(uaddr, cval, nval);
+		if (oldval == cval) {
+			break;
+		}
+		cval = oldval;
+	}
+	ret = 0;
+#endif /* defined(__i386__) */
 
 	if (ret)
 		return (ret);

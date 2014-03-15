@@ -262,6 +262,7 @@ int	suword (void *base, long word);
 int	suword32 (void *base, int word);
 int	fusword (void *base);
 int	susword (void *base, int word);
+u_int	casuword32(volatile u_int *p, u_int oldval, u_int newval);
 u_long	casuword(volatile u_long *p, u_long oldval, u_long newval);
 
 void	realitexpire (void *);

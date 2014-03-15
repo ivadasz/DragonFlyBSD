@@ -96,9 +96,7 @@ emuldata_set_robust(struct proc *p, struct linux_robust_list_head *robust_ftx)
 	em = emuldata_get(p);
 	KKASSERT(em != NULL);
 
-#if 0
 	em->robust_futexes = robust_ftx;
-#endif
 	EMUL_UNLOCK();
 }
 
@@ -157,9 +155,7 @@ emuldata_init(struct proc *p, struct proc *pchild, int flags)
 	if (ep != NULL) {
 		em->parent_tidptr = ep->parent_tidptr;
 		em->child_tidptr = ep->child_tidptr;
-#if 0
 		em->clone_flags = ep->clone_flags;
-#endif
 	}
 
 	em->clone_flags = flags;
@@ -183,20 +179,14 @@ emuldata_init(struct proc *p, struct proc *pchild, int flags)
 void
 emuldata_exit(void *unused, struct proc *p)
 {
-#if 0
 	struct linux_sys_futex_args cup;
-#endif
 	struct linux_emuldata *em;
-#if 0
 	int error = 0;
-#endif
 
 	if (__predict_true(p->p_sysent != &elf_linux_sysvec))
 		return;
 
-#if 0
 	release_futexes(p);
-#endif
 	EMUL_LOCK();
 
 	em = emuldata_get(p);
@@ -236,7 +226,6 @@ emuldata_exit(void *unused, struct proc *p)
 
 	EMUL_UNLOCK();
 
-#if 0
 	if (em->clear_tid != NULL) {
 		int tid = 0;
 		copyout(&tid, em->clear_tid, sizeof(tid));
@@ -250,7 +239,6 @@ emuldata_exit(void *unused, struct proc *p)
 		if (error)
 			kprintf("emuldata_exit futex stuff failed miserably\n");
 	}
-#endif
 
 	kfree(em, M_LINUX);
 }
