@@ -2660,6 +2660,17 @@ pci_add_map(device_t pcib, device_t bus, device_t dev,
 	 */
 	res = resource_list_alloc(rl, bus, dev, type, &reg, start, end, count,
 	    prefetch ? RF_PREFETCHABLE : 0, -1);
+	if (res == NULL && (start != 0 || end != ~0ul)) {
+		resource_list_delete(rl, type, reg);
+		resource_list_add(rl, type, reg, 0, ~0ul, count, -1);
+		start = 0xd0414000;
+		end = 0xd0417fff;
+		kprintf("Fixing up snd_hda address to 0x%08x\n", (uint32_t)start);
+//		res = resource_list_alloc(rl, bus, dev, type, &reg, 0, ~0ul,
+//		    count, prefetch ? RF_PREFETCHABLE : 0, -1);
+		res = resource_list_alloc(rl, bus, dev, type, &reg, start, end,
+		    count, prefetch ? RF_PREFETCHABLE : 0, -1);
+	}
 	if (res == NULL) {
 		/*
 		 * If the allocation fails, delete the resource list
