@@ -261,7 +261,6 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	struct trapframe *regs;
 	struct l_rt_sigframe *fp, frame;
 	int oonstack;
-//	struct linux__fpstate *fps;
 
 	regs = lp->lwp_md.md_regs;
 	oonstack = lp->lwp_sigstk.ss_flags & SS_ONSTACK;
@@ -284,11 +283,11 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	} else {
 		fp = (struct l_rt_sigframe *)(regs->tf_rsp - 128);
 	}
-	/* XXX not needed, since the fpstate is part of the sigframe struct */
+	/* XXX might be necessary for saving fp state */
 //	fp = (char *) (((long)fp - sizeof (*fps)) & ~0xfUL);
 //	fps = fp;
 
-	/* XXX Do we still need to subtract sizeof(struct l_rt_sigframe) here? */
+	/* XXX Making room for the l_rt_sigframe structon the stack? */
 	fp = (struct l_rt_sigframe *)
 	    ((((long)fp - sizeof(struct l_rt_sigframe)) & ~0xfUL) - 8);
 
@@ -321,7 +320,6 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 //	frame.pretcode = NULL; /* XXX */
 	/* XXX Assuming SA_RESTORER flag (should check of course) */
 	frame.pretcode = p->p_sigacts->ps_tramp[_SIG_IDX(sig)];
-//	kprintf("ps_tramp: %p\n", frame.pretcode);
 
 	/*
 	 * Build the argument list for the signal handler.
@@ -329,11 +327,6 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	if (p->p_sysent->sv_sigtbl)
 		if (sig <= p->p_sysent->sv_sigsize)
 			sig = p->p_sysent->sv_sigtbl[_SIG_IDX(sig)];
-
-//	frame.sf_handler = catcher;
-//	frame.sf_sig = sig;
-//	frame.sf_siginfo = &fp->sf_si;
-//	frame.sf_ucontext = &fp->sf_sc;
 
 	/* Fill siginfo structure. */
 	frame.sf_si.lsi_signo = sig;
@@ -402,8 +395,6 @@ linux_rt_sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	regs->tf_rsi = (l_ulong)&fp->sf_si;
 	regs->tf_rdx = (l_ulong)&fp->sf_sc;
 	regs->tf_rax = 0;
-
-//	kprintf("New rip: %lx, new rsp: %lx\n", regs->tf_rip, regs->tf_rsp);
 
 	/* XXX Compare with NetBSD code again */
 	/*
@@ -585,7 +576,10 @@ exec_linux_imgact_try(struct image_params *imgp)
     return(error);
 }
 
-/* XXX Disabled for now, because the linux_fixup function is broken */
+/*
+ * XXX a.out support disabled for now, because the linux_fixup function is
+ *     not yet ported to x64.
+ */
 #if 0
 struct sysentvec linux_sysvec = {
 	.sv_size	= LINUX_SYS_MAXSYSCALL,

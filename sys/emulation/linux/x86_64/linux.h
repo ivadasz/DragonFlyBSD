@@ -299,22 +299,7 @@ typedef struct {
 	l_size_t	ss_size;
 } l_stack_t;
 
-/* Matches the cpu's fxsave format */
-struct linux__fpstate {
-	u_int16_t cwd;
-	u_int16_t swd;
-	u_int16_t twd;
-	u_int16_t fop;
-	u_int64_t rip;
-	u_int64_t rdp;
-	u_int32_t mxcsr;
-	u_int32_t mxcsr_mask;
-	u_int32_t st_space[32];
-	u_int32_t xmm_space[64];
-	u_int32_t reserved2[24];
-};
-//__CTASSERT(sizeof (struct linux__fpstate) == 512);
-
+struct l_fpstate;
 /* The Linux sigcontext, pretty much a standard 386 trapframe. */
 struct l_sigcontext {
 	u_int64_t	sc_r8;
@@ -343,7 +328,7 @@ struct l_sigcontext {
 	l_ulong		sc_trapno;
 	l_ulong		sc_mask;
 	l_ulong		sc_cr2;
-	struct linux__fpstate *fpstate;
+	struct l_fpstate	*fpstate;
 	u_int64_t reserved1[8];
 };
 
