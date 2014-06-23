@@ -46,6 +46,7 @@
 
 #include <dev/video/fb/fbreg.h>
 #include "syscons.h"
+#include "fbinfo.h"
 
 SET_DECLARE(scrndr_set, const sc_renderer_t);
 
@@ -744,11 +745,17 @@ sc_render_match(scr_stat *scp, char *name, int model)
 	return NULL;
 }
 
+#define VIRTUAL_TTY(sc, x) ((SC_DEV((sc),(x)) != NULL) ?	\
+	(SC_DEV((sc),(x))->si_tty) : NULL)
+
 void
 sc_update_render(scr_stat *scp)
 {
 	sc_rndr_sw_t *rndr;
 	sc_term_sw_t *sw;
+	struct tty *tp;
+	int prev_ysize, new_ysize;
+	int error;
 
 	sw = scp->tsw;
 	if (sw == NULL) {
@@ -763,11 +770,57 @@ sc_update_render(scr_stat *scp)
 
 	scp->fbi = scp->sc->fbi;
 	rndr = NULL;
+	crit_enter();
 	if (strcmp(sw->te_renderer, "*") != 0) {
 		rndr = sc_render_match(scp, sw->te_renderer, scp->model);
 	}
 	if (rndr == NULL && scp->sc->fbi != NULL) {
 		rndr = sc_render_match(scp, "kms", scp->model);
+	}
+	if (rndr != NULL) {
+		/* Mostly copied from sc_set_text_mode */
+		if ((error = sc_clean_up(scp))) {
+			crit_exit();
+			return;
+		}
+		new_ysize = 0;
+#ifndef SC_NO_HISTORY
+		if (scp->history != NULL) {
+			sc_hist_save(scp);
+			new_ysize = sc_vtb_rows(scp->history);
+		}
+#endif
+		prev_ysize = scp->ysize;
+		scp->status |= UNKNOWN_MODE | MOUSE_HIDDEN;
+		scp->status &= ~(GRAPHICS_MODE | PIXEL_MODE | MOUSE_VISIBLE);
+		scp->model = V_INFO_MM_TEXT;
+		scp->xsize = scp->fbi->width / scp->sc->fbfontwidth;
+		scp->ysize = scp->fbi->height / scp->sc->fbfontheight;
+
+		/* allocate buffers */
+		sc_alloc_scr_buffer(scp, TRUE, TRUE);
+		sc_init_emulator(scp, NULL);
+#ifndef SC_NO_CUTPASTE
+		sc_alloc_cut_buffer(scp, FALSE);
+#endif
+#ifndef SC_NO_HISTORY
+		sc_alloc_history_buffer(scp, new_ysize, prev_ysize, FALSE);
+#endif
+		crit_exit();
+		scp->status &= ~UNKNOWN_MODE;
+		tp = VIRTUAL_TTY(scp->sc, scp->index);
+		if (tp == NULL)
+			return;
+		kprintf("syscons terminal resized from %dx%d to %dx%d\n",
+		    tp->t_winsize.ws_col, tp->t_winsize.ws_row,
+		    scp->xsize, scp->ysize);
+		if (tp->t_winsize.ws_col != scp->xsize ||
+		    tp->t_winsize.ws_row != scp->ysize) {
+			tp->t_winsize.ws_col = scp->xsize;
+			tp->t_winsize.ws_row = scp->ysize;
+			pgsignal(tp->t_pgrp, SIGWINCH, 1);
+		}
+		return;
 	}
 	if (rndr == NULL) {
 		rndr = sc_render_match(scp, scp->sc->adp->va_name, scp->model);
@@ -776,4 +829,5 @@ sc_update_render(scr_stat *scp)
 	if (rndr != NULL) {
 		scp->rndr = rndr;
 	}
+	crit_exit();
 }
