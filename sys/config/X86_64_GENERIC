@@ -168,7 +168,8 @@ pseudo-device	splash
 
 # syscons is the default console driver, resembling an SCO console
 device		sc0	at isa? flags 0x100
-options 	SC_PIXEL_MODE		# add support for the raster text mode
+#options 	SC_PIXEL_MODE		# add support for the raster text mode
+options		SC_NO_MODE_CHANGE
 
 device		agp		# support several AGP chipsets
 

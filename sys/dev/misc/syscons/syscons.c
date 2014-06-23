@@ -68,6 +68,10 @@
 #include <dev/video/fb/fbreg.h>
 #include <dev/video/fb/splashreg.h>
 #include "syscons.h"
+#include "fbinfo.h"
+
+#include "vt220iso8x16.h"
+#include "gallant12x22.h"
 
 #define COLD 0
 #define WARM 1
@@ -244,7 +248,9 @@ static	d_open_t	scopen;
 static	d_close_t	scclose;
 static	d_read_t	scread;
 static	d_ioctl_t	scioctl;
+#if 0
 static	d_mmap_t	scmmap;
+#endif
 
 static struct dev_ops sc_ops = {
 	{ "sc", 0, D_TTY },
@@ -253,7 +259,9 @@ static struct dev_ops sc_ops = {
 	.d_read =	scread,
 	.d_write =	ttywrite,
 	.d_ioctl =	scioctl,
+#if 0
 	.d_mmap =	scmmap,
+#endif
 	.d_kqfilter =	ttykqfilter,
 	.d_revoke =	ttyrevoke
 };
@@ -271,6 +279,44 @@ sc_probe_unit(int unit, int flags)
     sckbdprobe(unit, flags, FALSE);
 
     return 0;
+}
+
+void
+sc_set_framebuffer(struct fb_info *info)
+{
+    sc_softc_t *sc;
+
+    lwkt_gettoken(&tty_token);
+    sc = sc_get_softc(0, (sc_console_unit == 0) ? SC_KERNEL_CONSOLE : 0);
+    if (sc == NULL) {
+	lwkt_reltoken(&tty_token);
+        kprintf("%s: sc_get_softc(%d, %d) returned NULL\n", __func__,
+	    0, (sc_console_unit == 0) ? SC_KERNEL_CONSOLE : 0);
+	return;
+    }
+
+    sc->fbi = info;
+
+    if (info->width >= 80 * 12 && info->height >= 25 * 22) {
+	sc->fbfont = gallant12x22_data;
+	sc->fbfontwidth = 12;
+	sc->fbfontstride = 2;
+	sc->fbfontheight = 22;
+	sc->fbfontstart = 0;
+    } else {
+	sc->fbfont = vt220iso8x16_data;
+	sc->fbfontwidth = 8;
+	sc->fbfontstride = 1;
+	sc->fbfontheight = 16;
+	sc->fbfontstart = ' ';
+    }
+
+    if (sc->fbi != NULL) {
+	sc_update_render(sc->cur_scp);
+	sc->fbi->restore(sc->fbi->cookie);
+    }
+
+    lwkt_reltoken(&tty_token);
 }
 
 /* probe video adapters, return TRUE if found */ 
@@ -2630,12 +2676,14 @@ exchange_scr(sc_softc_t *sc)
 
     /* set up the video for the new screen */
     scp = sc->cur_scp = sc->new_scp;
-    if (sc->old_scp->mode != scp->mode || ISUNKNOWNSC(sc->old_scp))
-	set_mode(scp);
-    else
+    if (sc->old_scp->mode != scp->mode || ISUNKNOWNSC(sc->old_scp)) {
+       if (sc->fbi == NULL)
+           set_mode(scp);
+    } else
 	sc_vtb_init(&scp->scr, VTB_FRAMEBUFFER, scp->xsize, scp->ysize,
 		    (void *)sc->adp->va_window, FALSE);
     scp->status |= MOUSE_HIDDEN;
+    sc_update_render(scp);     /* Switch to kms renderer if necessary */
     sc_move_cursor(scp, scp->xpos, scp->ypos);
     if (!ISGRAPHSC(scp))
 	sc_set_cursor_image(scp);
@@ -2651,6 +2699,9 @@ exchange_scr(sc_softc_t *sc)
     update_kbd_state(scp, scp->status, LOCK_MASK, TRUE);
 
     mark_all(scp);
+    if (scp->sc->fbi != NULL) {
+	scp->sc->fbi->restore(scp->sc->fbi->cookie);
+    }
     lwkt_reltoken(&tty_token);
 }
 
@@ -3149,6 +3200,7 @@ init_scp(sc_softc_t *sc, int vty, scr_stat *scp)
 #endif
 	}
     }
+    scp->fbi = sc->fbi;
     sc_vtb_init(&scp->vtb, VTB_MEMORY, 0, 0, NULL, FALSE);
     sc_vtb_init(&scp->scr, VTB_FRAMEBUFFER, 0, 0, NULL, FALSE);
     scp->xoff = scp->yoff = 0;
@@ -3198,6 +3250,9 @@ sc_init_emulator(scr_stat *scp, char *name)
     rndr = NULL;
     if (strcmp(sw->te_renderer, "*") != 0) {
 	rndr = sc_render_match(scp, sw->te_renderer, scp->model);
+    }
+    if (rndr == NULL && scp->sc->fbi != NULL) {
+	rndr = sc_render_match(scp, "kms", scp->model);
     }
     if (rndr == NULL) {
 	rndr = sc_render_match(scp, scp->sc->adp->va_name, scp->model);
@@ -3544,6 +3599,7 @@ next_code:
     goto next_code;
 }
 
+#if 0
 int
 scmmap(struct dev_mmap_args *ap)
 {
@@ -3560,6 +3616,7 @@ scmmap(struct dev_mmap_args *ap)
     lwkt_reltoken(&tty_token);
     return(0);
 }
+#endif
 
 static int
 save_kbd_state(scr_stat *scp, int unlock)

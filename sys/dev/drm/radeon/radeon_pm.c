@@ -247,7 +247,7 @@ static void radeon_pm_set_clocks(struct radeon_device *rdev)
 	    (rdev->pm.requested_power_state_index == rdev->pm.current_power_state_index))
 		return;
 
-	DRM_LOCK(rdev->ddev);
+//	DRM_LOCK(rdev->ddev);
 	lockmgr(&rdev->pm.mclk_lock, LK_EXCLUSIVE);
 	lockmgr(&rdev->ring_lock, LK_EXCLUSIVE);
 
@@ -262,7 +262,7 @@ static void radeon_pm_set_clocks(struct radeon_device *rdev)
 			/* needs a GPU reset dont reset here */
 			lockmgr(&rdev->ring_lock, LK_RELEASE);
 			lockmgr(&rdev->pm.mclk_lock, LK_RELEASE);
-			DRM_UNLOCK(rdev->ddev);
+//			DRM_UNLOCK(rdev->ddev);
 			return;
 		}
 	}
@@ -298,7 +298,7 @@ static void radeon_pm_set_clocks(struct radeon_device *rdev)
 
 	lockmgr(&rdev->ring_lock, LK_RELEASE);
 	lockmgr(&rdev->pm.mclk_lock, LK_RELEASE);
-	DRM_UNLOCK(rdev->ddev);
+//	DRM_UNLOCK(rdev->ddev);
 }
 
 static void radeon_pm_print_states(struct radeon_device *rdev)

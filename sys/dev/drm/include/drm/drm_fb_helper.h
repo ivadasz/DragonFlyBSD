@@ -31,6 +31,7 @@
 #define DRM_FB_HELPER_H
 
 struct drm_fb_helper;
+struct fb_info;
 
 struct drm_fb_helper_crtc {
 	struct drm_mode_set mode_set;

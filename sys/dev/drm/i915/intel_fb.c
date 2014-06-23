@@ -31,6 +31,7 @@
 #include <drm/drm_fb_helper.h>
 #include "intel_drv.h"
 #include <drm/i915_drm.h>
+#include <dev/misc/syscons/fbinfo.h>
 #include "i915_drv.h"
 
 static int intelfb_create(struct intel_fbdev *ifbdev,
@@ -39,8 +40,8 @@ static int intelfb_create(struct intel_fbdev *ifbdev,
 	struct drm_device *dev = ifbdev->helper.dev;
 #if 0
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct fb_info *info;
 #endif
+	struct fb_info *info;
 	struct drm_framebuffer *fb;
 	struct drm_mode_fb_cmd2 mode_cmd;
 	struct drm_i915_gem_object *obj;
@@ -85,6 +86,13 @@ static int intelfb_create(struct intel_fbdev *ifbdev,
 
 	info->par = ifbdev;
 #endif
+	info = kmalloc(sizeof(struct fb_info), DRM_MEM_KMS, M_WAITOK | M_ZERO);
+	info->width = sizes->fb_width;
+	info->height = sizes->fb_height;
+	info->stride = sizes->fb_width * (sizes->surface_bpp/8);
+	info->depth = sizes->surface_bpp;
+	info->paddr = dev->agp->base + obj->gtt_offset;
+	info->vaddr = (vm_offset_t)pmap_mapdev_attr(info->paddr, info->height * info->stride, VM_MEMATTR_WRITE_COMBINING);
 
 	ret = intel_framebuffer_init(dev, &ifbdev->ifb, &mode_cmd, obj);
 	if (ret)
@@ -93,9 +101,9 @@ static int intelfb_create(struct intel_fbdev *ifbdev,
 	fb = &ifbdev->ifb.base;
 
 	ifbdev->helper.fb = fb;
-#if 0
 	ifbdev->helper.fbdev = info;
 
+#if 0
 	strcpy(info->fix.id, "inteldrmfb");
 
 	info->flags = FBINFO_DEFAULT | FBINFO_CAN_FORCE_OUTPUT;
@@ -134,7 +142,8 @@ static int intelfb_create(struct intel_fbdev *ifbdev,
 	/* Use default scratch pixmap (info->pixmap.flags = FB_PIXMAP_SYSTEM) */
 #endif
 
-	DRM_DEBUG_KMS("allocated %dx%d fb: 0x%08x, bo %p\n",
+//	DRM_DEBUG_KMS("allocated %dx%d fb: 0x%08x, bo %p\n",
+	kprintf("allocated %dx%d fb: 0x%08x, bo %p\n",
 		      fb->width, fb->height,
 		      obj->gtt_offset, obj);
 

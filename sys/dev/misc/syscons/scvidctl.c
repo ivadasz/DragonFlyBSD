@@ -109,7 +109,13 @@ sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode, int xsize, int ysize,
 	return error;
     }
 
-    if (sc_render_match(scp, scp->sc->adp->va_name, V_INFO_MM_TEXT) == NULL) {
+    if (scp->sc->fbi != NULL &&
+	sc_render_match(scp, "kms", V_INFO_MM_TEXT) == NULL) {
+	crit_exit();
+	return ENODEV;
+    }
+    if (scp->sc->fbi == NULL &&
+	sc_render_match(scp, scp->sc->adp->va_name, V_INFO_MM_TEXT) == NULL) {
 	crit_exit();
 	return ENODEV;
     }
@@ -192,7 +198,13 @@ sc_set_graphics_mode(scr_stat *scp, struct tty *tp, int mode)
 	return error;
     }
 
-    if (sc_render_match(scp, scp->sc->adp->va_name, V_INFO_MM_OTHER) == NULL) {
+    if (scp->sc->fbi != NULL &&
+	sc_render_match(scp, "kms", V_INFO_MM_OTHER) == NULL) {
+	crit_exit();
+	return ENODEV;
+    }
+    if (scp->sc->fbi == NULL &&
+	sc_render_match(scp, scp->sc->adp->va_name, V_INFO_MM_OTHER) == NULL) {
 	crit_exit();
 	return ENODEV;
     }
@@ -405,7 +417,9 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 {
     scr_stat *scp;
     video_adapter_t *adp;
+#ifndef SC_NO_MODE_CHANGE
     video_info_t info;
+#endif
     int error, ret;
 
 	KKASSERT(tp->t_dev);
@@ -728,4 +742,38 @@ sc_render_match(scr_stat *scp, char *name, int model)
 	}
 
 	return NULL;
+}
+
+void
+sc_update_render(scr_stat *scp)
+{
+	sc_rndr_sw_t *rndr;
+	sc_term_sw_t *sw;
+
+	sw = scp->tsw;
+	if (sw == NULL) {
+		return;
+	}
+
+	if (scp->rndr == NULL)
+		return;
+
+	if (scp->fbi == scp->sc->fbi)
+		return;
+
+	scp->fbi = scp->sc->fbi;
+	rndr = NULL;
+	if (strcmp(sw->te_renderer, "*") != 0) {
+		rndr = sc_render_match(scp, sw->te_renderer, scp->model);
+	}
+	if (rndr == NULL && scp->sc->fbi != NULL) {
+		rndr = sc_render_match(scp, "kms", scp->model);
+	}
+	if (rndr == NULL) {
+		rndr = sc_render_match(scp, scp->sc->adp->va_name, scp->model);
+	}
+
+	if (rndr != NULL) {
+		scp->rndr = rndr;
+	}
 }
