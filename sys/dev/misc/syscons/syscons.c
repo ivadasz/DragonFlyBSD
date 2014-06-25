@@ -3211,6 +3211,10 @@ init_scp(sc_softc_t *sc, int vty, scr_stat *scp)
 	}
     }
     scp->fbi = sc->fbi;
+    if (scp->fbi != NULL) {
+	scp->xsize = scp->fbi->width / sc->fbfontwidth;
+	scp->ysize = scp->fbi->height / sc->fbfontheight;
+    }
     sc_vtb_init(&scp->vtb, VTB_MEMORY, 0, 0, NULL, FALSE);
     sc_vtb_init(&scp->scr, VTB_FRAMEBUFFER, 0, 0, NULL, FALSE);
     scp->xoff = scp->yoff = 0;
