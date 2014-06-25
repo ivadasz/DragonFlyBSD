@@ -45,6 +45,7 @@ static int intelfb_create(struct intel_fbdev *ifbdev,
 	struct drm_framebuffer *fb;
 	struct drm_mode_fb_cmd2 mode_cmd;
 	struct drm_i915_gem_object *obj;
+	device_t vga_dev;
 	int size, ret;
 
 	/* we don't do packed 24bpp */
@@ -86,12 +87,14 @@ static int intelfb_create(struct intel_fbdev *ifbdev,
 
 	info->par = ifbdev;
 #endif
+	vga_dev = device_get_parent(dev->dev);
 	info = kmalloc(sizeof(struct fb_info), DRM_MEM_KMS, M_WAITOK | M_ZERO);
 	info->width = sizes->fb_width;
 	info->height = sizes->fb_height;
 	info->stride = sizes->fb_width * (sizes->surface_bpp/8);
 	info->depth = sizes->surface_bpp;
 	info->paddr = dev->agp->base + obj->gtt_offset;
+	info->is_vga_boot_display = vga_pci_is_boot_display(vga_dev);
 	info->vaddr = (vm_offset_t)pmap_mapdev_attr(info->paddr, info->height * info->stride, VM_MEMATTR_WRITE_COMBINING);
 
 	ret = intel_framebuffer_init(dev, &ifbdev->ifb, &mode_cmd, obj);

@@ -8,6 +8,7 @@ struct fb_info {
 	uint16_t height;
 	uint16_t stride;
 	uint16_t depth;
+	int is_vga_boot_display;
 	void *cookie;
 	void(*restore)(void *);
 };

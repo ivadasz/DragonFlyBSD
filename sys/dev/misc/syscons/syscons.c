@@ -286,12 +286,22 @@ sc_set_framebuffer(struct fb_info *info)
 {
     sc_softc_t *sc;
 
+    /* For now ignore framebuffers, which don't replace the vga display */
+    if (!info->is_vga_boot_display)
+	return;
+
     lwkt_gettoken(&tty_token);
     sc = sc_get_softc(0, (sc_console_unit == 0) ? SC_KERNEL_CONSOLE : 0);
     if (sc == NULL) {
 	lwkt_reltoken(&tty_token);
         kprintf("%s: sc_get_softc(%d, %d) returned NULL\n", __func__,
 	    0, (sc_console_unit == 0) ? SC_KERNEL_CONSOLE : 0);
+	return;
+    }
+
+    /* Ignore this framebuffer if we have already switched to a framebuffer */
+    if (sc->fbi != NULL) {
+	lwkt_reltoken(&tty_token);
 	return;
     }
 

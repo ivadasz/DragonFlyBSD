@@ -199,6 +199,7 @@ static int radeonfb_create(struct radeon_fbdev *rfbdev,
 #ifdef DUMBBELL_WIP
 	device_t device = rdev->dev;
 #endif
+	device_t vga_dev = device_get_parent(rdev->dev);
 	int ret;
 	unsigned long tmp;
 
@@ -242,6 +243,7 @@ static int radeonfb_create(struct radeon_fbdev *rfbdev,
 	info->height = sizes->surface_height;
 	info->stride = sizes->surface_width * (sizes->surface_bpp/8);
 	info->depth = sizes->surface_bpp;
+	info->is_vga_boot_display = vga_pci_is_boot_display(vga_dev);
 
 	DRM_INFO("fb mappable at 0x%jX\n",  info->paddr);
 	DRM_INFO("vram apper at 0x%lX\n",  (unsigned long)rdev->mc.aper_base);
