@@ -879,15 +879,14 @@ int drm_fb_helper_single_fb_probe(struct drm_fb_helper *fb_helper,
 	if (new_fb < 0)
 		return new_fb;
 
+	/* set the fb pointer */
+	for (i = 0; i < fb_helper->crtc_count; i++)
+		fb_helper->crtc_info[i].mode_set.fb = fb_helper->fb;
+
 	info = fb_helper->fbdev;
 	if (info != NULL) {
 		info->cookie = fb_helper;
 		info->restore = (void *)&sc_restore_fbdev_mode;
-
-		/* set the fb pointer */
-		for (i = 0; i < fb_helper->crtc_count; i++)
-			fb_helper->crtc_info[i].mode_set.fb = fb_helper->fb;
-
 		sc_set_framebuffer(info);
 	}
 
