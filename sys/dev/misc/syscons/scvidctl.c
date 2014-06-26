@@ -768,9 +768,9 @@ sc_update_render(scr_stat *scp)
 	if (scp->fbi == scp->sc->fbi)
 		return;
 
+	crit_enter();
 	scp->fbi = scp->sc->fbi;
 	rndr = NULL;
-	crit_enter();
 	if (strcmp(sw->te_renderer, "*") != 0) {
 		rndr = sc_render_match(scp, sw->te_renderer, scp->model);
 	}
@@ -778,6 +778,7 @@ sc_update_render(scr_stat *scp)
 		rndr = sc_render_match(scp, "kms", scp->model);
 	}
 	if (rndr != NULL) {
+		scp->rndr = rndr;
 		/* Mostly copied from sc_set_text_mode */
 		if ((error = sc_clean_up(scp))) {
 			crit_exit();
