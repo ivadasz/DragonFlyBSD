@@ -2687,8 +2687,7 @@ exchange_scr(sc_softc_t *sc)
     /* set up the video for the new screen */
     scp = sc->cur_scp = sc->new_scp;
     if (sc->old_scp->mode != scp->mode || ISUNKNOWNSC(sc->old_scp)) {
-       if (sc->fbi == NULL)
-           set_mode(scp);
+	set_mode(scp);
     } else
 	sc_vtb_init(&scp->scr, VTB_FRAMEBUFFER, scp->xsize, scp->ysize,
 		    (void *)sc->adp->va_window, FALSE);
@@ -3699,7 +3698,7 @@ set_mode(scr_stat *scp)
 
     lwkt_gettoken(&tty_token);
     /* reject unsupported mode */
-    if ((*vidsw[scp->sc->adapter]->get_info)(scp->sc->adp, scp->mode, &info)) {
+    if (scp->sc->fbi == NULL && (*vidsw[scp->sc->adapter]->get_info)(scp->sc->adp, scp->mode, &info)) {
         lwkt_reltoken(&tty_token);
 	return 1;
     }
@@ -3711,9 +3710,12 @@ set_mode(scr_stat *scp)
     }
 
     /* setup video hardware for the given mode */
-    (*vidsw[scp->sc->adapter]->set_mode)(scp->sc->adp, scp->mode);
+    if (scp->sc->fbi == NULL)
+	(*vidsw[scp->sc->adapter]->set_mode)(scp->sc->adp, scp->mode);
     sc_vtb_init(&scp->scr, VTB_FRAMEBUFFER, scp->xsize, scp->ysize,
 		(void *)scp->sc->adp->va_window, FALSE);
+    if (scp->sc->fbi != NULL)
+	goto done;
 
 #ifndef SC_NO_FONT_LOADING
     /* load appropriate font */
@@ -3745,6 +3747,7 @@ set_mode(scr_stat *scp)
     sc_set_border(scp, scp->border);
     sc_set_cursor_image(scp);
 
+done:
     lwkt_reltoken(&tty_token);
     return 0;
 }
