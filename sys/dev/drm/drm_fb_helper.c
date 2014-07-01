@@ -781,9 +781,9 @@ int drm_fb_helper_pan_display(struct fb_var_screeninfo *var,
 #endif
 
 static void
-sc_restore_fbdev_mode(void *cookie)
+do_restore_fbdev_mode(void *context, int pending)
 {
-	struct drm_fb_helper *fb_helper = cookie;
+	struct drm_fb_helper *fb_helper = context;
 	struct drm_device *dev = fb_helper->dev;
 
 	if (!fb_helper->fb)
@@ -792,6 +792,17 @@ sc_restore_fbdev_mode(void *cookie)
 	lockmgr(&dev->mode_config.mutex, LK_EXCLUSIVE);
 	drm_fb_helper_restore_fbdev_mode(fb_helper);
 	lockmgr(&dev->mode_config.mutex, LK_RELEASE);
+}
+
+static void
+sc_restore_fbdev_mode(void *cookie)
+{
+	struct drm_fb_helper *fb_helper = cookie;
+
+	if (!fb_helper->fb)
+		return;
+
+	taskqueue_enqueue(taskqueue_thread[0], &fb_helper->fb_mode_task);
 }
 
 int drm_fb_helper_single_fb_probe(struct drm_fb_helper *fb_helper,
@@ -883,6 +894,7 @@ int drm_fb_helper_single_fb_probe(struct drm_fb_helper *fb_helper,
 	for (i = 0; i < fb_helper->crtc_count; i++)
 		fb_helper->crtc_info[i].mode_set.fb = fb_helper->fb;
 
+	TASK_INIT(&fb_helper->fb_mode_task, 0, do_restore_fbdev_mode, fb_helper);
 	info = fb_helper->fbdev;
 	if (info != NULL) {
 		info->cookie = fb_helper;
