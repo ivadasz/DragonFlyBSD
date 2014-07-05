@@ -83,27 +83,45 @@ sc_vtb_init(sc_vtb_t *vtb, int type, int cols, int rows, void *buf, int wait)
 	vtb->vtb_cols = cols;
 	vtb->vtb_rows = rows;
 	vtb->vtb_size = cols*rows;
+	vtb->vtb_realsize = cols*rows;
 	vtb->vtb_buffer = NULL;
+	vtb->vtb_realbuffer = NULL;
+	vtb->vtb_roomafter = 0;
+	vtb->vtb_roombefore = 0;
 	vtb->vtb_tail = 0;
 
+	if (type == VTB_SCROLLMEMORY) {
+		vtb->vtb_type = type = VTB_MEMORY;
+		if (buf == NULL && cols * rows != 0) {
+			rows += 20;
+			vtb->vtb_realsize = cols * rows;
+			vtb->vtb_roomafter = vtb->vtb_realsize - vtb->vtb_size;
+			vtb->vtb_roombefore = 0;
+		}
+	}
+
 	switch (type) {
+	case VTB_SCROLLMEMORY:
 	case VTB_MEMORY:
 	case VTB_RINGBUFFER:
-		if ((buf == NULL) && (cols*rows != 0)) {
+		if ((buf == NULL) && (cols * rows != 0)) {
 			vtb->vtb_buffer = kmalloc(cols*rows*sizeof(uint16_t),
 				    M_SYSCONS,
 				    M_ZERO | ((wait) ? M_WAITOK : M_NOWAIT));
 			if (vtb->vtb_buffer != NULL) {
 				vtb->vtb_flags |= VTB_VALID;
 				vtb->vtb_flags |= VTB_ALLOCED;
+				vtb->vtb_realbuffer = vtb->vtb_buffer;
 			}
 		} else {
 			vtb->vtb_buffer = buf;
+			vtb->vtb_realbuffer = buf;
 			vtb->vtb_flags |= VTB_VALID;
 		}
 		break;
 	case VTB_FRAMEBUFFER:
 		vtb->vtb_buffer = buf;
+		vtb->vtb_realbuffer = buf;
 		vtb->vtb_flags |= VTB_VALID;
 		break;
 	default:
@@ -119,10 +137,14 @@ sc_vtb_destroy(sc_vtb_t *vtb)
 	vtb->vtb_cols = 0;
 	vtb->vtb_rows = 0;
 	vtb->vtb_size = 0;
+	vtb->vtb_realsize = 0;
+	vtb->vtb_roomafter = 0;
+	vtb->vtb_roombefore = 0;
 	vtb->vtb_tail = 0;
 
-	p = vtb->vtb_buffer;
+	p = vtb->vtb_realbuffer;
 	vtb->vtb_buffer = NULL;
+	vtb->vtb_realbuffer = NULL;
 	switch (vtb->vtb_type) {
 	case VTB_MEMORY:
 	case VTB_RINGBUFFER:
@@ -283,6 +305,23 @@ sc_vtb_delete(sc_vtb_t *vtb, int at, int count, int c, int attr)
 			sc_vtb_bcopy(vtb->vtb_buffer + at + count,
 				 vtb->vtb_buffer + at,
 				 len*sizeof(uint16_t)); 
+		} else if (at == 0 && vtb->vtb_realsize > vtb->vtb_size &&
+		    count * 4 < vtb->vtb_size) {
+			/* Special buffer for optimizing scrolling */
+			if (count > vtb->vtb_roomafter &&
+			    vtb->vtb_buffer > vtb->vtb_realbuffer) {
+				sc_vtb_bcopy(vtb->vtb_buffer + count,
+				      vtb->vtb_realbuffer,
+				      len*sizeof(uint16_t));
+				vtb->vtb_buffer = vtb->vtb_realbuffer;
+				vtb->vtb_roomafter =
+				    vtb->vtb_realsize - vtb->vtb_size;
+				vtb->vtb_roombefore = 0;
+			} else {
+				vtb->vtb_buffer += count;
+				vtb->vtb_roomafter -= count;
+				vtb->vtb_roombefore += count;
+			}
 		} else {
 			sc_vtb_bcopy(vtb->vtb_buffer + at + count,
 			      vtb->vtb_buffer + at,

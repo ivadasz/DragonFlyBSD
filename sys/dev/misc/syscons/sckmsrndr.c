@@ -115,11 +115,35 @@ kms_txtborder(scr_stat *scp, int color)
 {
 }
 
+static inline void
+idxtofgbg(uint16_t idx, int flip, uint32_t *bg, uint32_t *fg, int reverse)
+{
+	uint32_t mybg, myfg;
+	uint8_t attr;
+
+	attr = (idx >> 8) & 0xff;
+	if (flip) {
+		attr = (attr & 0x88) | ((attr & 0x70) >> 4)
+		        | ((attr & 0x07) << 4);
+	}
+	myfg = colormap[attr & 0xf];
+	mybg = colormap[(attr >> 4) & 0xf];
+	if (reverse) {
+		*bg = myfg;
+		*fg = mybg;
+	} else {
+		*bg = mybg;
+		*fg = myfg;
+	}
+}
+
+/* startcol and count can be arbitrary */
 static void
-draw_glyphs32(scr_stat *scp, int from, int count, int flip, int reverse)
+put_glyphs32_single(scr_stat *scp, uint32_t *fb, int row, int startcol, int count, int flip,
+    int reverse)
 {
 	sc_softc_t *sc = scp->sc;
-	uint32_t *fb = (uint32_t *)sc->fbi->vaddr;
+	uint32_t *pos, *line;
 	uint16_t width = sc->fbi->width;
 //	uint16_t stride = sc->fbi->stride;
 	uint16_t height = sc->fbi->height;
@@ -128,47 +152,377 @@ draw_glyphs32(scr_stat *scp, int from, int count, int flip, int reverse)
 	short fnwidth = sc->fbfontwidth;
 	short fnstride = sc->fbfontstride;
 	short fnheight = sc->fbfontheight;
-	int col, row;
-	int i, j, k;
+	int endcol = startcol + count - 1;
+	int i, j, k, at;
 	uint16_t idx;
 	uint8_t glyphidx;
-	uint8_t attr;
-	uint32_t bg;
-	uint32_t fg;
+	uint32_t bg, fg;
 
-	if (from + count > scp->xsize * scp->ysize)
-		count = scp->xsize * scp->ysize - from;
+	if ((row+1) * fnheight > height)
+		return;
+	if ((startcol + count) * fnwidth > width)
+		endcol = width / fnwidth - 1;
 
-	for (i = from; i < from + count; i++) {
-		idx = scp->vtb.vtb_buffer[i];
+	line = &fb[row * fnheight * width];
+	at = scp->xsize * row + startcol;
+	for (i = startcol; i <= endcol; i++, at++) {
+		if (sc_shadow_changed(scp, scp->vtb.vtb_buffer, at, 1) == 0)
+			continue;
+		pos = &line[i * fnwidth];
+		idx = scp->vtb.vtb_buffer[at];
 		glyphidx = idx & 0xff;
-		attr = (idx >> 8) & 0xff;
-		if (flip) {
-			attr = (attr & 0x88) | ((attr & 0x70) >> 4)
-			        | ((attr & 0x07) << 4);
-		}
-		fg = colormap[attr & 0xf];
-		bg = colormap[(attr >> 4) & 0xf];
-		if (reverse) {
-			uint32_t tmp = bg;
-			bg = fg;
-			fg = tmp;
-		}
+		idxtofgbg(idx, flip, &bg, &fg, reverse);
 
-		if (glyphidx < sc->fbfontstart)
-			continue;
+		if (glyphidx < sc->fbfontstart) {
+			if (glyphidx == 0 && sc->fbfontstart <= ' ')
+				glyphidx = ' ';
+			else
+				glyphidx = sc->fbfontstart;
+		}
 		glyph = &font[(glyphidx - sc->fbfontstart) * fnstride * fnheight];
-		col = i % scp->xsize;
-		row = i / scp->xsize;
-		if (col * fnwidth > width || row * fnheight > height)
-			continue;
 		for (j = 0; j < fnheight; j++) {
 			for (k = 0; k < fnwidth; k++) {
-				fb[(row*fnheight+j)*width + col*fnwidth + k] =
+				pos[j * width + k] =
 				    ((glyph[j * fnstride + k/8] >>
 				    (7 - (k%8))) & 1) ? fg : bg;
 			}
 		}
+	}
+}
+
+/* startcol and count must be multiples of 2 */
+/* For now assume that each line starts on a cacheline boundary */
+static void
+put_glyphs32_dual(scr_stat *scp, uint32_t *fb, int row, int startcol, int count, int flip,
+    int reverse)
+{
+	sc_softc_t *sc = scp->sc;
+	uint32_t *pos, *line;
+	uint16_t width = sc->fbi->width;
+//	uint16_t stride = sc->fbi->stride;
+	uint16_t height = sc->fbi->height;
+	u_char *font = sc->fbfont;
+	u_char *glyph[2];
+	short fnwidth = sc->fbfontwidth;
+	short fnstride = sc->fbfontstride;
+	short fnheight = sc->fbfontheight;
+	int endcol = startcol + count - 1;
+	int i, j, k, at;
+	uint16_t idx[2];
+	uint8_t glyphidx[2];
+	uint32_t bg[2], fg[2];
+
+	if ((row + 1) * fnheight > height)
+		return;
+	if ((startcol + count) * fnwidth > width)
+		endcol = width / fnwidth - 1;
+
+	line = &fb[row * fnheight * width];
+	at = scp->xsize * row + startcol;
+	for (i = startcol; i <= endcol; i+=2, at+=2) {
+		if (sc_shadow_changed(scp, scp->vtb.vtb_buffer, at, 2) == 0)
+			continue;
+		pos = &line[i * fnwidth];
+		idx[0] = scp->vtb.vtb_buffer[at];
+		idx[1] = scp->vtb.vtb_buffer[at+1];
+		glyphidx[0] = idx[0] & 0xff;
+		glyphidx[1] = idx[1] & 0xff;
+		idxtofgbg(idx[0], flip, &bg[0], &fg[0], reverse);
+		idxtofgbg(idx[1], flip, &bg[1], &fg[1], reverse);
+
+		if (glyphidx[0] < sc->fbfontstart) {
+			if (glyphidx[0] == 0 && sc->fbfontstart <= ' ')
+				glyphidx[0] = ' ';
+			else
+				glyphidx[0] = sc->fbfontstart;
+		}
+		if (glyphidx[1] < sc->fbfontstart) {
+			if (glyphidx[1] == 0 && sc->fbfontstart <= ' ')
+				glyphidx[1] = ' ';
+			else
+				glyphidx[1] = sc->fbfontstart;
+		}
+		glyph[0] = &font[(glyphidx[0] - sc->fbfontstart) * fnstride * fnheight];
+		glyph[1] = &font[(glyphidx[1] - sc->fbfontstart) * fnstride * fnheight];
+		for (j = 0; j < fnheight; j++) {
+			for (k = 0; k < fnwidth; k++) {
+				pos[j * width + k] =
+				    ((glyph[0][j * fnstride + k/8] >>
+				    (7 - (k%8))) & 1) ? fg[0] : bg[0];
+			}
+			for (k = 0; k < fnwidth; k++) {
+				pos[j * width + k + fnwidth] =
+				    ((glyph[1][j * fnstride + k/8] >>
+				    (7 - (k%8))) & 1) ? fg[1] : bg[1];
+			}
+		}
+	}
+}
+
+static uint32_t monomap[256*8];
+static int monomap_initted = 0;
+
+static void
+initmonomap(void)
+{
+	uint32_t val;
+	int i;
+
+	for (i = 0; i < 256; i++) {
+		val = i;
+		monomap[i*8+0] = ((val >> 7) & 1) ? 0xffffffff : 0x00000000;
+		monomap[i*8+1] = ((val >> 6) & 1) ? 0xffffffff : 0x00000000;
+		monomap[i*8+2] = ((val >> 5) & 1) ? 0xffffffff : 0x00000000;
+		monomap[i*8+3] = ((val >> 4) & 1) ? 0xffffffff : 0x00000000;
+		monomap[i*8+4] = ((val >> 3) & 1) ? 0xffffffff : 0x00000000;
+		monomap[i*8+5] = ((val >> 2) & 1) ? 0xffffffff : 0x00000000;
+		monomap[i*8+6] = ((val >> 1) & 1) ? 0xffffffff : 0x00000000;
+		monomap[i*8+7] = ((val >> 0) & 1) ? 0xffffffff : 0x00000000;
+	}
+	monomap_initted = 1;
+}
+
+/* startcol and count must be multiples of 4 */
+/* For now assume that each line starts on a cacheline boundary */
+/* Assumes that sc->fbfontwidth is a multiple of 2 */
+static void
+put_glyphs32_quad(scr_stat *scp, uint32_t *fb, int row, int startcol, int count, int flip,
+    int reverse)
+{
+	sc_softc_t *sc = scp->sc;
+	uint32_t *pos, *line;
+	uint16_t width = sc->fbi->width;
+//	uint16_t stride = sc->fbi->stride;
+	uint16_t height = sc->fbi->height;
+	u_char *font = sc->fbfont;
+	u_char *glyph[4];
+	short fnwidth = sc->fbfontwidth;
+	short fnstride = sc->fbfontstride;
+	short fnheight = sc->fbfontheight;
+	int endcol = startcol + count - 1;
+	int i, j, k, l, m, at;
+	uint16_t idx[4];
+	uint8_t glyphidx[4];
+	uint32_t bg[4], fg[4];
+	uint64_t mybg[4], myfg[4];
+	uint32_t *map;
+	uint64_t val;
+
+	if ((row+1) * fnheight > height)
+		return;
+	if ((startcol + count) * fnwidth > width)
+		endcol = width / fnwidth - 1;
+
+	line = &fb[row * fnheight * width];
+	at = scp->xsize * row + startcol;
+	for (i = startcol; i <= endcol; i+=4, at+=4) {
+		if (sc_shadow_changed(scp, scp->vtb.vtb_buffer, at, 4) == 0)
+			continue;
+		pos = &line[i * fnwidth];
+		idx[0] = scp->vtb.vtb_buffer[at];
+		idx[1] = scp->vtb.vtb_buffer[at+1];
+		idx[2] = scp->vtb.vtb_buffer[at+2];
+		idx[3] = scp->vtb.vtb_buffer[at+3];
+		glyphidx[0] = idx[0] & 0xff;
+		glyphidx[1] = idx[1] & 0xff;
+		glyphidx[2] = idx[2] & 0xff;
+		glyphidx[3] = idx[3] & 0xff;
+		if (glyphidx[0] < sc->fbfontstart) {
+			if (glyphidx[0] == 0 && sc->fbfontstart <= ' ')
+				glyphidx[0] = ' ';
+			else
+				glyphidx[0] = sc->fbfontstart;
+		}
+		if (glyphidx[1] < sc->fbfontstart) {
+			if (glyphidx[1] == 0 && sc->fbfontstart <= ' ')
+				glyphidx[1] = ' ';
+			else
+				glyphidx[1] = sc->fbfontstart;
+		}
+		if (glyphidx[2] < sc->fbfontstart) {
+			if (glyphidx[2] == 0 && sc->fbfontstart <= ' ')
+				glyphidx[2] = ' ';
+			else
+				glyphidx[2] = sc->fbfontstart;
+		}
+		if (glyphidx[3] < sc->fbfontstart) {
+			if (glyphidx[3] == 0 && sc->fbfontstart <= ' ')
+				glyphidx[3] = ' ';
+			else
+				glyphidx[3] = sc->fbfontstart;
+		}
+
+		idxtofgbg(idx[0], flip, &bg[0], &fg[0], reverse);
+		idxtofgbg(idx[1], flip, &bg[1], &fg[1], reverse);
+		idxtofgbg(idx[2], flip, &bg[2], &fg[2], reverse);
+		idxtofgbg(idx[3], flip, &bg[3], &fg[3], reverse);
+		mybg[0] = bg[0] | (((uint64_t)bg[0]) << 32);
+		mybg[1] = bg[1] | (((uint64_t)bg[1]) << 32);
+		mybg[2] = bg[2] | (((uint64_t)bg[2]) << 32);
+		mybg[3] = bg[3] | (((uint64_t)bg[3]) << 32);
+		myfg[0] = fg[0] | (((uint64_t)fg[0]) << 32);
+		myfg[1] = fg[1] | (((uint64_t)fg[1]) << 32);
+		myfg[2] = fg[2] | (((uint64_t)fg[2]) << 32);
+		myfg[3] = fg[3] | (((uint64_t)fg[3]) << 32);
+
+		glyph[0] = &font[(glyphidx[0] - sc->fbfontstart) * fnstride * fnheight];
+		glyph[1] = &font[(glyphidx[1] - sc->fbfontstart) * fnstride * fnheight];
+		glyph[2] = &font[(glyphidx[2] - sc->fbfontstart) * fnstride * fnheight];
+		glyph[3] = &font[(glyphidx[3] - sc->fbfontstart) * fnstride * fnheight];
+		for (j = 0; j < fnheight; j++) {
+			m = 0;
+			for (k = 0; k < fnstride; k++) {
+				map = &monomap[glyph[0][j * fnstride + k]*8];
+				int q = MIN(8, fnwidth - m);
+				for (l = 0; l < q; l+=2) {
+					val = *(uint64_t *)&map[l];
+					val = (val & myfg[0]) | ((~val) & mybg[0]);
+					*(uint64_t *)&pos[j*width+m] = val;
+					m+=2;
+				}
+			}
+			m = 0;
+			for (k = 0; k < fnstride; k++) {
+				map = &monomap[glyph[1][j * fnstride + k]*8];
+				int q = MIN(8, fnwidth - m);
+				for (l = 0; l < q; l+=2) {
+					val = *(uint64_t *)&map[l];
+					val = (val & myfg[1]) | ((~val) & mybg[1]);
+					*(uint64_t *)&pos[j*width+m+fnwidth] = val;
+					m+=2;
+				}
+			}
+			m = 0;
+			for (k = 0; k < fnstride; k++) {
+				map = &monomap[glyph[2][j * fnstride + k]*8];
+				int q = MIN(8, fnwidth - m);
+				for (l = 0; l < q; l+=2) {
+					val = *(uint64_t *)&map[l];
+					val = (val & myfg[2]) | ((~val) & mybg[2]);
+					*(uint64_t *)&pos[j*width+m+2*fnwidth] = val;
+					m+=2;
+				}
+			}
+			m = 0;
+			for (k = 0; k < fnstride; k++) {
+				map = &monomap[glyph[3][j * fnstride + k]*8];
+				int q = MIN(8, fnwidth - m);
+				for (l = 0; l < q; l+=2) {
+					val = *(uint64_t *)&map[l];
+					val = (val & myfg[3]) | ((~val) & mybg[3]);
+					*(uint64_t *)&pos[j*width+m+3*fnwidth] = val;
+					m+=2;
+				}
+			}
+#if 0
+			for (k = 0; k < fnwidth; k++) {
+				pos[j * width + k] =
+				    ((glyph[0][j * fnstride + k/8] >>
+				    (7 - (k%8))) & 1) ? fg[0] : bg[0];
+			}
+			for (k = 0; k < fnwidth; k++) {
+				pos[j * width + k + fnwidth] =
+				    ((glyph[1][j * fnstride + k/8] >>
+				    (7 - (k%8))) & 1) ? fg[1] : bg[1];
+			}
+			for (k = 0; k < fnwidth; k++) {
+				pos[j * width + k + 2*fnwidth] =
+				    ((glyph[2][j * fnstride + k/8] >>
+				    (7 - (k%8))) & 1) ? fg[2] : bg[2];
+			}
+			for (k = 0; k < fnwidth; k++) {
+				pos[j * width + k + 3*fnwidth] =
+				    ((glyph[3][j * fnstride + k/8] >>
+				    (7 - (k%8))) & 1) ? fg[3] : bg[3];
+			}
+#endif
+		}
+	}
+}
+
+static void
+draw_glyphline32(scr_stat *scp, int row, int startcol, int count, int flip,
+    int reverse)
+{
+	sc_softc_t *sc = scp->sc;
+	uint32_t *fb = (uint32_t *)sc->fbi->vaddr;
+	short fnwidth = sc->fbfontwidth;
+	int i;
+
+//#if 0
+	/* safety checks */
+	if (startcol + count > scp->xsize)
+		count = scp->xsize - startcol;
+
+	if (count < 1)
+		return;
+//#endif
+
+	if (fnwidth % 16 == 0) {
+		put_glyphs32_single(scp, fb, row, startcol, count, flip, reverse);
+	} else if ((fnwidth * 2) % 16 == 0) {
+		i = startcol;
+		while (i < startcol + count &&
+		    ((i & 1) || (startcol + count - i < 4))) {
+			put_glyphs32_single(scp, fb, row, i, 1, flip, reverse);
+			i++;
+		}
+		while (i + 2 <= startcol + count) {
+			int step = (startcol + count - i) & ~1;
+			if (step < 1)
+				break;
+			put_glyphs32_dual(scp, fb, row, i, step, flip, reverse);
+			i += step;
+		}
+		if (i < startcol + count)
+			put_glyphs32_single(scp, fb, row, i, startcol + count - i, flip, reverse);
+	} else {
+		i = startcol;
+		while (i < startcol + count &&
+		    ((i & 3) || (startcol + count - i < 4))) {
+			put_glyphs32_single(scp, fb, row, i, 1, flip, reverse);
+			i++;
+		}
+		while (i + 4 <= startcol + count) {
+			int step = (startcol + count - i) & (~3);
+			if (step < 1)
+				break;
+			put_glyphs32_quad(scp, fb, row, i, step, flip, reverse);
+			i += step;
+		}
+		if (i < startcol + count)
+			put_glyphs32_single(scp, fb, row, i, startcol + count - i, flip, reverse);
+	}
+}
+
+static void
+draw_glyphs32(scr_stat *scp, int from, int count, int flip, int reverse)
+{
+	int startcol, startrow, endcol, endrow;
+	int i;
+
+	if (from + count > scp->xsize * scp->ysize)
+		count = scp->xsize * scp->ysize - from;
+
+	if (count < 1)
+		return;
+
+	if (!monomap_initted)
+		initmonomap();
+
+	startrow = from / scp->xsize;
+	startcol = from % scp->xsize;
+	endrow = (from + count - 1) / scp->xsize;
+	endcol = (from + count - 1) % scp->xsize;
+
+	if (startrow == endrow) {
+		draw_glyphline32(scp, startrow, startcol, count, flip, reverse);
+	} else {
+		draw_glyphline32(scp, startrow, startcol, scp->xsize - startcol, flip, reverse);
+		for (i = startrow + 1; i < endrow; i++) {
+			draw_glyphline32(scp, i, 0, scp->xsize, flip, reverse);
+		}
+		draw_glyphline32(scp, endrow, 0, endcol + 1, flip, reverse);
 	}
 }
 
@@ -199,10 +553,16 @@ kms_txtcursor_shape(scr_stat *scp, int base, int height, int blink)
 static void
 kms_txtcursor(scr_stat *scp, int at, int blink, int on, int flip)
 {
+	sc_softc_t *sc = scp->sc;
+
+	if (sc->shadow != NULL)
+		sc->shadow[at] = 0xff00;
 	if (on)
 		draw_glyphs32(scp, at, 1, flip, 1);
 	else
 		draw_glyphs32(scp, at, 1, flip, 0);
+	if (sc->shadow != NULL)
+		sc->shadow[at] = 0xff00;
 }
 
 static void

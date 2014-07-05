@@ -321,6 +321,10 @@ sc_set_framebuffer(struct fb_info *info)
 	sc->fbfontstart = ' ';
     }
 
+    sc->shadow = kmalloc((sc->fbi->width / sc->fbfontwidth) *
+                         (sc->fbi->height / sc->fbfontheight) *
+                         sizeof(u_short), M_SYSCONS, M_WAITOK | M_ZERO);
+
     if (sc->fbi != NULL) {
 	sc_update_render(sc->cur_scp);
 	sc->fbi->restore(sc->fbi->cookie);
@@ -2807,7 +2811,8 @@ scinit(int unit, int flags)
      * but is necessry evil for the time being.  XXX
      */
     static scr_stat main_console;
-    static u_short sc_buffer[ROW*COL];	/* XXX */
+    static u_short sc_buffer[(ROW+20)*COL];	/* XXX */
+    static u_short  sc_shadow[ROW*COL];
 #ifndef SC_NO_FONT_LOADING
     static u_char font_8[256*8];
     static u_char font_14[256*14];
@@ -2858,6 +2863,7 @@ scinit(int unit, int flags)
 	DPRINTF(1, ("sc%d: kbd index:%d, unit:%d, flags:0x%x\n",
 		unit, sc->kbd->kb_index, sc->kbd->kb_unit, sc->kbd->kb_flags));
     }
+    sc->shadow = sc_shadow;
 
     if (!(sc->flags & SC_INIT_DONE) || (adp != sc->adp)) {
 
@@ -2889,7 +2895,7 @@ scinit(int unit, int flags)
 	    scp = &main_console;
 	    sc->console_scp = scp;
 	    init_scp(sc, sc->first_vty, scp);
-	    sc_vtb_init(&scp->vtb, VTB_MEMORY, scp->xsize, scp->ysize,
+	    sc_vtb_init(&scp->vtb, VTB_SCROLLMEMORY, scp->xsize, scp->ysize,
 			(void *)sc_buffer, FALSE);
 	    if (sc_init_emulator(scp, SC_DFLT_TERM))
 		sc_init_emulator(scp, "*");
@@ -3109,7 +3115,7 @@ sc_alloc_scr_buffer(scr_stat *scp, int wait, int discard)
 
     lwkt_gettoken(&tty_token);
     old = scp->vtb;
-    sc_vtb_init(&new, VTB_MEMORY, scp->xsize, scp->ysize, NULL, wait);
+    sc_vtb_init(&new, VTB_SCROLLMEMORY, scp->xsize, scp->ysize, NULL, wait);
     if (!discard && (old.vtb_flags & VTB_VALID)) {
 	/* retain the current cursor position and buffer contants */
 	scp->cursor_oldpos = scp->cursor_pos;
@@ -3214,7 +3220,7 @@ init_scp(sc_softc_t *sc, int vty, scr_stat *scp)
 	scp->xsize = scp->fbi->width / sc->fbfontwidth;
 	scp->ysize = scp->fbi->height / sc->fbfontheight;
     }
-    sc_vtb_init(&scp->vtb, VTB_MEMORY, 0, 0, NULL, FALSE);
+    sc_vtb_init(&scp->vtb, VTB_SCROLLMEMORY, 0, 0, NULL, FALSE);
     sc_vtb_init(&scp->scr, VTB_FRAMEBUFFER, 0, 0, NULL, FALSE);
     scp->xoff = scp->yoff = 0;
     scp->xpos = scp->ypos = 0;
@@ -3862,6 +3868,28 @@ sc_bell(scr_stat *scp, int pitch, int duration)
 	    pitch *= 2;
 	sysbeep(pitch, duration);
     }
+}
+
+int
+sc_shadow_changed(scr_stat *scp, u_short *src, int at, int count)
+{
+	int i, n;
+	u_short val;
+	u_short *shadow = scp->sc->shadow;
+
+	if (shadow == NULL)
+		return count;
+
+	n = 0;
+	for (i = at; i < at + count; i++) {
+		val = src[i];
+		if (shadow[i] != val) {
+			shadow[i] = val;
+			n++;
+		}
+	}
+
+	return n;
 }
 
 /*

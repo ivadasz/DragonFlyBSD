@@ -156,10 +156,15 @@ typedef struct sc_vtb {
 #define VTB_MEMORY	1
 #define VTB_FRAMEBUFFER	2
 #define VTB_RINGBUFFER	3
+#define VTB_SCROLLMEMORY	4	/* special */
 	int		vtb_cols;
 	int		vtb_rows;
 	int		vtb_size;
 	uint16_t	*vtb_buffer;
+	uint16_t	*vtb_realbuffer; /* may be != vtb_buffer for special */
+	int		vtb_realsize;		/* > vtb_size for special */
+	int		vtb_roomafter;		/* != 0 for special */
+	int		vtb_roombefore;		/* != 0 for special */
 	int		vtb_tail;	/* valid for VTB_RINGBUFFER only */
 } sc_vtb_t;
 
@@ -206,6 +211,8 @@ typedef struct sc_softc {
 	short		fbfontstride;
 	short		fbfontheight;
 	char		fbfontstart;
+
+	u_short		*shadow;		/* Shadow of screen content */
 
 	int		first_vty;
 	int		vtys;
@@ -526,6 +533,8 @@ void		sc_alloc_scr_buffer(scr_stat *scp, int wait, int discard);
 int		sc_init_emulator(scr_stat *scp, char *name);
 void		sc_paste(scr_stat *scp, u_char *p, int count);
 void		sc_bell(scr_stat *scp, int pitch, int duration);
+int		sc_shadow_changed(scr_stat *scp, u_short *src, int at,
+				  int count);
 
 /* schistory.c */
 #ifndef SC_NO_HISTORY
