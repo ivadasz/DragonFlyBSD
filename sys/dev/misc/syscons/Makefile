@@ -4,20 +4,20 @@
 .include "../../../platform/${MACHINE_PLATFORM}/Makefile.inc"
 
 SUBDIR =
-SUBDIR += blank
-SUBDIR += dragon
-SUBDIR += fade
-SUBDIR += fire
-SUBDIR += fred
-SUBDIR += green
-SUBDIR += logo
-SUBDIR += rain
-SUBDIR += snake
-SUBDIR += star
-SUBDIR += warp
+#SUBDIR += blank
+#SUBDIR += dragon
+#SUBDIR += fade
+#SUBDIR += fire
+#SUBDIR += fred
+#SUBDIR += green
+#SUBDIR += logo
+#SUBDIR += rain
+#SUBDIR += snake
+#SUBDIR += star
+#SUBDIR += warp
 
-.ifdef SYSCONS_APM_SUPPORT
-SUBDIR += apm
-.endif
+#.ifdef SYSCONS_APM_SUPPORT
+#SUBDIR += apm
+#.endif
 
 .include <bsd.subdir.mk>
