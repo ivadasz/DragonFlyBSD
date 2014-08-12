@@ -111,10 +111,6 @@ static  char        	init_done = COLD;
 static  char		shutdown_in_progress = FALSE;
 static	char		sc_malloc = FALSE;
 
-static	int		saver_mode = CONS_NO_SAVER; /* LKM/user saver */
-static	int		run_scrn_saver = FALSE;	/* should run the saver? */
-static	long        	scrn_blank_time = 0;    /* screen saver timeout value */
-
 #if !defined(SC_NO_FONT_LOADING) && defined(SC_DFLT_FONT)
 #include "font.h"
 #endif
@@ -590,7 +586,6 @@ scread(struct dev_read_args *ap)
     int ret;
 
     lwkt_gettoken(&tty_token);
-    sc_touch_scrn_saver();
     ret = ttyread(ap);
     lwkt_reltoken(&tty_token);
     return ret;
@@ -755,18 +750,6 @@ scioctl(struct dev_ioctl_args *ap)
 	lwkt_reltoken(&tty_token);
 	return 0;
 
-    case CONS_BLANKTIME:    	/* set screen saver timeout (0 = no saver) */
-	if (*(int *)data < 0 || *(int *)data > MAX_BLANKTIME) {
-	    lwkt_reltoken(&tty_token);
-            return EINVAL;
-	}
-	syscons_lock();
-	scrn_blank_time = *(int *)data;
-	run_scrn_saver = (scrn_blank_time != 0);
-	syscons_unlock();
-	lwkt_reltoken(&tty_token);
-	return 0;
-
     case CONS_CURSORTYPE:   	/* set cursor type blink/noblink */
 	syscons_lock();
 	if (!ISGRAPHSC(sc->cur_scp))
@@ -841,63 +824,6 @@ scioctl(struct dev_ioctl_args *ap)
 
     case CONS_GETVERS:  	/* get version number */
 	*(int*)data = 0x200;    /* version 2.0 */
-	lwkt_reltoken(&tty_token);
-	return 0;
-
-    case CONS_IDLE:		/* see if the screen has been idle */
-	/*
-	 * When the screen is in the GRAPHICS_MODE or UNKNOWN_MODE,
-	 * the user process may have been writing something on the
-	 * screen and syscons is not aware of it. Declare the screen
-	 * is NOT idle if it is in one of these modes. But there is
-	 * an exception to it; if a screen saver is running in the 
-	 * graphics mode in the current screen, we should say that the
-	 * screen has been idle.
-	 */
-	*(int *)data = (sc->flags & SC_SCRN_IDLE)
-		       && (!ISGRAPHSC(sc->cur_scp)
-			   || (sc->cur_scp->status & SAVER_RUNNING));
-	lwkt_reltoken(&tty_token);
-	return 0;
-
-    case CONS_SAVERMODE:	/* set saver mode */
-	switch(*(int *)data) {
-	case CONS_NO_SAVER:
-	case CONS_USR_SAVER:
-	    syscons_lock();
-	    /* if a LKM screen saver is running, stop it first. */
-	    saver_mode = *(int *)data;
-	    run_scrn_saver = TRUE;
-	    if (saver_mode == CONS_USR_SAVER)
-		scp->status |= SAVER_RUNNING;
-	    else
-		scp->status &= ~SAVER_RUNNING;
-	    syscons_unlock();
-	    break;
-	case CONS_LKM_SAVER:
-	    syscons_lock();
-	    if ((saver_mode == CONS_USR_SAVER) && (scp->status & SAVER_RUNNING))
-		scp->status &= ~SAVER_RUNNING;
-	    saver_mode = *(int *)data;
-	    syscons_unlock();
-	    break;
-	default:
-	    lwkt_reltoken(&tty_token);
-	    return EINVAL;
-	}
-	lwkt_reltoken(&tty_token);
-	return 0;
-
-    case CONS_SAVERSTART:	/* immediately start/stop the screen saver */
-	/*
-	 * Note that this ioctl does not guarantee the screen saver 
-	 * actually starts or stops. It merely attempts to do so...
-	 */
-	syscons_lock();
-	run_scrn_saver = (*(int *)data != 0);
-	if (run_scrn_saver)
-	    sc->scrn_time_stamp -= scrn_blank_time;
-	syscons_unlock();
 	lwkt_reltoken(&tty_token);
 	return 0;
 
@@ -1683,10 +1609,9 @@ sccngetch(int flags)
     /* assert(sc_console != NULL) */
 
     /* 
-     * Stop the screen saver and update the screen if necessary.
+     * Update the screen if necessary.
      * What if we have been running in the screen saver code... XXX
      */
-    sc_touch_scrn_saver();
     scp = sc_console->sc->cur_scp;	/* XXX */
     sccnupdate(scp);
     syscons_unlock();
@@ -1750,13 +1675,10 @@ sccnupdate(scr_stat *scp)
     }
 
     if (debugger > 0 || panicstr || shutdown_in_progress) {
-	sc_touch_scrn_saver();
+	/* Nothing */
     } else if (scp != scp->sc->cur_scp) {
 	return;
     }
-
-    if (!run_scrn_saver)
-	scp->sc->flags &= ~SC_SCRN_IDLE;
 
     if (scp != scp->sc->cur_scp || scp->sc->blink_in_progress
 	|| scp->sc->switch_in_progress) {
@@ -1767,7 +1689,7 @@ sccnupdate(scr_stat *scp)
      * when write_in_progress is non-zero.  XXX
      */
 
-    if (!ISGRAPHSC(scp) && !(scp->sc->flags & SC_SCRN_BLANKED))
+    if (!ISGRAPHSC(scp))
 	scrn_update(scp, TRUE);
 }
 
@@ -1775,7 +1697,6 @@ static void
 scrn_timer(void *arg)
 {
     static int kbd_interval = 0;
-    struct timeval tv;
     sc_softc_t *sc;
     scr_stat *scp;
     int again;
@@ -1820,11 +1741,8 @@ scrn_timer(void *arg)
     }
 
     /*
-     * Should we stop the screen saver?  We need the syscons_lock
-     * for most of this stuff.
+     * We need the syscons_lock for most of this stuff.
      */
-    getmicrouptime(&tv);
-
     if (syscons_lock_nonblock() != 0) {
 	/* failed to get the lock */
 	if (again)
@@ -1832,20 +1750,6 @@ scrn_timer(void *arg)
 	return;
     }
     /* successful lock */
-
-    if (debugger > 0 || panicstr || shutdown_in_progress)
-	sc_touch_scrn_saver();
-    if (run_scrn_saver) {
-	if (tv.tv_sec > sc->scrn_time_stamp + scrn_blank_time)
-	    sc->flags |= SC_SCRN_IDLE;
-	else
-	    sc->flags &= ~SC_SCRN_IDLE;
-    } else {
-	sc->scrn_time_stamp = tv.tv_sec;
-	sc->flags &= ~SC_SCRN_IDLE;
-	if (scrn_blank_time > 0)
-	    run_scrn_saver = TRUE;
-    }
 
     /* should we just return ? */
     if (sc->blink_in_progress || sc->switch_in_progress ||
@@ -1859,7 +1763,7 @@ scrn_timer(void *arg)
 
     /* Update the screen */
     scp = sc->cur_scp;		/* cur_scp may have changed... */
-    if (!ISGRAPHSC(scp) && !(sc->flags & SC_SCRN_BLANKED))
+    if (!ISGRAPHSC(scp))
 	scrn_update(scp, TRUE);
 
     syscons_unlock();
@@ -1999,12 +1903,6 @@ scrn_update(scr_stat *scp, int show_cursor)
     --scp->sc->videoio_in_progress;
 }
 
-void
-sc_touch_scrn_saver(void)
-{
-    run_scrn_saver = FALSE;
-}
-
 int
 sc_switch_scr(sc_softc_t *sc, u_int next_scr)
 {
@@ -2021,10 +1919,9 @@ sc_switch_scr(sc_softc_t *sc, u_int next_scr)
     }
 
     /* delay switch if the screen is blanked or being updated */
-    if ((sc->flags & SC_SCRN_BLANKED) || sc->write_in_progress
-	|| sc->blink_in_progress || sc->videoio_in_progress) {
+    if (sc->write_in_progress || sc->blink_in_progress
+	|| sc->videoio_in_progress) {
 	sc->delayed_next_scr = next_scr + 1;
-	sc_touch_scrn_saver();
 	DPRINTF(5, ("switch delayed\n"));
 	return 0;
     }
@@ -2686,7 +2583,6 @@ scshutdown(void *arg, int howto)
 
     lwkt_gettoken(&tty_token);
     syscons_lock();
-    sc_touch_scrn_saver();
     if (!cold && sc_console
 	&& sc_console->sc->cur_scp->smode.mode == VT_AUTO 
 	&& sc_console->smode.mode == VT_AUTO) {
@@ -2701,9 +2597,6 @@ int
 sc_clean_up(scr_stat *scp)
 {
     lwkt_gettoken(&tty_token);
-    if (scp->sc->flags & SC_SCRN_BLANKED) {
-	sc_touch_scrn_saver();
-    }
     scp->status |= MOUSE_HIDDEN;
     sc_remove_mouse_image(scp);
     sc_remove_cutmarking(scp);
@@ -2956,10 +2849,6 @@ next_code:
 	}
     }
 
-    /* make screensaver happy */
-    if (!(c & RELKEY))
-	sc_touch_scrn_saver();
-
     if (!(flags & SCGETC_CN))
 	/* do the /dev/random device a favour */
 	add_keyboard_randomness(c);
@@ -3076,10 +2965,8 @@ next_code:
 		break;
 
 	    case BTAB:
-		if (!(sc->flags & SC_SCRN_BLANKED)) {
-                    lwkt_reltoken(&tty_token);
-		    return c;
-		}
+                lwkt_reltoken(&tty_token);
+		return c;
 		break;
 
 	    case SPSC:
@@ -3173,19 +3060,15 @@ next_code:
 		    break;
 		}
 		/* assert(c & FKEY) */
-		if (!(sc->flags & SC_SCRN_BLANKED)) {
-		    lwkt_reltoken(&tty_token);
-		    return c;
-		}
+		lwkt_reltoken(&tty_token);
+		return c;
 		break;
 	    }
 	    /* goto next_code */
 	} else {
 	    /* regular keys (maybe MKEY is set) */
-	    if (!(sc->flags & SC_SCRN_BLANKED)) {
-		lwkt_reltoken(&tty_token);
-		return c;
-	    }
+	    lwkt_reltoken(&tty_token);
+	    return c;
 	}
     }
 

@@ -754,17 +754,6 @@ sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    if (sysmouse_event(mouse) == 0)
 		return 0;
 
-	    /* 
-	     * If any buttons are down or the mouse has moved a lot, 
-	     * stop the screen saver.
-	     */
-	    if (((mouse->operation == MOUSE_ACTION) && mouse->u.data.buttons)
-		|| (mouse->u.data.x*mouse->u.data.x
-			+ mouse->u.data.y*mouse->u.data.y
-			>= SC_WAKEUP_DELTA*SC_WAKEUP_DELTA)) {
-		sc_touch_scrn_saver();
-	    }
-
 	    cur_scp->status &= ~MOUSE_HIDDEN;
 
 	    get_mplock();
@@ -810,10 +799,6 @@ sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 
 	    if (sysmouse_event(mouse) == 0)
 		return 0;
-
-	    /* if a button is held down, stop the screen saver */
-	    if (mouse->u.event.value > 0)
-		sc_touch_scrn_saver();
 
 	    cur_scp->status &= ~MOUSE_HIDDEN;
 

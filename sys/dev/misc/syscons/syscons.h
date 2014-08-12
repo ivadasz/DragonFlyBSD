@@ -129,7 +129,7 @@ MALLOC_DECLARE(M_SYSCONS);
 #define MOUSE_VISIBLE	0x04000		/* mouse cursor is showing */
 #define GRAPHICS_MODE	0x08000		/* vty is in a graphics mode */
 #define PIXEL_MODE	0x10000		/* vty is in a raster text mode */
-#define SAVER_RUNNING	0x20000		/* screen saver is running */
+//#define SAVER_RUNNING	0x20000		/* screen saver is running */
 #define VR_CURSOR_BLINK	0x40000		/* blinking text cursor */
 #define VR_CURSOR_ON	0x80000		/* text cursor is on */
 #define MOUSE_HIDDEN	0x100000	/* mouse cursor is temporarily hidden */
@@ -184,13 +184,13 @@ typedef struct sc_softc {
 #define SC_BLINK_CURSOR	(1 << 2)
 #define SC_CHAR_CURSOR	(1 << 3)
 #define SC_MOUSE_ENABLED (1 << 4)
-#define	SC_SCRN_IDLE	(1 << 5)
-#define	SC_SCRN_BLANKED	(1 << 6)
-#define	SC_SAVER_FAILED	(1 << 7)
+//#define	SC_SCRN_IDLE	(1 << 5)
+//#define	SC_SCRN_BLANKED	(1 << 6)
+//#define	SC_SAVER_FAILED	(1 << 7)
 #define	SC_SCRN_VTYLOCK	(1 << 8)
 
 #define	SC_INIT_DONE	(1 << 16)
-#define	SC_SPLASH_SCRN	(1 << 17)
+//#define	SC_SPLASH_SCRN	(1 << 17)
 
 	int		keyboard;		/* -1 if unavailable */
 	struct keyboard	*kbd;
@@ -214,7 +214,6 @@ typedef struct sc_softc {
 	char        	write_in_progress;
 	char        	blink_in_progress;
 
-	long		scrn_time_stamp;
 	struct callout	scrn_timer_ch;
 
 	char		cursor_base;
@@ -505,7 +504,6 @@ void		sc_save_font(scr_stat *scp, int page, int size, u_char *font,
 			     int base, int count);
 void		sc_show_font(scr_stat *scp, int page);
 
-void		sc_touch_scrn_saver(void);
 void		sc_draw_cursor_image(scr_stat *scp);
 void		sc_remove_cursor_image(scr_stat *scp);
 void		sc_set_cursor_image(scr_stat *scp);
