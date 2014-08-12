@@ -161,7 +161,7 @@ device		vga0	at isa?
 device		kbdmux
 
 # splash screen/screen saver
-pseudo-device	splash
+#pseudo-device	splash
 
 # syscons is the default console driver, resembling an SCO console
 device		sc0	at isa? flags 0x100

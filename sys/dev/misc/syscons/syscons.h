@@ -312,8 +312,6 @@ typedef struct scr_stat {
 	int		history_pos;		/* position shown on screen */
 	int		history_size;		/* size of history buffer */
 
-	int		splash_save_mode;	/* saved mode for splash screen */
-	int		splash_save_status;	/* saved status for splash screen */
 #ifdef _SCR_MD_STAT_DECLARED_
 	scr_md_stat_t	md;			/* machine dependent vars */
 #endif
