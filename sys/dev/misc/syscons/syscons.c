@@ -300,9 +300,6 @@ sc_attach_unit(int unit, int flags)
 {
     sc_softc_t *sc;
     scr_stat *scp;
-#ifdef SC_PIXEL_MODE
-    video_info_t info;
-#endif
     int vc;
     cdev_t dev;
     flags &= ~SC_KERNEL_CONSOLE;
@@ -356,15 +353,6 @@ sc_attach_unit(int unit, int flags)
     scp = SC_STAT(sc->dev[0]);
     if (sc_console == NULL)	/* sc_console_unit < 0 */
 	sc_console = scp;
-
-#ifdef SC_PIXEL_MODE
-    if ((sc->config & SC_VESA800X600)
-	&& ((*vidsw[sc->adapter]->get_info)(sc->adp, M_VESA_800x600, &info) == 0)) {
-	sc_set_graphics_mode(scp, NULL, M_VESA_800x600);
-	sc_set_pixel_mode(scp, NULL, 0, 0, 16);
-	sc->initial_mode = M_VESA_800x600;
-    }
-#endif /* SC_PIXEL_MODE */
 
     /* initialize cursor */
     if (!ISGRAPHSC(scp))
@@ -516,10 +504,6 @@ scopen(struct dev_open_args *ap)
     scp = SC_STAT(dev);
     if (scp == NULL) {
 	scp = dev->si_drv1 = alloc_scp(sc, SC_VTY(dev));
-	syscons_lock();
-	if (ISGRAPHSC(scp))
-	    sc_set_pixel_mode(scp, NULL, COL, ROW, 16);
-	syscons_unlock();
     }
     if (!tp->t_winsize.ws_col && !tp->t_winsize.ws_row) {
 	tp->t_winsize.ws_col = scp->xsize;
@@ -3178,7 +3162,7 @@ set_mode(scr_stat *scp)
 #ifndef SC_NO_FONT_LOADING
     /* load appropriate font */
     if (!(scp->status & GRAPHICS_MODE)) {
-	if (!(scp->status & PIXEL_MODE) && ISFONTAVAIL(scp->sc->adp->va_flags)) {
+	if (ISFONTAVAIL(scp->sc->adp->va_flags)) {
 	    if (scp->font_size < 14) {
 		if (scp->sc->fonts_loaded & FONT_8)
 		    sc_load_font(scp, 0, 8, scp->sc->font_8, 0, 256);

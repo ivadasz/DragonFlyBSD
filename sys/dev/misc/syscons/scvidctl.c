@@ -128,7 +128,7 @@ sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode, int xsize, int ysize,
      * muck around with scp. XXX
      */
     scp->status |= UNKNOWN_MODE | MOUSE_HIDDEN;
-    scp->status &= ~(GRAPHICS_MODE | PIXEL_MODE | MOUSE_VISIBLE);
+    scp->status &= ~(GRAPHICS_MODE | MOUSE_VISIBLE);
     scp->mode = mode;
     scp->model = V_INFO_MM_TEXT;
     scp->xsize = xsize;
@@ -199,7 +199,7 @@ sc_set_graphics_mode(scr_stat *scp, struct tty *tp, int mode)
 
     /* set up scp */
     scp->status |= (UNKNOWN_MODE | GRAPHICS_MODE | MOUSE_HIDDEN);
-    scp->status &= ~(PIXEL_MODE | MOUSE_VISIBLE);
+    scp->status &= ~MOUSE_VISIBLE;
     scp->mode = mode;
     scp->model = V_INFO_MM_OTHER;
     /*
@@ -236,164 +236,6 @@ sc_set_graphics_mode(scr_stat *scp, struct tty *tp, int mode)
 
     return 0;
 #endif /* SC_NO_MODE_CHANGE */
-}
-
-int
-sc_set_pixel_mode(scr_stat *scp, struct tty *tp, int xsize, int ysize, 
-		  int fontsize)
-{
-#ifndef SC_PIXEL_MODE
-    return ENODEV;
-#else
-    video_info_t info;
-    u_char *font;
-    int prev_ysize;
-    int new_ysize;
-    int error;
-
-    lwkt_gettoken(&tty_token);
-    if ((*vidsw[scp->sc->adapter]->get_info)(scp->sc->adp, scp->mode, &info)) {
-        lwkt_reltoken(&tty_token);
-	return ENODEV;		/* this shouldn't happen */
-    }
-    lwkt_reltoken(&tty_token);
-
-    /* adjust argument values */
-    if (fontsize <= 0)
-	fontsize = info.vi_cheight;
-    if (fontsize < 14) {
-	fontsize = 8;
-#ifndef SC_NO_FONT_LOADING
-	if (!(scp->sc->fonts_loaded & FONT_8))
-	    return EINVAL;
-	font = scp->sc->font_8;
-#else
-	font = NULL;
-#endif
-    } else if (fontsize >= 16) {
-	fontsize = 16;
-#ifndef SC_NO_FONT_LOADING
-	if (!(scp->sc->fonts_loaded & FONT_16))
-	    return EINVAL;
-	font = scp->sc->font_16;
-#else
-	font = NULL;
-#endif
-    } else {
-	fontsize = 14;
-#ifndef SC_NO_FONT_LOADING
-	if (!(scp->sc->fonts_loaded & FONT_14))
-	    return EINVAL;
-	font = scp->sc->font_14;
-#else
-	font = NULL;
-#endif
-    }
-    if (xsize <= 0)
-	xsize = info.vi_width/8;
-    if (ysize <= 0)
-	ysize = info.vi_height/fontsize;
-
-    if ((info.vi_width < xsize*8) || (info.vi_height < ysize*fontsize))
-	return EINVAL;
-
-    /*
-     * We currently support the following graphic modes:
-     *
-     * - 4 bpp planar modes whose memory size does not exceed 64K
-     * - 8 bbp packed pixel modes
-     * - 15, 16, 24 and 32 bpp direct modes with linear frame buffer
-     */
-
-    if (info.vi_mem_model == V_INFO_MM_PLANAR) {
-	if (info.vi_planes != 4)
-	    return ENODEV;
-
-	/*
-	 * A memory size >64K requires bank switching to access the entire
-	 * screen. XXX
-	 */
-
-	if (info.vi_width * info.vi_height / 8 > info.vi_window_size)
-	    return ENODEV;
-    } else if (info.vi_mem_model == V_INFO_MM_PACKED) {
-	if (info.vi_depth != 8)
-	    return ENODEV;
-    } else if (info.vi_mem_model == V_INFO_MM_DIRECT) {
-	if (!(info.vi_flags & V_INFO_LINEAR) &&
-	    (info.vi_depth != 15) && (info.vi_depth != 16) &&
-	    (info.vi_depth != 24) && (info.vi_depth != 32))
-	    return ENODEV;
-    } else
-	return ENODEV;
-
-    /* stop screen saver, etc */
-    crit_enter();
-    if ((error = sc_clean_up(scp))) {
-	crit_exit();
-	return error;
-    }
-
-    if (sc_render_match(scp, scp->sc->adp->va_name, info.vi_mem_model) == NULL) {
-	crit_exit();
-	return ENODEV;
-    }
-
-#if 0
-    if (scp->tsw)
-	(*scp->tsw->te_term)(scp, scp->ts);
-    scp->tsw = NULL;
-    scp->ts = NULL;
-#endif
-
-    /* set up scp */
-    new_ysize = 0;
-#ifndef SC_NO_HISTORY
-    if (scp->history != NULL) {
-	sc_hist_save(scp);
-	new_ysize = sc_vtb_rows(scp->history);
-    }
-#endif
-    prev_ysize = scp->ysize;
-    scp->status |= (UNKNOWN_MODE | PIXEL_MODE | MOUSE_HIDDEN);
-    scp->status &= ~(GRAPHICS_MODE | MOUSE_VISIBLE);
-    scp->model = info.vi_mem_model;
-    scp->xsize = xsize;
-    scp->ysize = ysize;
-    scp->xoff = (scp->xpixel/8 - xsize)/2;
-    scp->yoff = (scp->ypixel/fontsize - ysize)/2;
-    scp->font = font;
-    scp->font_size = fontsize;
-
-    /* allocate buffers */
-    sc_alloc_scr_buffer(scp, TRUE, TRUE);
-    sc_init_emulator(scp, NULL);
-#ifndef SC_NO_CUTPASTE
-    sc_alloc_cut_buffer(scp, FALSE);
-#endif
-#ifndef SC_NO_HISTORY
-    sc_alloc_history_buffer(scp, new_ysize, prev_ysize, FALSE);
-#endif
-    crit_exit();
-
-    if (scp == scp->sc->cur_scp) {
-	sc_set_border(scp, scp->border);
-	sc_set_cursor_image(scp);
-    }
-
-    scp->status &= ~UNKNOWN_MODE;
-
-    if (tp == NULL)
-	return 0;
-    if (tp->t_winsize.ws_col != scp->xsize
-	|| tp->t_winsize.ws_row != scp->ysize) {
-	tp->t_winsize.ws_col = scp->xsize;
-	tp->t_winsize.ws_row = scp->ysize;
-	pgsignal(tp->t_pgrp, SIGWINCH, 1);
-    }
-
-    return 0;
-#endif /* SC_PIXEL_MODE */
 }
 
 #define fb_ioctl(a, c, d)		\
@@ -552,7 +394,7 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 #if 0
 #ifndef SC_NO_FONT_LOADING
 	    if (ISFONTAVAIL(adp->va_flags) 
-		&& !(scp->status & (GRAPHICS_MODE | PIXEL_MODE)))
+		&& !(scp->status & GRAPHICS_MODE))
 		/*
 		 * FONT KLUDGE
 		 * Don't load fonts for now... XXX
@@ -600,37 +442,6 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    lwkt_reltoken(&tty_token);
 	    return 0;
 
-#ifdef SC_PIXEL_MODE
-	case KD_PIXEL:		/* pixel (raster) display */
-	    if (!(scp->status & (GRAPHICS_MODE | PIXEL_MODE))) {
-	        lwkt_reltoken(&tty_token);
-		return EINVAL;
-            }
-	    if (scp->status & GRAPHICS_MODE) {
-	        lwkt_reltoken(&tty_token);
-		return sc_set_pixel_mode(scp, tp, scp->xsize, scp->ysize, 
-					 scp->font_size);
-	    }
-	    crit_enter();
-	    if ((error = sc_clean_up(scp))) {
-		crit_exit();
-		lwkt_reltoken(&tty_token);
-		return error;
-	    }
-	    scp->status |= (UNKNOWN_MODE | PIXEL_MODE | MOUSE_HIDDEN);
-	    crit_exit();
-	    if (scp == scp->sc->cur_scp) {
-		set_mode(scp);
-#ifndef SC_NO_PALETTE_LOADING
-		load_palette(adp, scp->sc->palette);
-#endif
-	    }
-	    sc_clear_screen(scp);
-	    scp->status &= ~UNKNOWN_MODE;
-	    lwkt_reltoken(&tty_token);
-	    return 0;
-#endif /* SC_PIXEL_MODE */
-
 	case KD_GRAPHICS:	/* switch to GRAPHICS (unknown) mode */
 	    crit_enter();
 	    if ((error = sc_clean_up(scp))) {
@@ -648,17 +459,6 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    return EINVAL;
 	}
 	/* NOT REACHED */
-
-#ifdef SC_PIXEL_MODE
-    case KDRASTER:		/* set pixel (raster) display mode */
-	if (ISUNKNOWNSC(scp) || ISTEXTSC(scp)) {
-	    lwkt_reltoken(&tty_token);
-	    return ENODEV;
-	}
-	lwkt_reltoken(&tty_token);
-	return sc_set_pixel_mode(scp, tp, ((int *)data)[0], ((int *)data)[1], 
-				 ((int *)data)[2]);
-#endif /* SC_PIXEL_MODE */
 
     case KDGETMODE:     	/* get current mode of this (virtual) console */
 	/* 

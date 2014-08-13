@@ -165,7 +165,6 @@ device		kbdmux
 
 # syscons is the default console driver, resembling an SCO console
 device		sc0	at isa? flags 0x100
-options 	SC_PIXEL_MODE		# add support for the raster text mode
 
 device		agp		# support several AGP chipsets
 

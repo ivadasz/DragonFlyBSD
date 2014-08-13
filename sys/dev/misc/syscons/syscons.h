@@ -50,15 +50,6 @@ MALLOC_DECLARE(M_SYSCONS);
 #define SC_NO_CUTPASTE	1
 #endif
 
-#ifdef SC_NO_MODE_CHANGE
-#undef SC_PIXEL_MODE
-#endif
-
-/* Always load font data if the pixel (raster text) mode is to be used. */
-#ifdef SC_PIXEL_MODE
-#undef SC_NO_FONT_LOADING
-#endif
-
 /* 
  * If font data is not available, the `arrow'-shaped mouse cursor cannot
  * be drawn.  Use the alternative drawing method.
@@ -108,16 +99,6 @@ MALLOC_DECLARE(M_SYSCONS);
 				    scp->end = scp->xsize * scp->ysize - 1;\
 				}
 
-/* macro for calculating the drawing position in video memory */
-#ifdef SC_PIXEL_MODE
-#define	VIDEO_MEMORY_POS(scp, pos, x) 					\
-	((scp)->sc->adp->va_window +					\
-	 (x) * (scp)->xoff +						\
-	 (scp)->yoff * (scp)->font_size * (scp)->sc->adp->va_line_width +\
-	 (x) * ((pos) % (scp)->xsize) +					\
-	 (scp)->font_size * (scp)->sc->adp->va_line_width * (pos / (scp)->xsize))
-#endif
-
 /* vty status flags (scp->status) */
 #define UNKNOWN_MODE	0x00010		/* unknown video mode */
 #define SWITCH_WAIT_REL	0x00080		/* waiting for vty release */
@@ -128,7 +109,7 @@ MALLOC_DECLARE(M_SYSCONS);
 #define MOUSE_CUTTING	0x02000		/* mouse cursor is cutting text */
 #define MOUSE_VISIBLE	0x04000		/* mouse cursor is showing */
 #define GRAPHICS_MODE	0x08000		/* vty is in a graphics mode */
-#define PIXEL_MODE	0x10000		/* vty is in a raster text mode */
+//#define PIXEL_MODE	0x10000		/* vty is in a raster text mode */
 //#define SAVER_RUNNING	0x20000		/* screen saver is running */
 #define VR_CURSOR_BLINK	0x40000		/* blinking text cursor */
 #define VR_CURSOR_ON	0x80000		/* text cursor is on */
@@ -476,12 +457,9 @@ typedef struct {
 
 /* other macros */
 #define ISTEXTSC(scp)	(!((scp)->status 				\
-			  & (UNKNOWN_MODE | GRAPHICS_MODE | PIXEL_MODE)))
+			  & (UNKNOWN_MODE | GRAPHICS_MODE)))
 #define ISGRAPHSC(scp)	(((scp)->status 				\
 			  & (UNKNOWN_MODE | GRAPHICS_MODE)))
-#define ISPIXELSC(scp)	(((scp)->status 				\
-			  & (UNKNOWN_MODE | GRAPHICS_MODE | PIXEL_MODE))\
-			  == PIXEL_MODE)
 #define ISUNKNOWNSC(scp) ((scp)->status & UNKNOWN_MODE)
 
 #define ISMOUSEAVAIL(af) ((af) & V_ADP_FONT)
@@ -558,8 +536,6 @@ int		sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data,
 int		sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode,
 				 int xsize, int ysize, int fontsize);
 int		sc_set_graphics_mode(scr_stat *scp, struct tty *tp, int mode);
-int		sc_set_pixel_mode(scr_stat *scp, struct tty *tp,
-				  int xsize, int ysize, int fontsize);
 int		sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data,
 				  int flag);
 
