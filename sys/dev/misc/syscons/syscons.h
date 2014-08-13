@@ -50,15 +50,6 @@ MALLOC_DECLARE(M_SYSCONS);
 #define SC_NO_CUTPASTE	1
 #endif
 
-/* 
- * If font data is not available, the `arrow'-shaped mouse cursor cannot
- * be drawn.  Use the alternative drawing method.
- */
-#ifdef SC_NO_FONT_LOADING
-#undef SC_ALT_MOUSE_IMAGE
-#define SC_ALT_MOUSE_IMAGE 1
-#endif
-
 #ifndef SC_CURSOR_CHAR
 #define SC_CURSOR_CHAR	(0x07)
 #endif
@@ -189,7 +180,6 @@ typedef struct sc_softc {
 	struct scr_stat	*old_scp;
 	int     	delayed_next_scr;
 
-	char        	font_loading_in_progress;
 	char        	switch_in_progress;
 	char        	videoio_in_progress;
 	char        	write_in_progress;
@@ -209,16 +199,6 @@ typedef struct sc_softc {
 
 #ifndef SC_NO_PALETTE_LOADING
 	u_char        	palette[256*3];
-#endif
-
-#ifndef SC_NO_FONT_LOADING
-	int     	fonts_loaded;
-#define FONT_8		2
-#define FONT_14		4
-#define FONT_16		8
-	u_char		*font_8;
-	u_char		*font_14;
-	u_char		*font_16;
 #endif
 
 	u_char		cursor_char;
@@ -243,7 +223,6 @@ typedef struct scr_stat {
 	int		xoff;			/* X offset in pixel mode */
 	int		yoff;			/* Y offset in pixel mode */
 
-	u_char		*font;			/* current font */
 	int		font_size;		/* fontsize in Y direction */
 
 	int		start;			/* modified area start */
@@ -476,11 +455,6 @@ int		set_mode(scr_stat *scp);
 void		refresh_ega_palette(scr_stat *scp);
 
 void		sc_set_border(scr_stat *scp, int color);
-void		sc_load_font(scr_stat *scp, int page, int size, u_char *font,
-			     int base, int count);
-void		sc_save_font(scr_stat *scp, int page, int size, u_char *font,
-			     int base, int count);
-void		sc_show_font(scr_stat *scp, int page);
 
 void		sc_draw_cursor_image(scr_stat *scp);
 void		sc_remove_cursor_image(scr_stat *scp);

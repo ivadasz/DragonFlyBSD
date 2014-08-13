@@ -54,7 +54,6 @@ sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode, int xsize, int ysize,
 		 int fontsize)
 {
     video_info_t info;
-    u_char *font;
     int prev_ysize;
     int new_ysize;
     int error;
@@ -71,31 +70,10 @@ sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode, int xsize, int ysize,
 	fontsize = info.vi_cheight;
     if (fontsize < 14) {
 	fontsize = 8;
-#ifndef SC_NO_FONT_LOADING
-	if (!(scp->sc->fonts_loaded & FONT_8))
-	    return EINVAL;
-	font = scp->sc->font_8;
-#else
-	font = NULL;
-#endif
     } else if (fontsize >= 16) {
 	fontsize = 16;
-#ifndef SC_NO_FONT_LOADING
-	if (!(scp->sc->fonts_loaded & FONT_16))
-	    return EINVAL;
-	font = scp->sc->font_16;
-#else
-	font = NULL;
-#endif
     } else {
 	fontsize = 14;
-#ifndef SC_NO_FONT_LOADING
-	if (!(scp->sc->fonts_loaded & FONT_14))
-	    return EINVAL;
-	font = scp->sc->font_14;
-#else
-	font = NULL;
-#endif
     }
     if ((xsize <= 0) || (xsize > info.vi_width))
 	xsize = info.vi_width;
@@ -137,7 +115,6 @@ sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode, int xsize, int ysize,
     scp->yoff = 0;
     scp->xpixel = scp->xsize*8;
     scp->ypixel = scp->ysize*fontsize;
-    scp->font = font;
     scp->font_size = fontsize;
 
     /* allocate buffers */
@@ -210,7 +187,6 @@ sc_set_graphics_mode(scr_stat *scp, struct tty *tp, int mode)
     scp->yoff = 0;
     scp->xpixel = info.vi_width;
     scp->ypixel = info.vi_height;
-    scp->font = NULL;
     scp->font_size = 0;
 #ifndef SC_NO_SYSMOUSE
     /* move the mouse cursor at the center of the screen */
@@ -390,25 +366,7 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	        lwkt_reltoken(&tty_token);
 		return EINVAL;
 	    }
-	    /* restore fonts & palette ! */
-#if 0
-#ifndef SC_NO_FONT_LOADING
-	    if (ISFONTAVAIL(adp->va_flags) 
-		&& !(scp->status & GRAPHICS_MODE))
-		/*
-		 * FONT KLUDGE
-		 * Don't load fonts for now... XXX
-		 */
-		if (scp->sc->fonts_loaded & FONT_8)
-		    sc_load_font(scp, 0, 8, scp->sc->font_8, 0, 256);
-		if (scp->sc->fonts_loaded & FONT_14)
-		    sc_load_font(scp, 0, 14, scp->sc->font_14, 0, 256);
-		if (scp->sc->fonts_loaded & FONT_16)
-		    sc_load_font(scp, 0, 16, scp->sc->font_16, 0, 256);
-	    }
-#endif /* SC_NO_FONT_LOADING */
-#endif
-
+	    /* restore palette ! */
 #ifndef SC_NO_PALETTE_LOADING
 	    load_palette(adp, scp->sc->palette);
 #endif

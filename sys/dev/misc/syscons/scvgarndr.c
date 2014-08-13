@@ -89,17 +89,6 @@ RENDERER(vga, V_INFO_MM_OTHER, grrndrsw, vga_set);
 
 RENDERER_MODULE(vga, vga_set);
 
-#ifndef SC_NO_CUTPASTE
-static u_short mouse_and_mask[16] = {
-	0xc000, 0xe000, 0xf000, 0xf800, 0xfc00, 0xfe00, 0xff00, 0xff80,
-	0xfe00, 0x1e00, 0x1f00, 0x0f00, 0x0f00, 0x0000, 0x0000, 0x0000
-};
-static u_short mouse_or_mask[16] = {
-	0x0000, 0x4000, 0x6000, 0x7000, 0x7800, 0x7c00, 0x7e00, 0x6800,
-	0x0c00, 0x0c00, 0x0600, 0x0600, 0x0000, 0x0000, 0x0000, 0x0000
-};
-#endif
-
 static void
 vga_nop(scr_stat *scp, ...)
 {
@@ -162,41 +151,6 @@ draw_txtcharcursor(scr_stat *scp, int at, u_short c, u_short a, int flip)
 	scp->cursor_saveunder_char = c;
 	scp->cursor_saveunder_attr = a;
 
-#ifndef SC_NO_FONT_LOADING
-	if (sc->flags & SC_CHAR_CURSOR) {
-		unsigned char *font;
-		int h;
-		int i;
-
-		if (scp->font_size < 14) {
-			font = sc->font_8;
-			h = 8;
-		} else if (scp->font_size >= 16) {
-			font = sc->font_16;
-			h = 16;
-		} else {
-			font = sc->font_14;
-			h = 14;
-		}
-		if (scp->cursor_base >= h)
-			return;
-		if (flip)
-			a = (a & 0x8800)
-				| ((a & 0x7000) >> 4) | ((a & 0x0700) << 4);
-		bcopy(font + c*h, font + sc->cursor_char*h, h);
-		font = font + sc->cursor_char*h;
-		for (i = imax(h - scp->cursor_base - scp->cursor_height, 0);
-			i < h - scp->cursor_base; ++i) {
-			font[i] ^= 0xff;
-		}
-		sc->font_loading_in_progress = TRUE;
-		/* XXX */
-		(*vidsw[sc->adapter]->load_font)(sc->adp, 0, h, font,
-						 sc->cursor_char, 1);
-		sc->font_loading_in_progress = FALSE;
-		sc_vtb_putc(&scp->scr, at, sc->cursor_char, a);
-	} else
-#endif /* SC_NO_FONT_LOADING */
 	{
 		if ((a & 0x7000) == 0x7000) {
 			a &= 0x8f00;
@@ -272,69 +226,6 @@ int sc_txtmouse_no_retrace_wait;
 static void
 draw_txtmouse(scr_stat *scp, int x, int y)
 {
-#ifndef SC_ALT_MOUSE_IMAGE
-    if (ISMOUSEAVAIL(scp->sc->adp->va_flags)) {
-	u_char font_buf[128];
-	u_short cursor[32];
-	u_char c;
-	int pos;
-	int xoffset, yoffset;
-	int i;
-
-	/* prepare mousepointer char's bitmaps */
-	pos = (y/scp->font_size - scp->yoff)*scp->xsize + x/8 - scp->xoff;
-	bcopy(scp->font + sc_vtb_getc(&scp->scr, pos)*scp->font_size,
-	      &font_buf[0], scp->font_size);
-	bcopy(scp->font + sc_vtb_getc(&scp->scr, pos + 1)*scp->font_size,
-	      &font_buf[32], scp->font_size);
-	bcopy(scp->font 
-		 + sc_vtb_getc(&scp->scr, pos + scp->xsize)*scp->font_size,
-	      &font_buf[64], scp->font_size);
-	bcopy(scp->font
-		 + sc_vtb_getc(&scp->scr, pos + scp->xsize + 1)*scp->font_size,
-	      &font_buf[96], scp->font_size);
-	for (i = 0; i < scp->font_size; ++i) {
-		cursor[i] = font_buf[i]<<8 | font_buf[i+32];
-		cursor[i + scp->font_size] = font_buf[i+64]<<8 | font_buf[i+96];
-	}
-
-	/* now and-or in the mousepointer image */
-	xoffset = x%8;
-	yoffset = y%scp->font_size;
-	for (i = 0; i < 16; ++i) {
-		cursor[i + yoffset] =
-	    		(cursor[i + yoffset] & ~(mouse_and_mask[i] >> xoffset))
-	    		| (mouse_or_mask[i] >> xoffset);
-	}
-	for (i = 0; i < scp->font_size; ++i) {
-		font_buf[i] = (cursor[i] & 0xff00) >> 8;
-		font_buf[i + 32] = cursor[i] & 0xff;
-		font_buf[i + 64] = (cursor[i + scp->font_size] & 0xff00) >> 8;
-		font_buf[i + 96] = cursor[i + scp->font_size] & 0xff;
-	}
-
-#if 1
-	/* wait for vertical retrace to avoid jitter on some videocards */
-	while (!sc_txtmouse_no_retrace_wait &&
-	    !(inb(CRTC + 6) & 0x08))
-		/* idle */ ;
-#endif
-	c = scp->sc->mouse_char;
-	(*vidsw[scp->sc->adapter]->load_font)(scp->sc->adp, 0, 32, font_buf,
-					      c, 4); 
-
-	sc_vtb_putc(&scp->scr, pos, c, sc_vtb_geta(&scp->scr, pos));
-	/* FIXME: may be out of range! */
-	sc_vtb_putc(&scp->scr, pos + scp->xsize, c + 2,
-		    sc_vtb_geta(&scp->scr, pos + scp->xsize));
-	if (x < (scp->xsize - 1)*8) {
-		sc_vtb_putc(&scp->scr, pos + 1, c + 1,
-			    sc_vtb_geta(&scp->scr, pos + 1));
-		sc_vtb_putc(&scp->scr, pos + scp->xsize + 1, c + 3,
-			    sc_vtb_geta(&scp->scr, pos + scp->xsize + 1));
-	}
-    } else
-#endif /* SC_ALT_MOUSE_IMAGE */
     {
 	/* Red, magenta and brown are mapped to green to to keep it readable */
 	static const int col_conv[16] = {

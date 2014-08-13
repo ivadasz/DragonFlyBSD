@@ -111,10 +111,6 @@ static  char        	init_done = COLD;
 static  char		shutdown_in_progress = FALSE;
 static	char		sc_malloc = FALSE;
 
-#if !defined(SC_NO_FONT_LOADING) && defined(SC_DFLT_FONT)
-#include "font.h"
-#endif
-
 static	bios_values_t	bios_value;
 
 static	int		enable_panic_key;
@@ -1259,115 +1255,6 @@ scioctl(struct dev_ioctl_args *ap)
 	lwkt_reltoken(&tty_token);
 	return error;
 
-#ifndef SC_NO_FONT_LOADING
-
-    case PIO_FONT8x8:   	/* set 8x8 dot font */
-	if (!ISFONTAVAIL(sc->adp->va_flags)) {
-	    lwkt_reltoken(&tty_token);
-	    return ENXIO;
-	}
-	syscons_lock();
-	bcopy(data, sc->font_8, 8*256);
-	sc->fonts_loaded |= FONT_8;
-	/*
-	 * FONT KLUDGE
-	 * Always use the font page #0. XXX
-	 * Don't load if the current font size is not 8x8.
-	 */
-	if (ISTEXTSC(sc->cur_scp) && (sc->cur_scp->font_size < 14))
-	    sc_load_font(sc->cur_scp, 0, 8, sc->font_8, 0, 256);
-	syscons_unlock();
-	lwkt_reltoken(&tty_token);
-	return 0;
-
-    case GIO_FONT8x8:   	/* get 8x8 dot font */
-	if (!ISFONTAVAIL(sc->adp->va_flags)) {
-	    lwkt_reltoken(&tty_token);
-	    return ENXIO;
-	}
-	if (sc->fonts_loaded & FONT_8) {
-	    bcopy(sc->font_8, data, 8*256);
-	    lwkt_reltoken(&tty_token);
-	    return 0;
-	}
-	else {
-	    lwkt_reltoken(&tty_token);
-	    return ENXIO;
-	}
-
-    case PIO_FONT8x14:  	/* set 8x14 dot font */
-	if (!ISFONTAVAIL(sc->adp->va_flags)) {
-	    lwkt_reltoken(&tty_token);
-	    return ENXIO;
-	}
-	syscons_lock();
-	bcopy(data, sc->font_14, 14*256);
-	sc->fonts_loaded |= FONT_14;
-	/*
-	 * FONT KLUDGE
-	 * Always use the font page #0. XXX
-	 * Don't load if the current font size is not 8x14.
-	 */
-	if (ISTEXTSC(sc->cur_scp)
-	    && (sc->cur_scp->font_size >= 14)
-	    && (sc->cur_scp->font_size < 16)) {
-	    sc_load_font(sc->cur_scp, 0, 14, sc->font_14, 0, 256);
-	}
-	syscons_unlock();
-	lwkt_reltoken(&tty_token);
-	return 0;
-
-    case GIO_FONT8x14:  	/* get 8x14 dot font */
-	if (!ISFONTAVAIL(sc->adp->va_flags)) {
-	    lwkt_reltoken(&tty_token);
-	    return ENXIO;
-	}
-	if (sc->fonts_loaded & FONT_14) {
-	    bcopy(sc->font_14, data, 14*256);
-	    lwkt_reltoken(&tty_token);
-	    return 0;
-	}
-	else {
-	    lwkt_reltoken(&tty_token);
-	    return ENXIO;
-        }
-
-    case PIO_FONT8x16:  	/* set 8x16 dot font */
-	if (!ISFONTAVAIL(sc->adp->va_flags)) {
-	    lwkt_reltoken(&tty_token);
-	    return ENXIO;
-	}
-	syscons_lock();
-	bcopy(data, sc->font_16, 16*256);
-	sc->fonts_loaded |= FONT_16;
-	/*
-	 * FONT KLUDGE
-	 * Always use the font page #0. XXX
-	 * Don't load if the current font size is not 8x16.
-	 */
-	if (ISTEXTSC(sc->cur_scp) && (sc->cur_scp->font_size >= 16))
-	    sc_load_font(sc->cur_scp, 0, 16, sc->font_16, 0, 256);
-	syscons_unlock();
-	lwkt_reltoken(&tty_token);
-	return 0;
-
-    case GIO_FONT8x16:  	/* get 8x16 dot font */
-	if (!ISFONTAVAIL(sc->adp->va_flags)) {
-	    lwkt_reltoken(&tty_token);
-	    return ENXIO;
-	}
-	if (sc->fonts_loaded & FONT_16) {
-	    bcopy(sc->font_16, data, 16*256);
-	    lwkt_reltoken(&tty_token);
-	    return 0;
-	}
-	else {
-	    lwkt_reltoken(&tty_token);
-	    return ENXIO;
-        }
-
-#endif /* SC_NO_FONT_LOADING */
-
     default:
 	break;
     }
@@ -1654,7 +1541,7 @@ sccnupdate(scr_stat *scp)
 {
     /* this is a cut-down version of scrn_timer()... */
 
-    if (scp->sc->font_loading_in_progress || scp->sc->videoio_in_progress) {
+    if (scp->sc->videoio_in_progress) {
 	return;
     }
 
@@ -1701,7 +1588,7 @@ scrn_timer(void *arg)
      * Don't do anything when we are performing some I/O operations.
      * (These are initiated by the frontend?)
      */
-    if (sc->font_loading_in_progress || sc->videoio_in_progress) {
+    if (sc->videoio_in_progress) {
 	if (again)
 	    callout_reset(&sc->scrn_timer_ch, hz / 10, scrn_timer, sc);
 	return;
@@ -2324,11 +2211,6 @@ scinit(int unit, int flags)
      */
     static scr_stat main_console;
     static u_short sc_buffer[ROW*COL];	/* XXX */
-#ifndef SC_NO_FONT_LOADING
-    static u_char font_8[256*8];
-    static u_char font_14[256*14];
-    static u_char font_16[256*16];
-#endif
 
     sc_softc_t *sc;
     scr_stat *scp;
@@ -2378,19 +2260,6 @@ scinit(int unit, int flags)
     if (!(sc->flags & SC_INIT_DONE) || (adp != sc->adp)) {
 
 	sc->initial_mode = sc->adp->va_initial_mode;
-
-#ifndef SC_NO_FONT_LOADING
-	if (flags & SC_KERNEL_CONSOLE) {
-	    sc->font_8 = font_8;
-	    sc->font_14 = font_14;
-	    sc->font_16 = font_16;
-	} else if (sc->font_8 == NULL) {
-	    /* assert(sc_malloc) */
-	    sc->font_8 = kmalloc(sizeof(font_8), M_SYSCONS, M_WAITOK);
-	    sc->font_14 = kmalloc(sizeof(font_14), M_SYSCONS, M_WAITOK);
-	    sc->font_16 = kmalloc(sizeof(font_16), M_SYSCONS, M_WAITOK);
-	}
-#endif
 
 	lwkt_gettoken(&tty_token);
 	/* extract the hardware cursor location and hide the cursor for now */
@@ -2453,39 +2322,7 @@ scinit(int unit, int flags)
     	    sc_draw_cursor_image(scp);
 	}
 
-	/* save font and palette */
-#ifndef SC_NO_FONT_LOADING
-	sc->fonts_loaded = 0;
-	if (ISFONTAVAIL(sc->adp->va_flags)) {
-#ifdef SC_DFLT_FONT
-	    bcopy(dflt_font_8, sc->font_8, sizeof(dflt_font_8));
-	    bcopy(dflt_font_14, sc->font_14, sizeof(dflt_font_14));
-	    bcopy(dflt_font_16, sc->font_16, sizeof(dflt_font_16));
-	    sc->fonts_loaded = FONT_16 | FONT_14 | FONT_8;
-	    if (scp->font_size < 14) {
-		sc_load_font(scp, 0, 8, sc->font_8, 0, 256);
-	    } else if (scp->font_size >= 16) {
-		sc_load_font(scp, 0, 16, sc->font_16, 0, 256);
-	    } else {
-		sc_load_font(scp, 0, 14, sc->font_14, 0, 256);
-	    }
-#else /* !SC_DFLT_FONT */
-	    if (scp->font_size < 14) {
-		sc_save_font(scp, 0, 8, sc->font_8, 0, 256);
-		sc->fonts_loaded = FONT_8;
-	    } else if (scp->font_size >= 16) {
-		sc_save_font(scp, 0, 16, sc->font_16, 0, 256);
-		sc->fonts_loaded = FONT_16;
-	    } else {
-		sc_save_font(scp, 0, 14, sc->font_14, 0, 256);
-		sc->fonts_loaded = FONT_14;
-	    }
-#endif /* SC_DFLT_FONT */
-	    /* FONT KLUDGE: always use the font page #0. XXX */
-	    sc_show_font(scp, 0);
-	}
-#endif /* !SC_NO_FONT_LOADING */
-
+	/* save palette */
 #ifndef SC_NO_PALETTE_LOADING
 	save_palette(sc->adp, sc->palette);
 #endif
@@ -2546,11 +2383,6 @@ scterm(int unit, int flags)
 #if 0
 	/* XXX: We need a ttyunregister for this */
 	kfree(sc->tty, M_SYSCONS);
-#endif
-#ifndef SC_NO_FONT_LOADING
-	kfree(sc->font_8, M_SYSCONS);
-	kfree(sc->font_14, M_SYSCONS);
-	kfree(sc->font_16, M_SYSCONS);
 #endif
 	/* XXX vtb, history */
     }
@@ -2667,7 +2499,6 @@ init_scp(sc_softc_t *sc, int vty, scr_stat *scp)
 	scp->xsize = info.vi_width/8;
 	scp->ysize = info.vi_height/info.vi_cheight;
 	scp->font_size = 0;
-	scp->font = NULL;
     } else {
 	scp->xsize = info.vi_width;
 	scp->ysize = info.vi_height;
@@ -2675,25 +2506,10 @@ init_scp(sc_softc_t *sc, int vty, scr_stat *scp)
 	scp->ypixel = scp->ysize*info.vi_cheight;
 	if (info.vi_cheight < 14) {
 	    scp->font_size = 8;
-#ifndef SC_NO_FONT_LOADING
-	    scp->font = sc->font_8;
-#else
-	    scp->font = NULL;
-#endif
 	} else if (info.vi_cheight >= 16) {
 	    scp->font_size = 16;
-#ifndef SC_NO_FONT_LOADING
-	    scp->font = sc->font_16;
-#else
-	    scp->font = NULL;
-#endif
 	} else {
 	    scp->font_size = 14;
-#ifndef SC_NO_FONT_LOADING
-	    scp->font = sc->font_14;
-#else
-	    scp->font = NULL;
-#endif
 	}
     }
     sc_vtb_init(&scp->vtb, VTB_MEMORY, 0, 0, NULL, FALSE);
@@ -3159,33 +2975,6 @@ set_mode(scr_stat *scp)
     sc_vtb_init(&scp->scr, VTB_FRAMEBUFFER, scp->xsize, scp->ysize,
 		(void *)scp->sc->adp->va_window, FALSE);
 
-#ifndef SC_NO_FONT_LOADING
-    /* load appropriate font */
-    if (!(scp->status & GRAPHICS_MODE)) {
-	if (ISFONTAVAIL(scp->sc->adp->va_flags)) {
-	    if (scp->font_size < 14) {
-		if (scp->sc->fonts_loaded & FONT_8)
-		    sc_load_font(scp, 0, 8, scp->sc->font_8, 0, 256);
-	    } else if (scp->font_size >= 16) {
-		if (scp->sc->fonts_loaded & FONT_16)
-		    sc_load_font(scp, 0, 16, scp->sc->font_16, 0, 256);
-	    } else {
-		if (scp->sc->fonts_loaded & FONT_14)
-		    sc_load_font(scp, 0, 14, scp->sc->font_14, 0, 256);
-	    }
-	    /*
-	     * FONT KLUDGE:
-	     * This is an interim kludge to display correct font.
-	     * Always use the font page #0 on the video plane 2.
-	     * Somehow we cannot show the font in other font pages on
-	     * some video cards... XXX
-	     */ 
-	    sc_show_font(scp, 0);
-	}
-	mark_all(scp);
-    }
-#endif /* !SC_NO_FONT_LOADING */
-
     sc_set_border(scp, scp->border);
     sc_set_cursor_image(scp);
 
@@ -3227,38 +3016,6 @@ sc_set_border(scr_stat *scp, int color)
     (*scp->rndr->draw_border)(scp, color);
     --scp->sc->videoio_in_progress;
 }
-
-#ifndef SC_NO_FONT_LOADING
-void
-sc_load_font(scr_stat *scp, int page, int size, u_char *buf,
-	     int base, int count)
-{
-    sc_softc_t *sc;
-
-    sc = scp->sc;
-    sc->font_loading_in_progress = TRUE;
-    (*vidsw[sc->adapter]->load_font)(sc->adp, page, size, buf, base, count);
-    sc->font_loading_in_progress = FALSE;
-}
-
-void
-sc_save_font(scr_stat *scp, int page, int size, u_char *buf,
-	     int base, int count)
-{
-    sc_softc_t *sc;
-
-    sc = scp->sc;
-    sc->font_loading_in_progress = TRUE;
-    (*vidsw[sc->adapter]->save_font)(sc->adp, page, size, buf, base, count);
-    sc->font_loading_in_progress = FALSE;
-}
-
-void
-sc_show_font(scr_stat *scp, int page)
-{
-    (*vidsw[scp->sc->adapter]->show_font)(scp->sc->adp, page);
-}
-#endif /* !SC_NO_FONT_LOADING */
 
 void
 sc_paste(scr_stat *scp, u_char *p, int count) 
