@@ -62,7 +62,6 @@ sc_clear_screen(scr_stat *scp)
 {
 	(*scp->tsw->te_clear)(scp);
 	scp->cursor_oldpos = scp->cursor_pos;
-	sc_remove_cutmarking(scp);
 }
 
 /* terminal emulator manager routines */

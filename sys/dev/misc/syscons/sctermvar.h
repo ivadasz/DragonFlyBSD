@@ -56,7 +56,6 @@ static __inline void	sc_term_clr_eos(scr_stat *scp, int n, int ch, int attr);
 static __inline void	sc_term_clr_eol(scr_stat *scp, int n, int ch, int attr);
 static __inline void	sc_term_tab(scr_stat *scp, int n);
 static __inline void	sc_term_backtab(scr_stat *scp, int n);
-static __inline void	sc_term_respond(scr_stat *scp, u_char *s);
 static __inline void	sc_term_gen_print(scr_stat *scp, u_char **buf, int *len,
 					  int attr);
 static __inline void	sc_term_gen_scroll(scr_stat *scp, int ch, int attr);
@@ -219,19 +218,16 @@ sc_term_clr_eos(scr_stat *scp, int n, int ch, int attr)
 			     ch, attr);
 		mark_for_update(scp, scp->cursor_pos);
 		mark_for_update(scp, scp->xsize*scp->ysize - 1);
-		sc_remove_cutmarking(scp);
 		break;
 	case 1: /* clear from beginning of display to cursor */
 		sc_vtb_erase(&scp->vtb, 0, scp->cursor_pos + 1, ch, attr);
 		mark_for_update(scp, 0);
 		mark_for_update(scp, scp->cursor_pos);
-		sc_remove_cutmarking(scp);
 		break;
 	case 2: /* clear entire display */
 		sc_vtb_erase(&scp->vtb, 0, scp->xsize*scp->ysize, ch, attr);
 		mark_for_update(scp, 0);
 		mark_for_update(scp, scp->xsize*scp->ysize - 1);
-		sc_remove_cutmarking(scp);
 		break;
 	}
 }
@@ -295,12 +291,6 @@ sc_term_backtab(scr_stat *scp, int n)
 	if (i < 0)
 		i = 0;
 	sc_move_cursor(scp, i, scp->ypos);
-}
-
-static __inline void
-sc_term_respond(scr_stat *scp, u_char *s)
-{
-	sc_paste(scp, s, strlen(s));	/* XXX: not correct, don't use rmap */
 }
 
 static __inline void
@@ -418,7 +408,6 @@ sc_term_gen_scroll(scr_stat *scp, int ch, int attr)
 {
 	/* do we have to scroll ?? */
 	if (scp->cursor_pos >= scp->ysize*scp->xsize) {
-		sc_remove_cutmarking(scp);		/* XXX */
 #ifndef SC_NO_HISTORY
 		if (scp->history != NULL)
 			sc_hist_save_one_line(scp, 0);	/* XXX */

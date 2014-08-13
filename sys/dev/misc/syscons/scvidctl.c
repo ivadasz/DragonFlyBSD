@@ -105,8 +105,8 @@ sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode, int xsize, int ysize,
      * This is a kludge to fend off scrn_update() while we
      * muck around with scp. XXX
      */
-    scp->status |= UNKNOWN_MODE | MOUSE_HIDDEN;
-    scp->status &= ~(GRAPHICS_MODE | MOUSE_VISIBLE);
+    scp->status |= UNKNOWN_MODE;
+    scp->status &= ~GRAPHICS_MODE;
     scp->mode = mode;
     scp->model = V_INFO_MM_TEXT;
     scp->xsize = xsize;
@@ -120,9 +120,6 @@ sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode, int xsize, int ysize,
     /* allocate buffers */
     sc_alloc_scr_buffer(scp, TRUE, TRUE);
     sc_init_emulator(scp, NULL);
-#ifndef SC_NO_CUTPASTE
-    sc_alloc_cut_buffer(scp, FALSE);
-#endif
 #ifndef SC_NO_HISTORY
     sc_alloc_history_buffer(scp, new_ysize, prev_ysize, FALSE);
 #endif
@@ -175,8 +172,7 @@ sc_set_graphics_mode(scr_stat *scp, struct tty *tp, int mode)
     }
 
     /* set up scp */
-    scp->status |= (UNKNOWN_MODE | GRAPHICS_MODE | MOUSE_HIDDEN);
-    scp->status &= ~MOUSE_VISIBLE;
+    scp->status |= (UNKNOWN_MODE | GRAPHICS_MODE);
     scp->mode = mode;
     scp->model = V_INFO_MM_OTHER;
     /*
@@ -390,7 +386,7 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 		lwkt_reltoken(&tty_token);
 		return error;
 	    }
-	    scp->status |= UNKNOWN_MODE | MOUSE_HIDDEN;
+	    scp->status |= UNKNOWN_MODE;
 	    crit_exit();
 	    /* no restore fonts & palette */
 	    if (scp == scp->sc->cur_scp)
@@ -407,7 +403,7 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 		lwkt_reltoken(&tty_token);
 		return error;
 	    }
-	    scp->status |= UNKNOWN_MODE | MOUSE_HIDDEN;
+	    scp->status |= UNKNOWN_MODE;
 	    crit_exit();
 	    lwkt_reltoken(&tty_token);
 	    return 0;

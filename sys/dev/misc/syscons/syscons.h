@@ -45,11 +45,6 @@ MALLOC_DECLARE(M_SYSCONS);
 #define MAXCONS		16	/* power of 2 */
 #endif
 
-#ifdef SC_NO_SYSMOUSE
-#undef SC_NO_CUTPASTE
-#define SC_NO_CUTPASTE	1
-#endif
-
 #ifndef SC_CURSOR_CHAR
 #define SC_CURSOR_CHAR	(0x07)
 #endif
@@ -97,14 +92,14 @@ MALLOC_DECLARE(M_SYSCONS);
 #define BUFFER_SAVED	0x00200		/* vty buffer is saved */
 #define CURSOR_ENABLED 	0x00400		/* text cursor is enabled */
 #define MOUSE_MOVED	0x01000		/* mouse cursor has moved */
-#define MOUSE_CUTTING	0x02000		/* mouse cursor is cutting text */
-#define MOUSE_VISIBLE	0x04000		/* mouse cursor is showing */
+//#define MOUSE_CUTTING	0x02000		/* mouse cursor is cutting text */
+//#define MOUSE_VISIBLE	0x04000		/* mouse cursor is showing */
 #define GRAPHICS_MODE	0x08000		/* vty is in a graphics mode */
 //#define PIXEL_MODE	0x10000		/* vty is in a raster text mode */
 //#define SAVER_RUNNING	0x20000		/* screen saver is running */
 #define VR_CURSOR_BLINK	0x40000		/* blinking text cursor */
 #define VR_CURSOR_ON	0x80000		/* text cursor is on */
-#define MOUSE_HIDDEN	0x100000	/* mouse cursor is temporarily hidden */
+//#define MOUSE_HIDDEN	0x100000	/* mouse cursor is temporarily hidden */
 
 /* misc defines */
 #define FALSE		0
@@ -155,7 +150,7 @@ typedef struct sc_softc {
 #define SC_QUIET_BELL	(1 << 1)
 #define SC_BLINK_CURSOR	(1 << 2)
 #define SC_CHAR_CURSOR	(1 << 3)
-#define SC_MOUSE_ENABLED (1 << 4)
+//#define SC_MOUSE_ENABLED (1 << 4)
 //#define	SC_SCRN_IDLE	(1 << 5)
 //#define	SC_SCRN_BLANKED	(1 << 6)
 //#define	SC_SAVER_FAILED	(1 << 7)
@@ -365,7 +360,6 @@ typedef void	vr_draw_cursor_t(scr_stat *scp, int at, int blink,
 				 int on, int flip);
 typedef void	vr_blink_cursor_t(scr_stat *scp, int at, int flip);
 typedef void	vr_set_mouse_t(scr_stat *scp);
-typedef void	vr_draw_mouse_t(scr_stat *scp, int x, int y, int on);
 
 typedef struct sc_rndr_sw {
 	vr_draw_border_t	*draw_border;
@@ -373,7 +367,6 @@ typedef struct sc_rndr_sw {
 	vr_set_cursor_t		*set_cursor;
 	vr_draw_cursor_t	*draw_cursor;
 	vr_blink_cursor_t	*blink_cursor;
-	vr_draw_mouse_t		*draw_mouse;
 } sc_rndr_sw_t;
 
 typedef struct sc_renderer {
@@ -463,7 +456,6 @@ int		sc_clean_up(scr_stat *scp);
 int		sc_switch_scr(sc_softc_t *sc, u_int next_scr);
 void		sc_alloc_scr_buffer(scr_stat *scp, int wait, int discard);
 int		sc_init_emulator(scr_stat *scp, char *name);
-void		sc_paste(scr_stat *scp, u_char *p, int count);
 void		sc_bell(scr_stat *scp, int pitch, int duration);
 
 /* schistory.c */
@@ -484,22 +476,6 @@ int		sc_hist_ioctl(struct tty *tp, u_long cmd, caddr_t data,
 #endif /* SC_NO_HISTORY */
 
 /* scmouse.c */
-#ifndef SC_NO_CUTPASTE
-void		sc_alloc_cut_buffer(scr_stat *scp, int wait);
-void		sc_draw_mouse_image(scr_stat *scp); 
-void		sc_remove_mouse_image(scr_stat *scp); 
-int		sc_inside_cutmark(scr_stat *scp, int pos);
-void		sc_remove_cutmarking(scr_stat *scp);
-void		sc_remove_all_cutmarkings(sc_softc_t *scp);
-void		sc_remove_all_mouse(sc_softc_t *scp);
-#else
-#define		sc_draw_mouse_image(scp)
-#define		sc_remove_mouse_image(scp)
-#define		sc_inside_cutmark(scp, pos)	FALSE
-#define		sc_remove_cutmarking(scp)
-#define		sc_remove_all_cutmarkings(scp)
-#define		sc_remove_all_mouse(scp)
-#endif /* SC_NO_CUTPASTE */
 #ifndef SC_NO_SYSMOUSE
 void		sc_mouse_move(scr_stat *scp, int x, int y);
 int		sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data,

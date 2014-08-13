@@ -53,11 +53,6 @@ static vr_draw_t		vga_txtdraw;
 static vr_set_cursor_t		vga_txtcursor_shape;
 static vr_draw_cursor_t		vga_txtcursor;
 static vr_blink_cursor_t	vga_txtblink;
-#ifndef SC_NO_CUTPASTE
-static vr_draw_mouse_t		vga_txtmouse;
-#else
-#define	vga_txtmouse		(vr_draw_mouse_t *)vga_nop
-#endif
 
 #ifndef SC_NO_MODE_CHANGE
 static vr_draw_border_t		vga_grborder;
@@ -71,7 +66,6 @@ static sc_rndr_sw_t txtrndrsw = {
 	vga_txtcursor_shape,
 	vga_txtcursor,
 	vga_txtblink,
-	vga_txtmouse,
 };
 RENDERER(vga, V_INFO_MM_TEXT, txtrndrsw, vga_set);
 
@@ -82,7 +76,6 @@ static sc_rndr_sw_t grrndrsw = {
 	(vr_set_cursor_t *)vga_nop,
 	(vr_draw_cursor_t *)vga_nop,
 	(vr_blink_cursor_t *)vga_nop,
-	(vr_draw_mouse_t *)vga_nop,
 };
 RENDERER(vga, V_INFO_MM_OTHER, grrndrsw, vga_set);
 #endif /* SC_NO_MODE_CHANGE */
@@ -220,48 +213,6 @@ vga_txtblink(scr_stat *scp, int at, int flip)
 }
 
 int sc_txtmouse_no_retrace_wait;
-
-#ifndef SC_NO_CUTPASTE
-
-static void
-draw_txtmouse(scr_stat *scp, int x, int y)
-{
-    {
-	/* Red, magenta and brown are mapped to green to to keep it readable */
-	static const int col_conv[16] = {
-		6, 6, 6, 6, 2, 2, 2, 6, 14, 14, 14, 14, 10, 10, 10, 14
-	};
-	int pos;
-	int color;
-	int a;
-
-	pos = (y/scp->font_size - scp->yoff)*scp->xsize + x/8 - scp->xoff;
-	a = sc_vtb_geta(&scp->scr, pos);
-	if (scp->sc->adp->va_flags & V_ADP_COLOR)
-		color = (col_conv[(a & 0xf000) >> 12] << 12)
-			| ((a & 0x0f00) | 0x0800);
-	else
-		color = ((a & 0xf000) >> 4) | ((a & 0x0f00) << 4);
-	sc_vtb_putc(&scp->scr, pos, sc_vtb_getc(&scp->scr, pos), color);
-    }
-
-}
-
-static void
-remove_txtmouse(scr_stat *scp, int x, int y)
-{
-}
-
-static void 
-vga_txtmouse(scr_stat *scp, int x, int y, int on)
-{
-	if (on)
-		draw_txtmouse(scp, x, y);
-	else
-		remove_txtmouse(scp, x, y);
-}
-
-#endif /* SC_NO_CUTPASTE */
 
 #ifndef SC_NO_MODE_CHANGE
 

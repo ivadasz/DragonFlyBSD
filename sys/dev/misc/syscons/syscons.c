@@ -418,10 +418,6 @@ scmeminit(void *arg)
     /* copy the temporary buffer to the final buffer */
     sc_alloc_scr_buffer(sc_console, TRUE, FALSE);
 
-#ifndef SC_NO_CUTPASTE
-    sc_alloc_cut_buffer(sc_console, TRUE);
-#endif
-
 #ifndef SC_NO_HISTORY
     /* initialize history buffer & pointers */
     sc_alloc_history_buffer(sc_console, 0, 0, TRUE);
@@ -645,10 +641,6 @@ sckbdevent(keyboard_t *thiskbd, int event, void *arg)
 	    break;
 	}
     }
-
-    syscons_lock();
-    sc->cur_scp->status |= MOUSE_HIDDEN;
-    syscons_unlock();
 
     lwkt_reltoken(&tty_token);
     return 0;
@@ -1391,8 +1383,6 @@ sccnputc(void *private, int c)
 	update_kbd_state(scp, scp->status, SLKED, TRUE);
 #endif
 	if (scp->status & BUFFER_SAVED) {
-	    if (!sc_hist_restore(scp))
-		sc_remove_cutmarking(scp);
 	    scp->status &= ~BUFFER_SAVED;
 	    scp->status |= CURSOR_ENABLED;
 	    sc_draw_cursor_image(scp);
@@ -1451,7 +1441,6 @@ sccndbctl(void *private, int on)
 	if (!cold
 	    && sc_console->sc->cur_scp->smode.mode == VT_AUTO
 	    && sc_console->smode.mode == VT_AUTO) {
-	    sc_console->sc->cur_scp->status |= MOUSE_HIDDEN;
 	    syscons_lock();
 	    sc_switch_scr(sc_console->sc, sc_console->index);
 	    syscons_unlock();
@@ -1664,24 +1653,6 @@ scrn_update(scr_stat *scp, int show_cursor)
 
     ++scp->sc->videoio_in_progress;
 
-#ifndef SC_NO_CUTPASTE
-    /* remove the previous mouse pointer image if necessary */
-    if (scp->status & MOUSE_VISIBLE) {
-	s = scp->mouse_pos;
-	e = scp->mouse_pos + scp->xsize + 1;
-	if ((scp->status & (MOUSE_MOVED | MOUSE_HIDDEN))
-	    || and_region(&s, &e, scp->start, scp->end)
-	    || ((scp->status & CURSOR_ENABLED) && 
-		(scp->cursor_pos != scp->cursor_oldpos) &&
-		(and_region(&s, &e, scp->cursor_pos, scp->cursor_pos)
-		 || and_region(&s, &e, scp->cursor_oldpos, scp->cursor_oldpos)))) {
-	    sc_remove_mouse_image(scp);
-	    if (scp->end >= scp->xsize*scp->ysize)
-		scp->end = scp->xsize*scp->ysize - 1;
-	}
-    }
-#endif /* !SC_NO_CUTPASTE */
-
 #if 1
     /* debug: XXX */
     if (scp->end >= scp->xsize*scp->ysize) {
@@ -1752,21 +1723,9 @@ scrn_update(scr_stat *scp, int show_cursor)
 		sc_draw_cursor_image(scp);
 	    else if (scp->sc->flags & SC_BLINK_CURSOR)
 		/* if it's a blinking cursor, update it */
-		(*scp->rndr->blink_cursor)(scp, scp->cursor_pos,
-					   sc_inside_cutmark(scp,
-					       scp->cursor_pos));
+		(*scp->rndr->blink_cursor)(scp, scp->cursor_pos, FALSE);
         }
     }
-
-#ifndef SC_NO_CUTPASTE
-    /* update "pseudo" mouse pointer image */
-    if (scp->sc->flags & SC_MOUSE_ENABLED) {
-	if (!(scp->status & (MOUSE_VISIBLE | MOUSE_HIDDEN))) {
-	    scp->status &= ~MOUSE_MOVED;
-	    sc_draw_mouse_image(scp);
-	}
-    }
-#endif /* SC_NO_CUTPASTE */
 
     scp->end = 0;
     scp->start = scp->xsize*scp->ysize - 1;
@@ -2104,7 +2063,6 @@ exchange_scr(sc_softc_t *sc)
     else
 	sc_vtb_init(&scp->scr, VTB_FRAMEBUFFER, scp->xsize, scp->ysize,
 		    (void *)sc->adp->va_window, FALSE);
-    scp->status |= MOUSE_HIDDEN;
     sc_move_cursor(scp, scp->xpos, scp->ypos);
     if (!ISGRAPHSC(scp))
 	sc_set_cursor_image(scp);
@@ -2140,8 +2098,7 @@ sc_draw_cursor_image(scr_stat *scp)
     /* assert(scp == scp->sc->cur_scp); */
     ++scp->sc->videoio_in_progress;
     (*scp->rndr->draw_cursor)(scp, scp->cursor_pos,
-			      scp->sc->flags & SC_BLINK_CURSOR, TRUE,
-			      sc_inside_cutmark(scp, scp->cursor_pos));
+			      scp->sc->flags & SC_BLINK_CURSOR, TRUE, FALSE);
     scp->cursor_oldpos = scp->cursor_pos;
     --scp->sc->videoio_in_progress;
 }
@@ -2152,8 +2109,7 @@ sc_remove_cursor_image(scr_stat *scp)
     /* assert(scp == scp->sc->cur_scp); */
     ++scp->sc->videoio_in_progress;
     (*scp->rndr->draw_cursor)(scp, scp->cursor_oldpos,
-			      scp->sc->flags & SC_BLINK_CURSOR, FALSE,
-			      sc_inside_cutmark(scp, scp->cursor_oldpos));
+			      scp->sc->flags & SC_BLINK_CURSOR, FALSE, FALSE);
     --scp->sc->videoio_in_progress;
 }
 
@@ -2173,11 +2129,9 @@ update_cursor_image(scr_stat *scp)
 
     /* assert(scp == scp->sc->cur_scp); */
     ++scp->sc->videoio_in_progress;
-    (*scp->rndr->draw_cursor)(scp, scp->cursor_oldpos, blink, FALSE, 
-			      sc_inside_cutmark(scp, scp->cursor_pos));
+    (*scp->rndr->draw_cursor)(scp, scp->cursor_oldpos, blink, FALSE, FALSE);
     (*scp->rndr->set_cursor)(scp, scp->cursor_base, scp->cursor_height, blink);
-    (*scp->rndr->draw_cursor)(scp, scp->cursor_pos, blink, TRUE, 
-			      sc_inside_cutmark(scp, scp->cursor_pos));
+    (*scp->rndr->draw_cursor)(scp, scp->cursor_pos, blink, TRUE, FALSE);
     --scp->sc->videoio_in_progress;
 }
 
@@ -2412,11 +2366,6 @@ scshutdown(void *arg, int howto)
 int
 sc_clean_up(scr_stat *scp)
 {
-    lwkt_gettoken(&tty_token);
-    scp->status |= MOUSE_HIDDEN;
-    sc_remove_mouse_image(scp);
-    sc_remove_cutmarking(scp);
-    lwkt_reltoken(&tty_token);
     return 0;
 }
 
@@ -2463,10 +2412,6 @@ alloc_scp(sc_softc_t *sc, int vty)
     sc_alloc_scr_buffer(scp, TRUE, TRUE);
     if (sc_init_emulator(scp, SC_DFLT_TERM))
 	sc_init_emulator(scp, "*");
-
-#ifndef SC_NO_CUTPASTE
-    sc_alloc_cut_buffer(scp, TRUE);
-#endif
 
 #ifndef SC_NO_HISTORY
     sc_alloc_history_buffer(scp, 0, 0, TRUE);
@@ -2533,7 +2478,7 @@ init_scp(sc_softc_t *sc, int vty, scr_stat *scp)
     scp->bell_pitch = bios_value.bell_pitch;
     scp->bell_duration = BELL_DURATION;
     scp->status |= (bios_value.shift_state & NLKED);
-    scp->status |= CURSOR_ENABLED | MOUSE_HIDDEN;
+    scp->status |= CURSOR_ENABLED;
     scp->pid = 0;
     scp->proc = NULL;
     scp->smode.mode = VT_AUTO;
@@ -2672,31 +2617,26 @@ next_code:
 	switch (c) {
 	/* FIXME: key codes */
 	case SPCLKEY | FKEY | F(49):  /* home key */
-	    sc_remove_cutmarking(scp);
 	    sc_hist_home(scp);
 	    goto next_code;
 
 	case SPCLKEY | FKEY | F(57):  /* end key */
-	    sc_remove_cutmarking(scp);
 	    sc_hist_end(scp);
 	    goto next_code;
 
 	case SPCLKEY | FKEY | F(50):  /* up arrow key */
-	    sc_remove_cutmarking(scp);
 	    if (sc_hist_up_line(scp))
 		if (!(flags & SCGETC_CN))
 		    sc_bell(scp, bios_value.bell_pitch, BELL_DURATION);
 	    goto next_code;
 
 	case SPCLKEY | FKEY | F(58):  /* down arrow key */
-	    sc_remove_cutmarking(scp);
 	    if (sc_hist_down_line(scp))
 		if (!(flags & SCGETC_CN))
 		    sc_bell(scp, bios_value.bell_pitch, BELL_DURATION);
 	    goto next_code;
 
 	case SPCLKEY | FKEY | F(51):  /* page up key */
-	    sc_remove_cutmarking(scp);
 	    for (i=0; i<scp->ysize; i++) {
 		if (sc_hist_up_line(scp)) {
 		    if (!(flags & SCGETC_CN))
@@ -2707,7 +2647,6 @@ next_code:
 	    goto next_code;
 
 	case SPCLKEY | FKEY | F(59):  /* page down key */
-	    sc_remove_cutmarking(scp);
 	    for (i=0; i<scp->ysize; i++) {
 		if (sc_hist_down_line(scp)) {
 		    if (!(flags & SCGETC_CN))
@@ -2744,8 +2683,6 @@ next_code:
 			scp->status &= ~SLKED;
 #ifndef SC_NO_HISTORY
 			if (scp->status & BUFFER_SAVED) {
-			    if (!sc_hist_restore(scp))
-				sc_remove_cutmarking(scp);
 			    scp->status &= ~BUFFER_SAVED;
 			    scp->status |= CURSOR_ENABLED;
 			    sc_draw_cursor_image(scp);
@@ -3015,26 +2952,6 @@ sc_set_border(scr_stat *scp, int color)
     ++scp->sc->videoio_in_progress;
     (*scp->rndr->draw_border)(scp, color);
     --scp->sc->videoio_in_progress;
-}
-
-void
-sc_paste(scr_stat *scp, u_char *p, int count) 
-{
-    struct tty *tp;
-    u_char *rmap;
-
-    lwkt_gettoken(&tty_token);
-    if (scp->status & MOUSE_VISIBLE) {
-	tp = VIRTUAL_TTY(scp->sc, scp->sc->cur_scp->index);
-	if (!ISTTYOPEN(tp)) {
-	    lwkt_reltoken(&tty_token);
-	    return;
-	}
-	rmap = scp->sc->scr_rmap;
-	for (; count > 0; --count)
-	    (*linesw[tp->t_line].l_rint)(rmap[*p++], tp);
-    }
-    lwkt_reltoken(&tty_token);
 }
 
 void
