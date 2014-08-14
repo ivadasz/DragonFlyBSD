@@ -70,9 +70,6 @@
 #define COLD 0
 #define WARM 1
 
-#define DEFAULT_BLANKTIME	(5*60)		/* 5 minutes */
-#define MAX_BLANKTIME		(7*24*60*60)	/* 7 days!? */
-
 #define KEYCODE_BS		0x0e		/* "<-- Backspace" key, XXX */
 #define WANT_UNLOCK(m) do {	  \
 	if (m)			  \
@@ -687,14 +684,6 @@ scioctl(struct dev_ioctl_args *ap)
     }
 #endif
 
-#ifndef SC_NO_SYSMOUSE
-    error = sc_mouse_ioctl(tp, cmd, data, flag);
-    if (error != ENOIOCTL) {
-        lwkt_reltoken(&tty_token);
-	return error;
-    }
-#endif
-
     scp = SC_STAT(tp->t_dev);
     /* assert(scp != NULL) */
     /* scp is sc_console, if SC_VTY(dev) == SC_CONSOLECTL. */
@@ -768,7 +757,8 @@ scioctl(struct dev_ioctl_args *ap)
 	vid_info_t *ptr = (vid_info_t*)data;
 	if (ptr->size == sizeof(struct vid_info)) {
 	    ptr->m_num = sc->cur_scp->index;
-	    ptr->font_size = scp->font_size;
+	    /* dummy values */
+	    ptr->font_size = 16;
 	    ptr->mv_col = scp->xpos;
 	    ptr->mv_row = scp->ypos;
 	    ptr->mv_csz = scp->xsize;
@@ -1644,8 +1634,6 @@ and_region(int *s1, int *e1, int s2, int e2)
 static void 
 scrn_update(scr_stat *scp, int show_cursor)
 {
-    int start;
-    int end;
     int s;
     int e;
 
@@ -1667,39 +1655,10 @@ scrn_update(scr_stat *scp, int show_cursor)
 
     /* update screen image */
     if (scp->start <= scp->end)  {
-	if (scp->mouse_cut_end >= 0) {
-	    /* there is a marked region for cut & paste */
-	    if (scp->mouse_cut_start <= scp->mouse_cut_end) {
-		start = scp->mouse_cut_start;
-		end = scp->mouse_cut_end;
-	    } else {
-		start = scp->mouse_cut_end;
-		end = scp->mouse_cut_start - 1;
-	    }
-	    s = start;
-	    e = end;
-	    /* does the cut-mark region overlap with the update region? */
-	    if (and_region(&s, &e, scp->start, scp->end)) {
-		(*scp->rndr->draw)(scp, s, e - s + 1, TRUE);
-		s = 0;
-		e = start - 1;
-		if (and_region(&s, &e, scp->start, scp->end))
-		    (*scp->rndr->draw)(scp, s, e - s + 1, FALSE);
-		s = end + 1;
-		e = scp->xsize*scp->ysize - 1;
-		if (and_region(&s, &e, scp->start, scp->end))
-		    (*scp->rndr->draw)(scp, s, e - s + 1, FALSE);
-	    } else {
-		(*scp->rndr->draw)(scp, scp->start,
-				   scp->end - scp->start + 1, FALSE);
-	    }
-	} else {
-	    (*scp->rndr->draw)(scp, scp->start,
-			       scp->end - scp->start + 1, FALSE);
-	}
+	(*scp->rndr->draw)(scp, scp->start, scp->end - scp->start + 1, FALSE);
     }
 
-    /* we are not to show the cursor and the mouse pointer... */
+    /* we are not to show the cursor... */
     if (!show_cursor) {
         scp->end = 0;
         scp->start = scp->xsize*scp->ysize - 1;
@@ -2118,19 +2077,12 @@ update_cursor_image(scr_stat *scp)
 {
     int blink;
 
-    if (scp->sc->flags & SC_CHAR_CURSOR) {
-	scp->cursor_base = imax(0, scp->sc->cursor_base);
-	scp->cursor_height = imin(scp->sc->cursor_height, scp->font_size);
-    } else {
-	scp->cursor_base = 0;
-	scp->cursor_height = scp->font_size;
-    }
     blink = scp->sc->flags & SC_BLINK_CURSOR;
 
     /* assert(scp == scp->sc->cur_scp); */
     ++scp->sc->videoio_in_progress;
     (*scp->rndr->draw_cursor)(scp, scp->cursor_oldpos, blink, FALSE, FALSE);
-    (*scp->rndr->set_cursor)(scp, scp->cursor_base, scp->cursor_height, blink);
+    (*scp->rndr->set_cursor)(scp, blink);
     (*scp->rndr->draw_cursor)(scp, scp->cursor_pos, blink, TRUE, FALSE);
     --scp->sc->videoio_in_progress;
 }
@@ -2138,18 +2090,9 @@ update_cursor_image(scr_stat *scp)
 void
 sc_set_cursor_image(scr_stat *scp)
 {
-    if (scp->sc->flags & SC_CHAR_CURSOR) {
-	scp->cursor_base = imax(0, scp->sc->cursor_base);
-	scp->cursor_height = imin(scp->sc->cursor_height, scp->font_size);
-    } else {
-	scp->cursor_base = 0;
-	scp->cursor_height = scp->font_size;
-    }
-
     /* assert(scp == scp->sc->cur_scp); */
     ++scp->sc->videoio_in_progress;
-    (*scp->rndr->set_cursor)(scp, scp->cursor_base, scp->cursor_height,
-			     scp->sc->flags & SC_BLINK_CURSOR);
+    (*scp->rndr->set_cursor)(scp, scp->sc->flags & SC_BLINK_CURSOR);
     --scp->sc->videoio_in_progress;
 }
 
@@ -2262,15 +2205,7 @@ scinit(int unit, int flags)
 	scp->xpos = col;
 	scp->ypos = row;
 	scp->cursor_pos = scp->cursor_oldpos = row*scp->xsize + col;
-	if (bios_value.cursor_end < scp->font_size)
-	    sc->cursor_base = scp->font_size - bios_value.cursor_end - 1;
-	else
-	    sc->cursor_base = 0;
 	i = bios_value.cursor_end - bios_value.cursor_start + 1;
-	sc->cursor_height = imin(i, scp->font_size);
-#ifndef SC_NO_SYSMOUSE
-	sc_mouse_move(scp, scp->xpixel/2, scp->ypixel/2);
-#endif
 	if (!ISGRAPHSC(scp)) {
     	    sc_set_cursor_image(scp);
     	    sc_draw_cursor_image(scp);
@@ -2391,11 +2326,6 @@ sc_alloc_scr_buffer(scr_stat *scp, int wait, int discard)
 	scp->vtb = new;
 	sc_vtb_destroy(&old);
     }
-
-#ifndef SC_NO_SYSMOUSE
-    /* move the mouse cursor at the center of the screen */
-    sc_mouse_move(scp, scp->xpixel / 2, scp->ypixel / 2);
-#endif
     lwkt_reltoken(&tty_token);
 }
 
@@ -2439,27 +2369,14 @@ init_scp(sc_softc_t *sc, int vty, scr_stat *scp)
     lwkt_reltoken(&tty_token);
     if (info.vi_flags & V_INFO_GRAPHICS) {
 	scp->status |= GRAPHICS_MODE;
-	scp->xpixel = info.vi_width;
-	scp->ypixel = info.vi_height;
 	scp->xsize = info.vi_width/8;
 	scp->ysize = info.vi_height/info.vi_cheight;
-	scp->font_size = 0;
     } else {
 	scp->xsize = info.vi_width;
 	scp->ysize = info.vi_height;
-	scp->xpixel = scp->xsize*8;
-	scp->ypixel = scp->ysize*info.vi_cheight;
-	if (info.vi_cheight < 14) {
-	    scp->font_size = 8;
-	} else if (info.vi_cheight >= 16) {
-	    scp->font_size = 16;
-	} else {
-	    scp->font_size = 14;
-	}
     }
     sc_vtb_init(&scp->vtb, VTB_MEMORY, 0, 0, NULL, FALSE);
     sc_vtb_init(&scp->scr, VTB_FRAMEBUFFER, 0, 0, NULL, FALSE);
-    scp->xoff = scp->yoff = 0;
     scp->xpos = scp->ypos = 0;
     scp->start = scp->xsize * scp->ysize - 1;
     scp->end = 0;
@@ -2467,13 +2384,6 @@ init_scp(sc_softc_t *sc, int vty, scr_stat *scp)
     scp->ts = NULL;
     scp->rndr = NULL;
     scp->border = BG_BLACK;
-    scp->cursor_base = sc->cursor_base;
-    scp->cursor_height = imin(sc->cursor_height, scp->font_size);
-    scp->mouse_cut_start = scp->xsize*scp->ysize;
-    scp->mouse_cut_end = -1;
-    scp->mouse_signal = 0;
-    scp->mouse_pid = 0;
-    scp->mouse_proc = NULL;
     scp->kbd_mode = K_XLATE;
     scp->bell_pitch = bios_value.bell_pitch;
     scp->bell_duration = BELL_DURATION;

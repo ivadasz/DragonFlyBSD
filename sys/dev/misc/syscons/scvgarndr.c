@@ -54,11 +54,9 @@ static vr_set_cursor_t		vga_txtcursor_shape;
 static vr_draw_cursor_t		vga_txtcursor;
 static vr_blink_cursor_t	vga_txtblink;
 
-#ifndef SC_NO_MODE_CHANGE
-static vr_draw_border_t		vga_grborder;
-#endif
-
+#if 0
 static void			vga_nop(scr_stat *scp, ...);
+#endif
 
 static sc_rndr_sw_t txtrndrsw = {
 	vga_txtborder,
@@ -69,23 +67,14 @@ static sc_rndr_sw_t txtrndrsw = {
 };
 RENDERER(vga, V_INFO_MM_TEXT, txtrndrsw, vga_set);
 
-#ifndef SC_NO_MODE_CHANGE
-static sc_rndr_sw_t grrndrsw = {
-	vga_grborder,
-	(vr_draw_t *)vga_nop,
-	(vr_set_cursor_t *)vga_nop,
-	(vr_draw_cursor_t *)vga_nop,
-	(vr_blink_cursor_t *)vga_nop,
-};
-RENDERER(vga, V_INFO_MM_OTHER, grrndrsw, vga_set);
-#endif /* SC_NO_MODE_CHANGE */
-
 RENDERER_MODULE(vga, vga_set);
 
+#if 0
 static void
 vga_nop(scr_stat *scp, ...)
 {
 }
+#endif
 
 /* text mode renderer */
 
@@ -119,19 +108,10 @@ vga_txtdraw(scr_stat *scp, int from, int count, int flip)
 }
 
 static void 
-vga_txtcursor_shape(scr_stat *scp, int base, int height, int blink)
+vga_txtcursor_shape(scr_stat *scp, int blink)
 {
-	if (base < 0 || base >= scp->font_size)
-		return;
-
-	/* the caller may set height <= 0 in order to disable the cursor */
-#if 0
-	scp->cursor_base = base;
-	scp->cursor_height = height;
-#endif
 	(*vidsw[scp->sc->adapter]->set_hw_cursor_shape)(scp->sc->adp,
-							base, height,
-							scp->font_size, blink);
+							0, 16, 16, blink);
 
 }
 
@@ -166,9 +146,6 @@ vga_txtcursor(scr_stat *scp, int at, int blink, int on, int flip)
 {
 	video_adapter_t *adp;
 	int cursor_attr;
-
-	if (scp->cursor_height <= 0)	/* the text cursor is disabled */
-		return;
 
 	adp = scp->sc->adp;
 	if (blink) {
@@ -213,17 +190,3 @@ vga_txtblink(scr_stat *scp, int at, int flip)
 }
 
 int sc_txtmouse_no_retrace_wait;
-
-#ifndef SC_NO_MODE_CHANGE
-
-/* graphics mode renderer */
-
-static void
-vga_grborder(scr_stat *scp, int color)
-{
-	lwkt_gettoken(&tty_token);
-	(*vidsw[scp->sc->adapter]->set_border)(scp->sc->adp, color);
-	lwkt_reltoken(&tty_token);
-}
-
-#endif

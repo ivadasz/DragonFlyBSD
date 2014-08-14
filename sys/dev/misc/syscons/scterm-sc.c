@@ -563,11 +563,6 @@ scterm_scan_esc(scr_stat *scp, term_stat *tcp, u_char c)
 					sc->flags |= SC_CHAR_CURSOR;
 				else
 					sc->flags &= ~SC_CHAR_CURSOR;
-			} else if (tcp->num_param == 2) {
-				sc->cursor_base = scp->font_size 
-						- (tcp->param[1] & 0x1F) - 1;
-				sc->cursor_height = (tcp->param[1] & 0x1F) 
-						- (tcp->param[0] & 0x1F) + 1;
 			}
 			/* 
 			 * The cursor shape is global property; 

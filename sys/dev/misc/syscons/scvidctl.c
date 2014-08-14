@@ -65,16 +65,6 @@ sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode, int xsize, int ysize,
     }
     lwkt_reltoken(&tty_token);
 
-    /* adjust argument values */
-    if (fontsize <= 0)
-	fontsize = info.vi_cheight;
-    if (fontsize < 14) {
-	fontsize = 8;
-    } else if (fontsize >= 16) {
-	fontsize = 16;
-    } else {
-	fontsize = 14;
-    }
     if ((xsize <= 0) || (xsize > info.vi_width))
 	xsize = info.vi_width;
     if ((ysize <= 0) || (ysize > info.vi_height))
@@ -111,11 +101,6 @@ sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode, int xsize, int ysize,
     scp->model = V_INFO_MM_TEXT;
     scp->xsize = xsize;
     scp->ysize = ysize;
-    scp->xoff = 0;
-    scp->yoff = 0;
-    scp->xpixel = scp->xsize*8;
-    scp->ypixel = scp->ysize*fontsize;
-    scp->font_size = fontsize;
 
     /* allocate buffers */
     sc_alloc_scr_buffer(scp, TRUE, TRUE);
@@ -143,73 +128,6 @@ sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode, int xsize, int ysize,
     return 0;
 }
 
-int
-sc_set_graphics_mode(scr_stat *scp, struct tty *tp, int mode)
-{
-#ifdef SC_NO_MODE_CHANGE
-    return ENODEV;
-#else
-    video_info_t info;
-    int error;
-
-    lwkt_gettoken(&tty_token);
-    if ((*vidsw[scp->sc->adapter]->get_info)(scp->sc->adp, mode, &info)) {
-        lwkt_reltoken(&tty_token);
-	return ENODEV;
-    }
-    lwkt_reltoken(&tty_token);
-
-    /* stop screen saver, etc */
-    crit_enter();
-    if ((error = sc_clean_up(scp))) {
-	crit_exit();
-	return error;
-    }
-
-    if (sc_render_match(scp, scp->sc->adp->va_name, V_INFO_MM_OTHER) == NULL) {
-	crit_exit();
-	return ENODEV;
-    }
-
-    /* set up scp */
-    scp->status |= (UNKNOWN_MODE | GRAPHICS_MODE);
-    scp->mode = mode;
-    scp->model = V_INFO_MM_OTHER;
-    /*
-     * Don't change xsize and ysize; preserve the previous vty
-     * and history buffers.
-     */
-    scp->xoff = 0;
-    scp->yoff = 0;
-    scp->xpixel = info.vi_width;
-    scp->ypixel = info.vi_height;
-    scp->font_size = 0;
-#ifndef SC_NO_SYSMOUSE
-    /* move the mouse cursor at the center of the screen */
-    sc_mouse_move(scp, scp->xpixel / 2, scp->ypixel / 2);
-#endif
-    sc_init_emulator(scp, NULL);
-    crit_exit();
-
-    if (scp == scp->sc->cur_scp)
-	set_mode(scp);
-    /* clear_graphics();*/
-    refresh_ega_palette(scp);
-    scp->status &= ~UNKNOWN_MODE;
-
-    if (tp == NULL)
-	return 0;
-    if (tp->t_winsize.ws_xpixel != scp->xpixel
-	|| tp->t_winsize.ws_ypixel != scp->ypixel) {
-	tp->t_winsize.ws_xpixel = scp->xpixel;
-	tp->t_winsize.ws_ypixel = scp->ypixel;
-	pgsignal(tp->t_pgrp, SIGWINCH, 1);
-    }
-
-    return 0;
-#endif /* SC_NO_MODE_CHANGE */
-}
-
 #define fb_ioctl(a, c, d)		\
 	(((a) == NULL) ? ENODEV : 	\
 			 (*vidsw[(a)->va_index]->ioctl)((a), (c), (caddr_t)(d)))
@@ -219,7 +137,6 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 {
     scr_stat *scp;
     video_adapter_t *adp;
-    video_info_t info;
     int error, ret;
 
 	KKASSERT(tp->t_dev);
@@ -264,28 +181,6 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	*(int *)data = scp->mode;
 	lwkt_reltoken(&tty_token);
 	return 0;
-
-#ifndef SC_NO_MODE_CHANGE
-    case CONS_SET:
-    case FBIO_SETMODE:		/* set video mode */
-	if (!(adp->va_flags & V_ADP_MODECHANGE)) {
-	    lwkt_reltoken(&tty_token);
- 	    return ENODEV;
-	}
-	info.vi_mode = *(int *)data;
-	error = fb_ioctl(adp, FBIO_MODEINFO, &info);
-	if (error) {
-	    lwkt_reltoken(&tty_token);
-	    return error;
-	}
-	if (info.vi_flags & V_INFO_GRAPHICS) {
-	    lwkt_reltoken(&tty_token);
-	    return sc_set_graphics_mode(scp, tp, *(int *)data);
-	} else {
-	    lwkt_reltoken(&tty_token);
-	    return sc_set_text_mode(scp, tp, *(int *)data, 0, 0, 0);
-	}
-#endif /* SC_NO_MODE_CHANGE */
 
     case CONS_MODEINFO:		/* get mode information */
     case FBIO_MODEINFO:

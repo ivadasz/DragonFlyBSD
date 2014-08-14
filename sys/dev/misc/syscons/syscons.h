@@ -49,15 +49,6 @@ MALLOC_DECLARE(M_SYSCONS);
 #define SC_CURSOR_CHAR	(0x07)
 #endif
 
-#ifndef SC_MOUSE_CHAR
-#define SC_MOUSE_CHAR	(0xd0)
-#endif
-
-#if SC_MOUSE_CHAR <= SC_CURSOR_CHAR && SC_CURSOR_CHAR < (SC_MOUSE_CHAR + 4)
-#undef SC_CURSOR_CHAR
-#define SC_CURSOR_CHAR	(SC_MOUSE_CHAR + 4)
-#endif
-
 #ifndef SC_DEBUG_LEVEL
 #define SC_DEBUG_LEVEL	0
 #endif
@@ -91,7 +82,7 @@ MALLOC_DECLARE(M_SYSCONS);
 #define SWITCH_WAIT_ACQ	0x00100		/* waiting for vty ack */
 #define BUFFER_SAVED	0x00200		/* vty buffer is saved */
 #define CURSOR_ENABLED 	0x00400		/* text cursor is enabled */
-#define MOUSE_MOVED	0x01000		/* mouse cursor has moved */
+//#define MOUSE_MOVED	0x01000		/* mouse cursor has moved */
 //#define MOUSE_CUTTING	0x02000		/* mouse cursor is cutting text */
 //#define MOUSE_VISIBLE	0x04000		/* mouse cursor is showing */
 #define GRAPHICS_MODE	0x08000		/* vty is in a graphics mode */
@@ -141,7 +132,7 @@ struct dev_ioctl_args;
 typedef struct sc_softc {
 	int		unit;			/* unit # */
 	int		config;			/* configuration flags */
-#define SC_VESA800X600	(1 << 7)
+//#define SC_VESA800X600	(1 << 7)
 #define SC_AUTODETECT_KBD (1 << 8)
 #define SC_KERNEL_CONSOLE (1 << 9)
 
@@ -182,9 +173,6 @@ typedef struct sc_softc {
 
 	struct callout	scrn_timer_ch;
 
-	char		cursor_base;
-	char		cursor_height;
-
 	u_char      	scr_map[256];
 	u_char      	scr_rmap[256];
 
@@ -197,7 +185,6 @@ typedef struct sc_softc {
 #endif
 
 	u_char		cursor_char;
-	u_char		mouse_char;
 
 } sc_softc_t;
 
@@ -213,12 +200,6 @@ typedef struct scr_stat {
 	int 		ypos;			/* current Y position */
 	int 		xsize;			/* X text size */
 	int 		ysize;			/* Y text size */
-	int 		xpixel;			/* X graphics size */
-	int 		ypixel;			/* Y graphics size */
-	int		xoff;			/* X offset in pixel mode */
-	int		yoff;			/* Y offset in pixel mode */
-
-	int		font_size;		/* fontsize in Y direction */
 
 	int		start;			/* modified area start */
 	int		end;			/* modified area end */
@@ -233,21 +214,6 @@ typedef struct scr_stat {
 	int		cursor_oldpos;		/* cursor old buffer position */
 	u_short		cursor_saveunder_char;	/* saved char under cursor */
 	u_short		cursor_saveunder_attr;	/* saved attr under cursor */
-	char		cursor_base;		/* cursor base line # */
-	char		cursor_height;		/* cursor height */
-
-	int		mouse_pos;		/* mouse buffer position */
-	int		mouse_oldpos;		/* mouse old buffer position */
-	short		mouse_xpos;		/* mouse x coordinate */
-	short		mouse_ypos;		/* mouse y coordinate */
-	short		mouse_oldxpos;		/* mouse previous x coordinate */
-	short		mouse_oldypos;		/* mouse previous y coordinate */
-	short		mouse_buttons;		/* mouse buttons */
-	int		mouse_cut_start;	/* mouse cut start pos */
-	int		mouse_cut_end;		/* mouse cut end pos */
-	struct proc 	*mouse_proc;		/* proc* of controlling proc */
-	pid_t 		mouse_pid;		/* pid of controlling proc */
-	int		mouse_signal;		/* signal # to report with */
 
 	u_short		bell_duration;
 	u_short		bell_pitch;
@@ -355,11 +321,10 @@ extern struct linker_set scterm_set;
 /* renderer function table */
 typedef void	vr_draw_border_t(scr_stat *scp, int color);
 typedef void	vr_draw_t(scr_stat *scp, int from, int count, int flip);
-typedef void	vr_set_cursor_t(scr_stat *scp, int base, int height, int blink);
+typedef void	vr_set_cursor_t(scr_stat *scp, int blink);
 typedef void	vr_draw_cursor_t(scr_stat *scp, int at, int blink,
 				 int on, int flip);
 typedef void	vr_blink_cursor_t(scr_stat *scp, int at, int flip);
-typedef void	vr_set_mouse_t(scr_stat *scp);
 
 typedef struct sc_rndr_sw {
 	vr_draw_border_t	*draw_border;
@@ -475,17 +440,9 @@ int		sc_hist_ioctl(struct tty *tp, u_long cmd, caddr_t data,
 			      int flag);
 #endif /* SC_NO_HISTORY */
 
-/* scmouse.c */
-#ifndef SC_NO_SYSMOUSE
-void		sc_mouse_move(scr_stat *scp, int x, int y);
-int		sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data,
-			       int flag);
-#endif /* SC_NO_SYSMOUSE */
-
 /* scvidctl.c */
 int		sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode,
 				 int xsize, int ysize, int fontsize);
-int		sc_set_graphics_mode(scr_stat *scp, struct tty *tp, int mode);
 int		sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data,
 				  int flag);
 
