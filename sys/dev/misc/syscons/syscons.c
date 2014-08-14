@@ -2584,6 +2584,7 @@ next_code:
 			scp->status &= ~SLKED;
 #ifndef SC_NO_HISTORY
 			if (scp->status & BUFFER_SAVED) {
+			    sc_hist_restore(scp);
 			    scp->status &= ~BUFFER_SAVED;
 			    scp->status |= CURSOR_ENABLED;
 			    sc_draw_cursor_image(scp);
