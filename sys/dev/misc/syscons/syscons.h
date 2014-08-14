@@ -180,10 +180,6 @@ typedef struct sc_softc {
 	sc_md_softc_t	md;			/* machine dependent vars */
 #endif
 
-#ifndef SC_NO_PALETTE_LOADING
-	u_char        	palette[256*3];
-#endif
-
 	u_char		cursor_char;
 
 } sc_softc_t;
@@ -220,7 +216,6 @@ typedef struct scr_stat {
 
 	struct callout	blink_screen_ch;
 
-	uint32_t	ega_palette[16];	/* ega palette */
 	u_char		border;			/* border color */
 	int	 	mode;			/* mode */
 	int		model;			/* memory model */
@@ -410,7 +405,6 @@ int		sc_probe_unit(int unit, int flags);
 int		sc_attach_unit(int unit, int flags);
 
 int		set_mode(scr_stat *scp);
-void		refresh_ega_palette(scr_stat *scp);
 
 void		sc_set_border(scr_stat *scp, int color);
 

@@ -2025,10 +2025,6 @@ exchange_scr(sc_softc_t *sc)
     sc_move_cursor(scp, scp->xpos, scp->ypos);
     if (!ISGRAPHSC(scp))
 	sc_set_cursor_image(scp);
-#ifndef SC_NO_PALETTE_LOADING
-    if (ISGRAPHSC(sc->old_scp))
-	load_palette(sc->adp, sc->palette);
-#endif
     sc_set_border(scp, scp->border);
 
     /* set up the keyboard for the new screen */
@@ -2210,11 +2206,6 @@ scinit(int unit, int flags)
     	    sc_set_cursor_image(scp);
     	    sc_draw_cursor_image(scp);
 	}
-
-	/* save palette */
-#ifndef SC_NO_PALETTE_LOADING
-	save_palette(sc->adp, sc->palette);
-#endif
     }
 
     /* the rest is not necessary, if we have done it once */
@@ -2725,18 +2716,7 @@ next_code:
 int
 scmmap(struct dev_mmap_args *ap)
 {
-    scr_stat *scp;
-
-    lwkt_gettoken(&tty_token);
-    scp = SC_STAT(ap->a_head.a_dev);
-    if (scp != scp->sc->cur_scp) {
-        lwkt_reltoken(&tty_token);
-	return EINVAL;
-    }
-    ap->a_result = (*vidsw[scp->sc->adapter]->mmap)(scp->sc->adp, ap->a_offset,
-						    ap->a_nprot);
-    lwkt_reltoken(&tty_token);
-    return(0);
+    return ENODEV;
 }
 
 static int
@@ -2827,33 +2807,6 @@ set_mode(scr_stat *scp)
 
     lwkt_reltoken(&tty_token);
     return 0;
-}
-
-void
-refresh_ega_palette(scr_stat *scp)
-{
-    uint32_t r, g, b;
-    int reg;
-    int rsize, gsize, bsize;
-    int rfld, gfld, bfld;
-    int i;
-
-    rsize = scp->sc->adp->va_info.vi_pixel_fsizes[0];
-    gsize = scp->sc->adp->va_info.vi_pixel_fsizes[1];
-    bsize = scp->sc->adp->va_info.vi_pixel_fsizes[2];
-    rfld = scp->sc->adp->va_info.vi_pixel_fields[0];
-    gfld = scp->sc->adp->va_info.vi_pixel_fields[1];
-    bfld = scp->sc->adp->va_info.vi_pixel_fields[2];
-
-    for (i = 0; i < 16; i++) {
-	reg = scp->sc->adp->va_palette_regs[i];
-
-	r = scp->sc->palette[reg * 3] >> (8 - rsize);
-	g = scp->sc->palette[reg * 3 + 1] >> (8 - gsize);
-	b = scp->sc->palette[reg * 3 + 2] >> (8 - bsize);
-
-	scp->ega_palette[i] = (r << rfld) + (g << gfld) + (b << bfld);
-    }
 }
 
 void

@@ -257,10 +257,6 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	        lwkt_reltoken(&tty_token);
 		return EINVAL;
 	    }
-	    /* restore palette ! */
-#ifndef SC_NO_PALETTE_LOADING
-	    load_palette(adp, scp->sc->palette);
-#endif
 
 	    /* move hardware cursor out of the way */
 	    (*vidsw[adp->va_index]->set_hw_cursor)(adp, -1, -1);
@@ -283,7 +279,6 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    }
 	    scp->status |= UNKNOWN_MODE;
 	    crit_exit();
-	    /* no restore fonts & palette */
 	    if (scp == scp->sc->cur_scp)
 		set_mode(scp);
 	    sc_clear_screen(scp);
