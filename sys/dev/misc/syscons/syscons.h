@@ -402,7 +402,6 @@ typedef struct {
 
 /* syscons.c */
 int		sc_probe_unit(int unit, int flags);
-int		sc_attach_unit(int unit, int flags);
 
 int		set_mode(scr_stat *scp);
 
@@ -483,8 +482,8 @@ sc_term_sw_t	*sc_term_match(char *name);
 sc_term_sw_t	*sc_term_match_by_number(int index);
 
 /* machine dependent functions */
-int		sc_max_unit(void);
-sc_softc_t	*sc_get_softc(int unit, int flags);
+#if 0
 sc_softc_t	*sc_find_softc(struct video_adapter *adp, struct keyboard *kbd);
+#endif
 
 #endif /* !_DEV_SYSCONS_SYSCONS_H_ */

@@ -100,6 +100,7 @@ static default_attr kernel_default = {
     SC_KERNEL_CONS_REV_ATTR,
 };
 
+static	sc_softc_t	main_softc;
 static	int		sc_console_unit = -1;
 static  scr_stat    	*sc_console;
 static	struct tty	*sc_console_tty;
@@ -130,11 +131,16 @@ static  void	sc_blink_screen(scr_stat *scp);
 static	struct mtx	syscons_mtx = MTX_INITIALIZER;
 
 /* prototypes */
+static int sc_max_unit(void);
+static sc_softc_t *sc_get_softc(int unit, int flags);
 static int sc_get_cons_priority(int *unit, int *flags);
 static void sc_get_bios_values(bios_values_t *values);
 static int sc_tone(int hertz);
 static int scvidprobe(int unit, int flags, int cons);
 static int sckbdprobe(int unit, int flags, int cons);
+static char *adapter_name(video_adapter_t *adp);
+static int sc_drvinit(void *ident);
+static int sc_attach_unit(int unit, int flags);
 static void scmeminit(void *arg);
 static int scdevtounit(cdev_t dev);
 static kbd_callback_func_t sckbdevent;
@@ -196,8 +202,48 @@ syscons_unlock(void)
 }
 
 static int
+sc_max_unit(void)
+{
+	return 1;
+#if 0
+	return devclass_get_maxunit(sc_devclass);
+#endif
+}
+
+static sc_softc_t *
+sc_get_softc(int unit, int flags)
+{
+	sc_softc_t *sc;
+
+	if (unit < 0)
+		return NULL;
+	if (flags & SC_KERNEL_CONSOLE) {
+		/* FIXME: clear if it is wired to another unit! */
+		sc = &main_softc;
+	} else if (unit == 0) {
+		sc = &main_softc;
+	} else {
+		return NULL;
+	}
+#if 0
+	        sc = (sc_softc_t *)device_get_softc(devclass_get_device(sc_devclass, unit));
+		if (sc == NULL)
+			return NULL;
+	}
+#endif
+	sc->unit = unit;
+	if (!(sc->flags & SC_INIT_DONE)) {
+		sc->keyboard = -1;
+		sc->adapter = -1;
+		sc->cursor_char = SC_CURSOR_CHAR;
+	}
+	return sc;
+}
+
+static int
 sc_get_cons_priority(int *unit, int *flags)
 {
+#if 0
 	int disabled;
 	int u, f;
 	int i;
@@ -224,9 +270,10 @@ sc_get_cons_priority(int *unit, int *flags)
 	}
 	if ((i < 0) && (*unit < 0))
 		return CN_DEAD;
-#if 0
 	return ((*flags & SC_KERNEL_CONSOLE) ? CN_INTERNAL : CN_NORMAL);
 #endif
+	*unit = 0;
+	*flags = 0x300;
 	return CN_INTERNAL;
 }
 
@@ -379,7 +426,13 @@ adapter_name(video_adapter_t *adp)
     return names[i].name[(adp->va_flags & V_ADP_COLOR) ? 0 : 1];
 }
 
-int
+static int
+sc_drvinit(void *ident)
+{
+	return sc_attach_unit(0, 0x300);
+}
+
+static int
 sc_attach_unit(int unit, int flags)
 {
     sc_softc_t *sc;
@@ -3021,3 +3074,5 @@ sc_allocate_keyboard(sc_softc_t *sc, int unit)
 
 	return (idx0);
 }
+
+SYSINIT(sc_attach, SI_SUB_DRIVERS, SI_ORDER_ANY, sc_drvinit, NULL);

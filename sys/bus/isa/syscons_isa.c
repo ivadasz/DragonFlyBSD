@@ -97,36 +97,6 @@ scattach(device_t dev)
 	return sc_attach_unit(device_get_unit(dev), device_get_flags(dev));
 }
 
-int
-sc_max_unit(void)
-{
-	return devclass_get_maxunit(sc_devclass);
-}
-
-sc_softc_t *
-sc_get_softc(int unit, int flags)
-{
-	sc_softc_t *sc;
-
-	if (unit < 0)
-		return NULL;
-	if (flags & SC_KERNEL_CONSOLE) {
-		/* FIXME: clear if it is wired to another unit! */
-		sc = &main_softc;
-	} else {
-	        sc = (sc_softc_t *)device_get_softc(devclass_get_device(sc_devclass, unit));
-		if (sc == NULL)
-			return NULL;
-	}
-	sc->unit = unit;
-	if (!(sc->flags & SC_INIT_DONE)) {
-		sc->keyboard = -1;
-		sc->adapter = -1;
-		sc->cursor_char = SC_CURSOR_CHAR;
-	}
-	return sc;
-}
-
 sc_softc_t *
 sc_find_softc(struct video_adapter *adp, struct keyboard *kbd)
 {
