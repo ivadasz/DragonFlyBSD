@@ -113,10 +113,10 @@ vga_txtdraw(scr_stat *scp, int from, int count, int flip)
 			}
 		}
 	} else {
-		c = sc_vtb_getc(&scp->vtb, from);
-		a = sc_vtb_geta(&scp->vtb, from);
 //		sc_vtb_copy(&scp->vtb, from, &scp->scr, from, count);
 		for (; count-- > 0; ++from) {
+			c = sc_vtb_getc(&scp->vtb, from);
+			a = sc_vtb_geta(&scp->vtb, from);
 			val = c | a;
 			sc->txtdevsw->putchars(sc->txtdev_cookie,
 			    from % 80, from / 80, &val, 1);

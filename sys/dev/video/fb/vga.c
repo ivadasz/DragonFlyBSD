@@ -115,7 +115,7 @@ vga_attach_unit(int unit, vga_softc_t *sc, int flags)
 		return error;
 	val = (*sw->init)(unit, sc->adp, flags);
 
-	if (register_txtdev((void *)&sc->adp, &txtsw,
+	if (register_txtdev((void *)sc->adp, &txtsw,
 	    TXTDEV_REPLACE_VGA | TXTDEV_IS_VGA) == 0) {
 		kprintf("registered with txtdev\n");
 		/* XXX successfully registered with txtdev */
