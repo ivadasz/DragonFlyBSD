@@ -486,8 +486,5 @@ sc_term_sw_t	*sc_term_match_by_number(int index);
 int		sc_max_unit(void);
 sc_softc_t	*sc_get_softc(int unit, int flags);
 sc_softc_t	*sc_find_softc(struct video_adapter *adp, struct keyboard *kbd);
-int		sc_get_cons_priority(int *unit, int *flags);
-void		sc_get_bios_values(bios_values_t *values);
-int		sc_tone(int hertz);
 
 #endif /* !_DEV_SYSCONS_SYSCONS_H_ */

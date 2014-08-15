@@ -39,6 +39,7 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/bus.h>
 #include <sys/eventhandler.h>
 #include <sys/reboot.h>
 #include <sys/conf.h>
@@ -129,6 +130,9 @@ static  void	sc_blink_screen(scr_stat *scp);
 static	struct mtx	syscons_mtx = MTX_INITIALIZER;
 
 /* prototypes */
+static int sc_get_cons_priority(int *unit, int *flags);
+static void sc_get_bios_values(bios_values_t *values);
+static int sc_tone(int hertz);
 static int scvidprobe(int unit, int flags, int cons);
 static int sckbdprobe(int unit, int flags, int cons);
 static void scmeminit(void *arg);
@@ -189,6 +193,93 @@ static void
 syscons_unlock(void)
 {
 	mtx_spinunlock(&syscons_mtx);
+}
+
+static int
+sc_get_cons_priority(int *unit, int *flags)
+{
+	int disabled;
+	int u, f;
+	int i;
+
+	*unit = -1;
+	for (i = -1; (i = resource_locate(i, SC_DRIVER_NAME)) >= 0;) {
+		u = resource_query_unit(i);
+		if ((resource_int_value(SC_DRIVER_NAME, u, "disabled",
+					&disabled) == 0) && disabled)
+			continue;
+		if (resource_int_value(SC_DRIVER_NAME, u, "flags", &f) != 0)
+			f = 0;
+		if (f & SC_KERNEL_CONSOLE) {
+			/* the user designates this unit to be the console */
+			*unit = u;
+			*flags = f;
+			break;
+		}
+		if (*unit < 0) {
+			/* ...otherwise remember the first found unit */
+			*unit = u;
+			*flags = f;
+		}
+	}
+	if ((i < 0) && (*unit < 0))
+		return CN_DEAD;
+#if 0
+	return ((*flags & SC_KERNEL_CONSOLE) ? CN_INTERNAL : CN_NORMAL);
+#endif
+	return CN_INTERNAL;
+}
+
+static void
+sc_get_bios_values(bios_values_t *values)
+{
+#ifdef __i386__
+	u_int8_t shift;
+
+	values->cursor_start = *(u_int8_t *)BIOS_PADDRTOVADDR(0x461);
+	values->cursor_end = *(u_int8_t *)BIOS_PADDRTOVADDR(0x460);
+	shift = *(u_int8_t *)BIOS_PADDRTOVADDR(0x417);
+	values->shift_state = ((shift & BIOS_CLKED) ? CLKED : 0)
+			       | ((shift & BIOS_NLKED) ? NLKED : 0)
+			       | ((shift & BIOS_SLKED) ? SLKED : 0)
+			       | ((shift & BIOS_ALKED) ? ALKED : 0);
+	values->bell_pitch = BELL_PITCH;
+#else /* !__i386__ */
+	values->cursor_start = 0;
+	values->cursor_end = 32;
+	values->shift_state = 0;
+	values->bell_pitch = BELL_PITCH;
+#endif /* __i386__ */
+}
+
+static int
+sc_tone(int hertz)
+{
+	return EBUSY;
+#if 0
+	/* XXX use sound device if available */
+#ifdef __i386__
+	int pitch;
+
+	if (hertz) {
+		/* set command for counter 2, 2 byte write */
+		if (acquire_timer2(TIMER_16BIT | TIMER_SQWAVE))
+			return EBUSY;
+		/* set pitch */
+		pitch = cputimer_freq/hertz;
+		outb(TIMER_CNTR2, pitch);
+		outb(TIMER_CNTR2, pitch >> 8);
+		/* enable counter 2 output to speaker */
+		outb(IO_PPI, inb(IO_PPI) | 3);
+	} else {
+		/* disable counter 2 output to speaker */
+		if (release_timer2() == 0)
+			outb(IO_PPI, inb(IO_PPI) & 0xFC);
+	}
+#endif /* __i386__ */
+
+	return 0;
+#endif
 }
 
 /*
