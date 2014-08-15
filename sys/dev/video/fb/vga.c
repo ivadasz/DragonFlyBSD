@@ -2390,11 +2390,11 @@ vga_txt_putchars(void *cookie, int col, int row, uint16_t *buf, int len)
 	vgabuf = (uint16_t *)adp->va_window;
 	at = row * 80 + col;
 
-	if (at >= col * row)
+	if (at >= 80 * 25)
 		return 0;
 
-	if (at + len > col * row)
-		len = col * row - at;
+	if (at + len > 80 * 25)
+		len = 80 * 25 - at;
 
 	for (i = 0; i < len; i++)
 		writew(&vgabuf[at + i], buf[i]);
