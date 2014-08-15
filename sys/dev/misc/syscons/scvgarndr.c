@@ -45,6 +45,7 @@
 #include <dev/video/fb/fbreg.h>
 #include <dev/video/fb/vgareg.h>
 #include "syscons.h"
+#include "../txt/txtdev.h"
 
 #include <bus/isa/isareg.h>
 
@@ -81,13 +82,17 @@ vga_nop(scr_stat *scp, ...)
 static void
 vga_txtborder(scr_stat *scp, int color)
 {
+#if 0
 	(*vidsw[scp->sc->adapter]->set_border)(scp->sc->adp, color);
+#endif
 }
 
 static void
 vga_txtdraw(scr_stat *scp, int from, int count, int flip)
 {
-	uint16_t *p;
+	sc_softc_t *sc = (sc_softc_t *)scp->sc;
+//	uint16_t *p;
+	uint16_t val;
 	int c;
 	int a;
 
@@ -95,26 +100,40 @@ vga_txtdraw(scr_stat *scp, int from, int count, int flip)
 		count = scp->xsize*scp->ysize - from;
 
 	if (flip) {
-		for (p = scp->scr.vtb_buffer + from; count-- > 0; ++from) {
+		for (; count-- > 0; ++from) {
 			c = sc_vtb_getc(&scp->vtb, from);
 			a = sc_vtb_geta(&scp->vtb, from);
 			a = (a & 0x8800) | ((a & 0x7000) >> 4) 
 				| ((a & 0x0700) << 4);
-			p = sc_vtb_putchar(&scp->scr, p, c, a);
+//			p = sc_vtb_putchar(&scp->scr, p, c, a);
+			if (sc->txtdevsw != NULL) {
+				val = c | a;
+				sc->txtdevsw->putchars(sc->txtdev_cookie,
+				    from % 80, from / 80, &val, 1);
+			}
 		}
 	} else {
-		sc_vtb_copy(&scp->vtb, from, &scp->scr, from, count);
+		c = sc_vtb_getc(&scp->vtb, from);
+		a = sc_vtb_geta(&scp->vtb, from);
+//		sc_vtb_copy(&scp->vtb, from, &scp->scr, from, count);
+		for (; count-- > 0; ++from) {
+			val = c | a;
+			sc->txtdevsw->putchars(sc->txtdev_cookie,
+			    from % 80, from / 80, &val, 1);
+		}
 	}
 }
 
 static void 
 vga_txtcursor_shape(scr_stat *scp, int blink)
 {
+#if 0
 	(*vidsw[scp->sc->adapter]->set_hw_cursor_shape)(scp->sc->adp,
 							0, 16, 16, blink);
-
+#endif
 }
 
+#if 0
 static void
 draw_txtcharcursor(scr_stat *scp, int at, u_short c, u_short a, int flip)
 {
@@ -140,10 +159,12 @@ draw_txtcharcursor(scr_stat *scp, int at, u_short c, u_short a, int flip)
 		sc_vtb_putc(&scp->scr, at, c, a);
 	}
 }
+#endif
 
 static void
 vga_txtcursor(scr_stat *scp, int at, int blink, int on, int flip)
 {
+#if 0
 	video_adapter_t *adp;
 	int cursor_attr;
 
@@ -182,6 +203,7 @@ vga_txtcursor(scr_stat *scp, int at, int blink, int on, int flip)
 			scp->status &= ~VR_CURSOR_ON;
 		}
 	}
+#endif
 }
 
 static void

@@ -2374,15 +2374,30 @@ vga_txt_getmode(void *cookie, struct txtmode *mode)
 static int
 vga_txt_setmode(void *cookie, struct txtmode *mode)
 {
-	return 1;
+	if (mode->txt_columns == 80 && mode->txt_rows == 25)
+		return 0;
+	else
+		return 1;
 }
 
 static int
-vga_txt_putchars(void *cookie, int col, int row, uint8_t *buf, int len)
+vga_txt_putchars(void *cookie, int col, int row, uint16_t *buf, int len)
 {
+	uint16_t *vgabuf;
+	int at, i;
 	__unused video_adapter_t *adp = (video_adapter_t *)cookie;
 
-	/* XXX */
+	vgabuf = (uint16_t *)adp->va_window;
+	at = row * 80 + col;
+
+	if (at >= col * row)
+		return 0;
+
+	if (at + len > col * row)
+		len = col * row - at;
+
+	for (i = 0; i < len; i++)
+		writew(&vgabuf[at + i], buf[i]);
 
 	return 0;
 }

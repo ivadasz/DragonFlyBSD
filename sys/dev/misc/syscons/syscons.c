@@ -378,10 +378,15 @@ sc_probe_unit(int unit, int flags)
     return 0;
 }
 
+static struct txtmode sctxtmode = {
+	80, 25
+};
+
 int
 sc_set_txtdev(void *cookie, struct txtdev_sw *sw)
 {
 	sc_softc_t *sc;
+	struct txtmode;
 
 	lwkt_gettoken(&tty_token);
 	sc = sc_get_softc(0, (sc_console_unit == 0) ? SC_KERNEL_CONSOLE : 0);
@@ -408,6 +413,14 @@ sc_set_txtdev(void *cookie, struct txtdev_sw *sw)
 	if (sc->txtdevsw != NULL) {
 		sc->txtdevsw->restore(sc->txtdev_cookie);
 	}
+
+	if (sc->txtdevsw->setmode(sc->txtdev_cookie, &sctxtmode) != 0) {
+		lwkt_reltoken(&tty_token);
+		kprintf("sc0: setting txtdev mode to %dx%d failed\n",
+		    sctxtmode.txt_columns, sctxtmode.txt_rows);
+		return 1;
+	}
+	sc->txtdevsw->setcursor(sc->txtdev_cookie, 5, 40);
 
 	lwkt_reltoken(&tty_token);
 
@@ -2374,7 +2387,9 @@ scinit(int unit, int flags)
 	lwkt_gettoken(&tty_token);
 	/* extract the hardware cursor location and hide the cursor for now */
 	(*vidsw[sc->adapter]->read_hw_cursor)(sc->adp, &col, &row);
-	(*vidsw[sc->adapter]->set_hw_cursor)(sc->adp, -1, -1);
+//	(*vidsw[sc->adapter]->set_hw_cursor)(sc->adp, -1, -1);
+	if (sc->txtdevsw != NULL)
+	    sc->txtdevsw->setcursor(sc->txtdev_cookie, -1, -1);
 	lwkt_reltoken(&tty_token);
 
 	/* set up the first console */

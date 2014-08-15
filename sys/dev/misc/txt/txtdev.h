@@ -42,7 +42,7 @@ struct txtmode {
 
 typedef int txtdev_getmode(void *cookie, struct txtmode *mode);
 typedef int txtdev_setmode(void *cookie, struct txtmode *mode);
-typedef int txtdev_putchars(void *cookie, int col, int row, uint8_t *buf,
+typedef int txtdev_putchars(void *cookie, int col, int row, uint16_t *buf,
 			    int len);
 typedef int txtdev_setcursor(void *cookie, int col, int row);
 typedef char *txtdev_getname(void *cookie);
