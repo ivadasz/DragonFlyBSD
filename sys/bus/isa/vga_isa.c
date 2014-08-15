@@ -30,7 +30,6 @@
 
 #include "opt_vga.h"
 #include "opt_fb.h"
-#include "opt_syscons.h"	/* should be removed in the future, XXX */
 
 #include <sys/param.h>
 #include <sys/systm.h>

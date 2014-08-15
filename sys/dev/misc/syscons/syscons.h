@@ -153,6 +153,9 @@ typedef struct sc_softc {
 	int		keyboard;		/* -1 if unavailable */
 	struct keyboard	*kbd;
 
+	void		*txtdev_cookie;
+	struct txtdev_sw *txtdevsw;
+
 	int		adapter;
 	struct video_adapter *adp;
 	int		initial_mode;		/* initial video mode */
@@ -402,6 +405,8 @@ typedef struct {
 
 /* syscons.c */
 int		sc_probe_unit(int unit, int flags);
+int		sc_set_txtdev(void *cookie, struct txtdev_sw *sw);
+int		sc_replace_txtdev(void *cookie, struct txtdev_sw *sw, void *oldcookie);
 
 int		set_mode(scr_stat *scp);
 

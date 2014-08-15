@@ -31,7 +31,8 @@
 
 enum {
 	TXTDEV_IS_EARLY = 1,
-	TXTDEV_DROP_EARLY = 2,
+	TXTDEV_IS_VGA = 2,
+	TXTDEV_REPLACE_VGA = 4,
 };
 
 struct txtmode {

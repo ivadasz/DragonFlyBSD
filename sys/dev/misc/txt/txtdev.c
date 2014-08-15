@@ -37,18 +37,32 @@
 
 #include "txtdev.h"
 
+int	sc_set_txtdev(void *cookie, struct txtdev_sw *sw);
+int	sc_replace_txtdev(void *cookie, struct txtdev_sw *sw, void *oldcookie);
+
 static int myflags = 0;
 static void *mycookie = NULL;
 static struct txtdev_sw *mysw = NULL;
 
+/* XXX needs a corresponding unregister_txtdev method */
 int
 register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 {
-	if ((myflags & TXTDEV_IS_EARLY) != 0 &&
-	    (how & TXTDEV_DROP_EARLY) != 0) {
-		mycookie = NULL;
-		mysw = NULL;
-		myflags = 0;
+	void *oldcookie = mycookie;
+	int replacing = 0;
+
+	if (sw == NULL)
+		return 1;
+
+	/* Only allow replacing early attachements */
+	if ((myflags & TXTDEV_IS_EARLY) != 0) {
+		if ((myflags & TXTDEV_IS_VGA) != 0 &&
+		    (how & TXTDEV_REPLACE_VGA) != 0) {
+			mycookie = NULL;
+			mysw = NULL;
+			myflags = 0;
+			replacing = 1;
+		}
 	}
 
 	if (mycookie != NULL || mysw != NULL)
@@ -61,7 +75,10 @@ register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 	char *dummy = "Hallo, World";
 	mysw->putchars(mycookie, 20, 10, dummy, strlen(dummy));
 
-	/* XXX Register with syscons */
+	if (replacing)
+		sc_replace_txtdev(mycookie, mysw, oldcookie);
+	else
+		sc_set_txtdev(mycookie, mysw);
 
 	return 0;
 }

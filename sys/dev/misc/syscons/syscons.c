@@ -67,6 +67,7 @@
 #include <dev/misc/kbd/kbdreg.h>
 #include <dev/video/fb/fbreg.h>
 #include "syscons.h"
+#include "../txt/txtdev.h"
 
 #define COLD 0
 #define WARM 1
@@ -375,6 +376,78 @@ sc_probe_unit(int unit, int flags)
     sckbdprobe(unit, flags, FALSE);
 
     return 0;
+}
+
+int
+sc_set_txtdev(void *cookie, struct txtdev_sw *sw)
+{
+	sc_softc_t *sc;
+
+	lwkt_gettoken(&tty_token);
+	sc = sc_get_softc(0, (sc_console_unit == 0) ? SC_KERNEL_CONSOLE : 0);
+	if (sc == NULL) {
+		lwkt_reltoken(&tty_token);
+		kprintf("%s: sc_get_softc(%d, %d) returned NULL\n", __func__,
+		    0, (sc_console_unit == 0) ? SC_KERNEL_CONSOLE : 0);
+		return 1;
+	}
+
+	if (sc->txtdevsw != NULL) {
+		lwkt_reltoken(&tty_token);
+		return 1;
+	}
+
+	sc->txtdev_cookie = cookie;
+	sc->txtdevsw = sw;
+
+	kprintf("sc0: txtdev is now set to \"%s\"\n",
+	    sc->txtdevsw->getname(sc->txtdev_cookie));
+
+	/* XXX */
+
+	if (sc->txtdevsw != NULL) {
+		sc->txtdevsw->restore(sc->txtdev_cookie);
+	}
+
+	lwkt_reltoken(&tty_token);
+
+	return 0;
+}
+
+int
+sc_replace_txtdev(void *cookie, struct txtdev_sw *sw, void *oldcookie)
+{
+	sc_softc_t *sc;
+
+	lwkt_gettoken(&tty_token);
+	sc = sc_get_softc(0, (sc_console_unit == 0) ? SC_KERNEL_CONSOLE : 0);
+	if (sc == NULL) {
+		lwkt_reltoken(&tty_token);
+		kprintf("%s: sc_get_softc(%d, %d) returned NULL\n", __func__,
+		    0, (sc_console_unit == 0) ? SC_KERNEL_CONSOLE : 0);
+		return 1;
+	}
+
+	if (sc->txtdevsw != NULL && sc->txtdev_cookie != oldcookie) {
+		lwkt_reltoken(&tty_token);
+		return 1;
+	}
+
+	sc->txtdev_cookie = cookie;
+	sc->txtdevsw = sw;
+
+	kprintf("sc0: txtdev is now set to \"%s\"\n",
+	    sc->txtdevsw->getname(sc->txtdev_cookie));
+
+	/* XXX */
+
+	if (sc->txtdevsw != NULL) {
+		sc->txtdevsw->restore(sc->txtdev_cookie);
+	}
+
+	lwkt_reltoken(&tty_token);
+
+	return 0;
 }
 
 /* probe video adapters, return TRUE if found */ 

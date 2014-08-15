@@ -57,6 +57,7 @@
 
 #include "fbreg.h"
 #include "vgareg.h"
+#include "../../misc/txt/txtdev.h"
 
 #ifndef VGA_DEBUG
 #define VGA_DEBUG		0
@@ -83,11 +84,27 @@ vga_probe_unit(int unit, video_adapter_t *buf, int flags)
 	return 0;
 }
 
+static txtdev_getmode vga_txt_getmode;
+static txtdev_setmode vga_txt_setmode;
+static txtdev_putchars vga_txt_putchars;
+static txtdev_setcursor vga_txt_setcursor;
+static txtdev_getname vga_txt_getname;
+static txtdev_restore vga_txt_restore;
+
+struct txtdev_sw txtsw = {
+	vga_txt_getmode,
+	vga_txt_setmode,
+	vga_txt_putchars,
+	vga_txt_setcursor,
+	vga_txt_getname,
+	vga_txt_restore
+};
+
 int
 vga_attach_unit(int unit, vga_softc_t *sc, int flags)
 {
 	video_switch_t *sw;
-	int error;
+	int error, val;
 
 	sw = vid_get_switch(VGA_DRIVER_NAME);
 	if (sw == NULL)
@@ -96,7 +113,17 @@ vga_attach_unit(int unit, vga_softc_t *sc, int flags)
 	error = (*sw->probe)(unit, &sc->adp, NULL, flags);
 	if (error)
 		return error;
-	return (*sw->init)(unit, sc->adp, flags);
+	val = (*sw->init)(unit, sc->adp, flags);
+
+	if (register_txtdev((void *)&sc->adp, &txtsw,
+	    TXTDEV_REPLACE_VGA | TXTDEV_IS_VGA) == 0) {
+		kprintf("registered with txtdev\n");
+		/* XXX successfully registered with txtdev */
+	} else {
+		/* XXX failed registering with txtdev */
+	}
+
+	return val;
 }
 
 /* cdev driver functions */
@@ -438,6 +465,13 @@ vga_configure(int flags)
     }
     if (vga_sub_configure != NULL)
 	(*vga_sub_configure)(flags);
+
+    if (register_txtdev((void *)&biosadapter, &txtsw,
+	TXTDEV_IS_EARLY | TXTDEV_IS_VGA) == 0) {
+	/* Successfully registered with txtdev */
+    } else {
+	/* Failed registering with txtdev */
+    }
 
     return 1;
 }
@@ -2325,4 +2359,50 @@ vga_diag(video_adapter_t *adp, int level)
     hexdump(mp, V_MODE_PARAM_SIZE, NULL, HD_OMIT_CHARS | HD_OMIT_COUNT);
 
     return 0;
+}
+
+static int
+vga_txt_getmode(void *cookie, struct txtmode *mode)
+{
+	/* Default VGA textmode */
+	mode->txt_columns = 80;
+	mode->txt_rows = 25;
+
+	return 0;
+}
+
+static int
+vga_txt_setmode(void *cookie, struct txtmode *mode)
+{
+	return 1;
+}
+
+static int
+vga_txt_putchars(void *cookie, int col, int row, uint8_t *buf, int len)
+{
+	__unused video_adapter_t *adp = (video_adapter_t *)cookie;
+
+	/* XXX */
+
+	return 0;
+}
+
+static int
+vga_txt_setcursor(void *cookie, int col, int row)
+{
+	video_adapter_t *adp = (video_adapter_t *)cookie;
+
+	return vga_set_hw_cursor(adp, col, row);
+}
+
+static char *
+vga_txt_getname(void *cookie)
+{
+	return "vga";
+}
+
+static void
+vga_txt_restore(void *cookie)
+{
+	/* Nothing */
 }
