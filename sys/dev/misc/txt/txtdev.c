@@ -72,13 +72,6 @@ register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 	mysw = sw;
 	myflags = how;
 
-	char *dummy = "Hallo, World";
-	uint16_t buf[128];
-	int i;
-	for (i = 0; i < strlen(dummy); i++)
-		buf[i] = 0x2600 | (dummy[i] & 0x00ff);
-	mysw->putchars(mycookie, 5, 30, buf, strlen(dummy));
-
 	if (replacing)
 		sc_replace_txtdev(mycookie, mysw, oldcookie);
 	else

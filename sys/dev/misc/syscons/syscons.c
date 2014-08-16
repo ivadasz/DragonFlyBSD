@@ -405,22 +405,21 @@ sc_set_txtdev(void *cookie, struct txtdev_sw *sw)
 	sc->txtdev_cookie = cookie;
 	sc->txtdevsw = sw;
 
-	kprintf("sc0: txtdev is now set to \"%s\"\n",
-	    sc->txtdevsw->getname(sc->txtdev_cookie));
-
 	/* XXX */
 
 	if (sc->txtdevsw != NULL) {
+		kprintf("sc0: txtdev is now set to \"%s\"\n",
+		    sc->txtdevsw->getname(sc->txtdev_cookie));
 		sc->txtdevsw->restore(sc->txtdev_cookie);
+		if (sc->txtdevsw->setmode(sc->txtdev_cookie, &sctxtmode) != 0) {
+			lwkt_reltoken(&tty_token);
+			kprintf("sc0: setting txtdev mode to %dx%d failed\n",
+			    sctxtmode.txt_columns, sctxtmode.txt_rows);
+			return 1;
+		}
+	} else {
+		kprintf("sc0: txtdev is now set to NULL\n");
 	}
-
-	if (sc->txtdevsw->setmode(sc->txtdev_cookie, &sctxtmode) != 0) {
-		lwkt_reltoken(&tty_token);
-		kprintf("sc0: setting txtdev mode to %dx%d failed\n",
-		    sctxtmode.txt_columns, sctxtmode.txt_rows);
-		return 1;
-	}
-	sc->txtdevsw->setcursor(sc->txtdev_cookie, 5, 40);
 
 	lwkt_reltoken(&tty_token);
 
@@ -449,13 +448,20 @@ sc_replace_txtdev(void *cookie, struct txtdev_sw *sw, void *oldcookie)
 	sc->txtdev_cookie = cookie;
 	sc->txtdevsw = sw;
 
-	kprintf("sc0: txtdev is now set to \"%s\"\n",
-	    sc->txtdevsw->getname(sc->txtdev_cookie));
-
 	/* XXX */
 
 	if (sc->txtdevsw != NULL) {
+		kprintf("sc0: txtdev is now set to \"%s\"\n",
+		    sc->txtdevsw->getname(sc->txtdev_cookie));
 		sc->txtdevsw->restore(sc->txtdev_cookie);
+		if (sc->txtdevsw->setmode(sc->txtdev_cookie, &sctxtmode) != 0) {
+			lwkt_reltoken(&tty_token);
+			kprintf("sc0: setting txtdev mode to %dx%d failed\n",
+			    sctxtmode.txt_columns, sctxtmode.txt_rows);
+			return 1;
+		}
+	} else {
+		kprintf("sc0: txtdev is now set to NULL\n");
 	}
 
 	lwkt_reltoken(&tty_token);
@@ -760,7 +766,6 @@ scclose(struct dev_close_args *ap)
 	}
 	else {
 	    sc_vtb_destroy(&scp->vtb);
-	    sc_vtb_destroy(&scp->scr);
 	    sc_free_history_buffer(scp, scp->ysize);
 	    SC_STAT(dev) = NULL;
 	    kfree(scp, M_SYSCONS);
@@ -2249,9 +2254,6 @@ exchange_scr(sc_softc_t *sc)
     scp = sc->cur_scp = sc->new_scp;
     if (sc->old_scp->mode != scp->mode || ISUNKNOWNSC(sc->old_scp))
 	set_mode(scp);
-    else
-	sc_vtb_init(&scp->scr, VTB_FRAMEBUFFER, scp->xsize, scp->ysize,
-		    (void *)sc->adp->va_window, FALSE);
     sc_move_cursor(scp, scp->xpos, scp->ypos);
     if (!ISGRAPHSC(scp))
 	sc_set_cursor_image(scp);
@@ -2420,10 +2422,12 @@ scinit(int unit, int flags)
 	sc->cur_scp = scp;
 
 	/* copy screen to temporary buffer */
-	sc_vtb_init(&scp->scr, VTB_FRAMEBUFFER, scp->xsize, scp->ysize,
-		    (void *)scp->sc->adp->va_window, FALSE);
-	if (ISTEXTSC(scp))
-	    sc_vtb_copy(&scp->scr, 0, &scp->vtb, 0, scp->xsize*scp->ysize);
+	if (ISTEXTSC(scp)) {
+	    if (sc->txtdevsw != NULL) {
+		sc->txtdevsw->putchars(sc->txtdev_cookie, 0, 0,
+		    scp->vtb.vtb_buffer, scp->xsize * scp->ysize);
+	    }
+	}
 
 	/* move cursors to the initial positions */
 	if (col >= scp->xsize)
@@ -2599,7 +2603,6 @@ init_scp(sc_softc_t *sc, int vty, scr_stat *scp)
 	scp->ysize = info.vi_height;
     }
     sc_vtb_init(&scp->vtb, VTB_MEMORY, 0, 0, NULL, FALSE);
-    sc_vtb_init(&scp->scr, VTB_FRAMEBUFFER, 0, 0, NULL, FALSE);
     scp->xpos = scp->ypos = 0;
     scp->start = scp->xsize * scp->ysize - 1;
     scp->end = 0;
@@ -3032,8 +3035,7 @@ set_mode(scr_stat *scp)
 
     /* setup video hardware for the given mode */
     (*vidsw[scp->sc->adapter]->set_mode)(scp->sc->adp, scp->mode);
-    sc_vtb_init(&scp->scr, VTB_FRAMEBUFFER, scp->xsize, scp->ysize,
-		(void *)scp->sc->adp->va_window, FALSE);
+    /* XXX scp->sc->adp->va_window could have changed */
 
     sc_set_border(scp, scp->border);
     sc_set_cursor_image(scp);

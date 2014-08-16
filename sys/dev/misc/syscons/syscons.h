@@ -112,7 +112,7 @@ typedef struct sc_vtb {
 	int		vtb_type;
 #define VTB_INVALID	0
 #define VTB_MEMORY	1
-#define VTB_FRAMEBUFFER	2
+//#define VTB_FRAMEBUFFER	2
 #define VTB_RINGBUFFER	3
 	int		vtb_cols;
 	int		vtb_rows;
@@ -192,7 +192,6 @@ typedef struct scr_stat {
 	int		index;			/* index of this vty */
 	struct sc_softc *sc;			/* pointer to softc */
 	struct sc_rndr_sw *rndr;		/* renderer */
-	sc_vtb_t	scr;
 	sc_vtb_t	vtb;
 
 	int 		xpos;			/* current X position */

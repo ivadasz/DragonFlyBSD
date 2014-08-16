@@ -102,10 +102,6 @@ sc_vtb_init(sc_vtb_t *vtb, int type, int cols, int rows, void *buf, int wait)
 			vtb->vtb_flags |= VTB_VALID;
 		}
 		break;
-	case VTB_FRAMEBUFFER:
-		vtb->vtb_buffer = buf;
-		vtb->vtb_flags |= VTB_VALID;
-		break;
 	default:
 		break;
 	}
@@ -145,37 +141,25 @@ sc_vtb_size(int cols, int rows)
 int
 sc_vtb_getc(sc_vtb_t *vtb, int at)
 {
-	if (vtb->vtb_type == VTB_FRAMEBUFFER)
-		return (readw(vtb->vtb_buffer + at) & 0x00ff);
-	else
-		return (*(vtb->vtb_buffer + at) & 0x00ff);
+	return (*(vtb->vtb_buffer + at) & 0x00ff);
 }
 
 int
 sc_vtb_geta(sc_vtb_t *vtb, int at)
 {
-	if (vtb->vtb_type == VTB_FRAMEBUFFER)
-		return (readw(vtb->vtb_buffer + at) & 0xff00);
-	else
-		return (*(vtb->vtb_buffer + at) & 0xff00);
+	return (*(vtb->vtb_buffer + at) & 0xff00);
 }
 
 void
 sc_vtb_putc(sc_vtb_t *vtb, int at, int c, int a)
 {
-	if (vtb->vtb_type == VTB_FRAMEBUFFER)
-		writew(vtb->vtb_buffer + at, a | c);
-	else
-		*(vtb->vtb_buffer + at) = a | c;
+	*(vtb->vtb_buffer + at) = a | c;
 }
 
 uint16_t *
 sc_vtb_putchar(sc_vtb_t *vtb, uint16_t *p, int c, int a)
 {
-	if (vtb->vtb_type == VTB_FRAMEBUFFER)
-		writew(p, a | c);
-	else
-		*p = a | c;
+	*p = a | c;
 	return (p + 1);
 }
 
@@ -188,26 +172,14 @@ sc_vtb_pos(sc_vtb_t *vtb, int pos, int offset)
 void
 sc_vtb_clear(sc_vtb_t *vtb, int c, int attr)
 {
-	if (vtb->vtb_type == VTB_FRAMEBUFFER)
-		fillw_io(attr | c, vtb->vtb_buffer, vtb->vtb_size);
-	else
-		fillw(attr | c, vtb->vtb_buffer, vtb->vtb_size);
+	fillw(attr | c, vtb->vtb_buffer, vtb->vtb_size);
 }
 
 void
 sc_vtb_copy(sc_vtb_t *vtb1, int from, sc_vtb_t *vtb2, int to, int count)
 {
-	/* XXX if both are VTB_VRAMEBUFFER... */
-	if (vtb2->vtb_type == VTB_FRAMEBUFFER) {
-		sc_vtb_bcopy(vtb1->vtb_buffer + from, vtb2->vtb_buffer + to,
-			   count*sizeof(uint16_t));
-	} else if (vtb1->vtb_type == VTB_FRAMEBUFFER) {
-		sc_vtb_bcopy(vtb1->vtb_buffer + from, vtb2->vtb_buffer + to,
-			     count*sizeof(uint16_t));
-	} else {
-		sc_vtb_bcopy(vtb1->vtb_buffer + from, vtb2->vtb_buffer + to,
-		      count*sizeof(uint16_t));
-	}
+	sc_vtb_bcopy(vtb1->vtb_buffer + from, vtb2->vtb_buffer + to,
+	      count*sizeof(uint16_t));
 }
 
 void
@@ -220,15 +192,8 @@ sc_vtb_append(sc_vtb_t *vtb1, int from, sc_vtb_t *vtb2, int count)
 
 	while (count > 0) {
 		len = imin(count, vtb2->vtb_size - vtb2->vtb_tail);
-		if (vtb1->vtb_type == VTB_FRAMEBUFFER) {
-			sc_vtb_bcopy(vtb1->vtb_buffer + from,
-				     vtb2->vtb_buffer + vtb2->vtb_tail,
-				     len*sizeof(uint16_t));
-		} else {
-			sc_vtb_bcopy(vtb1->vtb_buffer + from,
-			      vtb2->vtb_buffer + vtb2->vtb_tail,
-			      len*sizeof(uint16_t));
-		}
+		sc_vtb_bcopy(vtb1->vtb_buffer + from,
+		      vtb2->vtb_buffer + vtb2->vtb_tail, len*sizeof(uint16_t));
 		from += len;
 		count -= len;
 		vtb2->vtb_tail = vtb_wrap(vtb2, vtb2->vtb_tail, len);
@@ -246,10 +211,7 @@ sc_vtb_erase(sc_vtb_t *vtb, int at, int count, int c, int attr)
 {
 	if (at + count > vtb->vtb_size)
 		count = vtb->vtb_size - at;
-	if (vtb->vtb_type == VTB_FRAMEBUFFER)
-		fillw_io(attr | c, vtb->vtb_buffer + at, count);
-	else
-		fillw(attr | c, vtb->vtb_buffer + at, count);
+	fillw(attr | c, vtb->vtb_buffer + at, count);
 }
 
 void
@@ -261,13 +223,8 @@ sc_vtb_move(sc_vtb_t *vtb, int from, int to, int count)
 		count = vtb->vtb_size - to;
 	if (count <= 0)
 		return;
-	if (vtb->vtb_type == VTB_FRAMEBUFFER) {
-		sc_vtb_bcopy(vtb->vtb_buffer + from, vtb->vtb_buffer + to,
-			 count*sizeof(uint16_t)); 
-	} else {
-		sc_vtb_bcopy(vtb->vtb_buffer + from, vtb->vtb_buffer + to,
-		      count*sizeof(uint16_t));
-	}
+	sc_vtb_bcopy(vtb->vtb_buffer + from, vtb->vtb_buffer + to,
+	      count*sizeof(uint16_t));
 }
 
 void
@@ -279,22 +236,10 @@ sc_vtb_delete(sc_vtb_t *vtb, int at, int count, int c, int attr)
 		count = vtb->vtb_size - at;
 	len = vtb->vtb_size - at - count;
 	if (len > 0) {
-		if (vtb->vtb_type == VTB_FRAMEBUFFER) {
-			sc_vtb_bcopy(vtb->vtb_buffer + at + count,
-				 vtb->vtb_buffer + at,
-				 len*sizeof(uint16_t)); 
-		} else {
-			sc_vtb_bcopy(vtb->vtb_buffer + at + count,
-			      vtb->vtb_buffer + at,
-			      len*sizeof(uint16_t)); 
-		}
+		sc_vtb_bcopy(vtb->vtb_buffer + at + count,
+		      vtb->vtb_buffer + at, len*sizeof(uint16_t)); 
 	}
-	if (vtb->vtb_type == VTB_FRAMEBUFFER)
-		fillw_io(attr | c, vtb->vtb_buffer + at + len,
-			 vtb->vtb_size - at - len);
-	else
-		fillw(attr | c, vtb->vtb_buffer + at + len,
-		      vtb->vtb_size - at - len);
+	fillw(attr | c, vtb->vtb_buffer + at + len, vtb->vtb_size - at - len);
 }
 
 void
@@ -303,18 +248,9 @@ sc_vtb_ins(sc_vtb_t *vtb, int at, int count, int c, int attr)
 	if (at + count > vtb->vtb_size) {
 		count = vtb->vtb_size - at;
 	} else {
-		if (vtb->vtb_type == VTB_FRAMEBUFFER) {
-			sc_vtb_bcopy(vtb->vtb_buffer + at,
-				 vtb->vtb_buffer + at + count,
-				 (vtb->vtb_size - at - count)*sizeof(uint16_t));
-		} else {
-			sc_vtb_bcopy(vtb->vtb_buffer + at,
-			      vtb->vtb_buffer + at + count,
-			      (vtb->vtb_size - at - count)*sizeof(uint16_t)); 
-		}
+		sc_vtb_bcopy(vtb->vtb_buffer + at,
+		      vtb->vtb_buffer + at + count,
+		      (vtb->vtb_size - at - count)*sizeof(uint16_t)); 
 	}
-	if (vtb->vtb_type == VTB_FRAMEBUFFER)
-		fillw_io(attr | c, vtb->vtb_buffer + at, count);
-	else
-		fillw(attr | c, vtb->vtb_buffer + at, count);
+	fillw(attr | c, vtb->vtb_buffer + at, count);
 }
