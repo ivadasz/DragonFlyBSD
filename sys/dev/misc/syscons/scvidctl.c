@@ -46,6 +46,7 @@
 
 #include <dev/video/fb/fbreg.h>
 #include "syscons.h"
+#include "../txt/txtdev.h"
 
 SET_DECLARE(scrndr_set, const sc_renderer_t);
 
@@ -135,6 +136,7 @@ sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode, int xsize, int ysize,
 int
 sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 {
+    sc_softc_t *sc;
     scr_stat *scp;
     video_adapter_t *adp;
     int error, ret;
@@ -144,7 +146,8 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
     scp = SC_STAT(tp->t_dev);
     if (scp == NULL)		/* tp == SC_MOUSE */
 		return ENOIOCTL;
-    adp = scp->sc->adp;
+    sc = (sc_softc_t *)scp->sc;
+    adp = sc->adp;
     if (adp == NULL)		/* shouldn't happen??? */
 		return ENODEV;
 
@@ -259,7 +262,11 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    }
 
 	    /* move hardware cursor out of the way */
-	    (*vidsw[adp->va_index]->set_hw_cursor)(adp, -1, -1);
+//	    (*vidsw[adp->va_index]->set_hw_cursor)(adp, -1, -1);
+	    if (sc->txtdevsw != NULL) {
+		sc->txtdevsw->setcursor(sc->txtdev_cookie, -1, -1,
+		    TXTDEV_CURSOR_HW);
+	    }
 	    /* FALL THROUGH */
 
 	case KD_TEXT1:  	/* switch to TEXT (known) mode */

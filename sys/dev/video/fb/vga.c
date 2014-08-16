@@ -2385,7 +2385,7 @@ vga_txt_putchars(void *cookie, int col, int row, uint16_t *buf, int len)
 {
 	uint16_t *vgabuf;
 	int at, i;
-	__unused video_adapter_t *adp = (video_adapter_t *)cookie;
+	video_adapter_t *adp = (video_adapter_t *)cookie;
 
 	vgabuf = (uint16_t *)adp->va_window;
 	at = row * 80 + col;
@@ -2403,11 +2403,54 @@ vga_txt_putchars(void *cookie, int col, int row, uint16_t *buf, int len)
 }
 
 static int
-vga_txt_setcursor(void *cookie, int col, int row)
+vga_txt_setcursor(void *cookie, int col, int row, int mode)
 {
+	static uint16_t saveunder = 0x0000;
+	static int savepos = 0;
+	uint16_t *vgabuf;
 	video_adapter_t *adp = (video_adapter_t *)cookie;
+	int a, c, flip = 0, on;
+	uint16_t val;
 
-	return vga_set_hw_cursor(adp, col, row);
+	vgabuf = (uint16_t *)adp->va_window;
+	on = col != -1 || row != -1;
+
+	switch (mode) {
+	case TXTDEV_CURSOR_HW:
+		return vga_set_hw_cursor(adp, col, row);
+	case TXTDEV_CURSOR_FLIPCHAR:
+		flip = 1;
+		/* Fallthrough */
+	case TXTDEV_CURSOR_CHAR:
+		if (on) {
+			saveunder = readw(&vgabuf[row * 80 + col]);
+			savepos = row * 80 + col;
+		} else {
+			col = savepos % 80;
+			row = savepos / 80;
+		}
+		a = saveunder & 0xff00;
+		c = saveunder & 0x00ff;
+		if (on) {
+			if ((a & 0x7000) == 0x7000) {
+				a &= 0x8f00;
+				if ((a & 0x0700) == 0)
+					a |= 0x0700;
+			} else {
+				a |= 0x7000;
+				if ((a & 0x0700) == 0x0700)
+					a &= 0xf000;
+			}
+		}
+		if (flip)
+			a = (a & 0x8800)
+				| ((a & 0x7000) >> 4) | ((a & 0x0700) << 4);
+		val = c | a;
+		writew(&vgabuf[row * 80 + col], val);
+		return 0;
+	default:
+		return 1;
+	}
 }
 
 static char *

@@ -35,6 +35,12 @@ enum {
 	TXTDEV_REPLACE_VGA = 4,
 };
 
+enum {
+	TXTDEV_CURSOR_HW,
+	TXTDEV_CURSOR_CHAR,
+	TXTDEV_CURSOR_FLIPCHAR,
+};
+
 struct txtmode {
 	int txt_columns;
 	int txt_rows;
@@ -44,7 +50,7 @@ typedef int txtdev_getmode(void *cookie, struct txtmode *mode);
 typedef int txtdev_setmode(void *cookie, struct txtmode *mode);
 typedef int txtdev_putchars(void *cookie, int col, int row, uint16_t *buf,
 			    int len);
-typedef int txtdev_setcursor(void *cookie, int col, int row);
+typedef int txtdev_setcursor(void *cookie, int col, int row, int mode);
 typedef char *txtdev_getname(void *cookie);
 typedef void txtdev_restore(void *cookie);
 

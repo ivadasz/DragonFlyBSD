@@ -109,13 +109,15 @@ vga_txtdraw(scr_stat *scp, int from, int count, int flip)
 			if (sc->txtdevsw != NULL) {
 				val = c | a;
 				sc->txtdevsw->putchars(sc->txtdev_cookie,
-				    from % 80, from / 80, &val, 1);
+				    from % scp->xsize, from / scp->xsize,
+				    &val, 1);
 			}
 		}
 	} else {
 		if (sc->txtdevsw != NULL) {
 			sc->txtdevsw->putchars(sc->txtdev_cookie,
-			    from % 80, from / 80, scp->vtb.vtb_buffer, count);
+			    from % scp->xsize, from / scp->xsize,
+			    &scp->vtb.vtb_buffer[from], count);
 		}
 //		sc_vtb_copy(&scp->vtb, from, &scp->scr, from, count);
 	}
@@ -131,89 +133,37 @@ vga_txtcursor_shape(scr_stat *scp, int blink)
 }
 
 static void
-draw_txtcharcursor(scr_stat *scp, int at, u_short c, u_short a, int flip)
-{
-	sc_softc_t *sc = (sc_softc_t *)scp->sc;
-	uint16_t val;
-
-	scp->cursor_saveunder_char = c;
-	scp->cursor_saveunder_attr = a;
-
-	if ((a & 0x7000) == 0x7000) {
-		a &= 0x8f00;
-		if ((a & 0x0700) == 0)
-			a |= 0x0700;
-	} else {
-		a |= 0x7000;
-		if ((a & 0x0700) == 0x0700)
-			a &= 0xf000;
-	}
-	if (flip)
-		a = (a & 0x8800)
-			| ((a & 0x7000) >> 4) | ((a & 0x0700) << 4);
-//	sc_vtb_putc(&scp->scr, at, c, a);
-	val = c | a;
-	if (sc->txtdevsw != NULL) {
-		sc->txtdevsw->putchars(sc->txtdev_cookie,
-		    at % 80, at / 80, &val, 1);
-	}
-}
-
-static void
 vga_txtcursor(scr_stat *scp, int at, int blink, int on, int flip)
 {
 	sc_softc_t *sc = (sc_softc_t *)scp->sc;
-//	video_adapter_t *adp;
-	int cursor_attr;
-	uint16_t val;
+	int cursormode;
 
-//	adp = scp->sc->adp;
-	if (blink) {
+	if (blink)
 		scp->status |= VR_CURSOR_BLINK;
-		if (on) {
-			scp->status |= VR_CURSOR_ON;
-			if (sc->txtdevsw != NULL) {
-				sc->txtdevsw->setcursor(sc->txtdev_cookie,
-				    at % scp->xsize, at % scp->ysize);
-			}
-		} else {
-			if (scp->status & VR_CURSOR_ON) {
-				if (sc->txtdevsw != NULL) {
-					sc->txtdevsw->setcursor(
-					    sc->txtdev_cookie, -1, -1);
-				}
-//				(*vidsw[adp->va_index]->set_hw_cursor)(adp,
-//								       -1, -1);
-			}
-			scp->status &= ~VR_CURSOR_ON;
+	else
+		scp->status &= ~VR_CURSOR_BLINK;
+
+	if (scp->status & VR_CURSOR_BLINK)
+		cursormode = TXTDEV_CURSOR_HW;
+	else if (flip)
+		cursormode = TXTDEV_CURSOR_FLIPCHAR;
+	else
+		cursormode = TXTDEV_CURSOR_CHAR;
+
+	if (on) {
+		scp->status |= VR_CURSOR_ON;
+		if (sc->txtdevsw != NULL) {
+			sc->txtdevsw->setcursor(sc->txtdev_cookie,
+			    at % scp->xsize, at / scp->xsize, cursormode);
 		}
 	} else {
-		scp->status &= ~VR_CURSOR_BLINK;
-		if (on) {
-			scp->status |= VR_CURSOR_ON;
-			draw_txtcharcursor(scp, at,
-					   sc_vtb_getc(&scp->vtb, at),
-					   sc_vtb_geta(&scp->vtb, at),
-					   flip);
-		} else {
-			cursor_attr = scp->cursor_saveunder_attr;
-			if (flip)
-				cursor_attr = (cursor_attr & 0x8800)
-					| ((cursor_attr & 0x7000) >> 4)
-					| ((cursor_attr & 0x0700) << 4);
-			if (scp->status & VR_CURSOR_ON) {
-//				sc_vtb_putc(&scp->scr, at,
-//					    scp->cursor_saveunder_char,
-//					    cursor_attr);
-				val = scp->cursor_saveunder_char | cursor_attr;
-				if (sc->txtdevsw != NULL) {
-					sc->txtdevsw->putchars(
-					    sc->txtdev_cookie,
-					    at % 80, at / 80, &val, 1);
-				}
+		if (scp->status & VR_CURSOR_ON) {
+			if (sc->txtdevsw != NULL) {
+				sc->txtdevsw->setcursor(sc->txtdev_cookie,
+				    -1, -1, cursormode);
 			}
-			scp->status &= ~VR_CURSOR_ON;
 		}
+		scp->status &= ~VR_CURSOR_ON;
 	}
 }
 

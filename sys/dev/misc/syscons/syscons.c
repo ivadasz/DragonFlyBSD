@@ -2391,7 +2391,8 @@ scinit(int unit, int flags)
 	(*vidsw[sc->adapter]->read_hw_cursor)(sc->adp, &col, &row);
 //	(*vidsw[sc->adapter]->set_hw_cursor)(sc->adp, -1, -1);
 	if (sc->txtdevsw != NULL)
-	    sc->txtdevsw->setcursor(sc->txtdev_cookie, -1, -1);
+	    sc->txtdevsw->setcursor(sc->txtdev_cookie, -1, -1,
+		TXTDEV_CURSOR_HW);
 	lwkt_reltoken(&tty_token);
 
 	/* set up the first console */
