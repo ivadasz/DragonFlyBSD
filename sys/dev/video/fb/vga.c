@@ -2403,25 +2403,21 @@ vga_txt_putchars(void *cookie, int col, int row, uint16_t *buf, int len)
 }
 
 static int
-vga_txt_setcursor(void *cookie, int col, int row, int mode)
+vga_txt_setcursor(void *cookie, int col, int row, int flip, int mode)
 {
 	static uint16_t saveunder = 0x0000;
 	static int savepos = 0;
 	uint16_t *vgabuf;
 	video_adapter_t *adp = (video_adapter_t *)cookie;
-	int a, c, flip = 0, on;
+	int a, c, on;
 	uint16_t val;
-
-	vgabuf = (uint16_t *)adp->va_window;
-	on = col != -1 || row != -1;
 
 	switch (mode) {
 	case TXTDEV_CURSOR_HW:
 		return vga_set_hw_cursor(adp, col, row);
-	case TXTDEV_CURSOR_FLIPCHAR:
-		flip = 1;
-		/* Fallthrough */
 	case TXTDEV_CURSOR_CHAR:
+		on = col != -1 || row != -1;
+		vgabuf = (uint16_t *)adp->va_window;
 		if (on) {
 			saveunder = readw(&vgabuf[row * 80 + col]);
 			savepos = row * 80 + col;

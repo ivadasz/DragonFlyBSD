@@ -210,8 +210,6 @@ typedef struct scr_stat {
 
 	int		cursor_pos;		/* cursor buffer position */
 	int		cursor_oldpos;		/* cursor old buffer position */
-	u_short		cursor_saveunder_char;	/* saved char under cursor */
-	u_short		cursor_saveunder_attr;	/* saved attr under cursor */
 
 	u_short		bell_duration;
 	u_short		bell_pitch;
@@ -316,19 +314,13 @@ extern struct linker_set scterm_set;
 		       SI_SUB_DRIVERS, SI_ORDER_MIDDLE)
 
 /* renderer function table */
-typedef void	vr_draw_border_t(scr_stat *scp, int color);
 typedef void	vr_draw_t(scr_stat *scp, int from, int count, int flip);
-typedef void	vr_set_cursor_t(scr_stat *scp, int blink);
 typedef void	vr_draw_cursor_t(scr_stat *scp, int at, int blink,
 				 int on, int flip);
-typedef void	vr_blink_cursor_t(scr_stat *scp, int at, int flip);
 
 typedef struct sc_rndr_sw {
-	vr_draw_border_t	*draw_border;
 	vr_draw_t		*draw;
-	vr_set_cursor_t		*set_cursor;
 	vr_draw_cursor_t	*draw_cursor;
-	vr_blink_cursor_t	*blink_cursor;
 } sc_rndr_sw_t;
 
 typedef struct sc_renderer {
@@ -405,15 +397,13 @@ typedef struct {
 /* syscons.c */
 int		sc_probe_unit(int unit, int flags);
 int		sc_set_txtdev(void *cookie, struct txtdev_sw *sw);
-int		sc_replace_txtdev(void *cookie, struct txtdev_sw *sw, void *oldcookie);
+int		sc_replace_txtdev(void *cookie, struct txtdev_sw *sw,
+				  void *oldcookie);
 
 int		set_mode(scr_stat *scp);
 
-void		sc_set_border(scr_stat *scp, int color);
-
 void		sc_draw_cursor_image(scr_stat *scp);
 void		sc_remove_cursor_image(scr_stat *scp);
-void		sc_set_cursor_image(scr_stat *scp);
 int		sc_clean_up(scr_stat *scp);
 int		sc_switch_scr(sc_softc_t *sc, u_int next_scr);
 void		sc_alloc_scr_buffer(scr_stat *scp, int wait, int discard);

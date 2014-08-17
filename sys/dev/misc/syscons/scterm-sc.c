@@ -537,8 +537,10 @@ scterm_scan_esc(scr_stat *scp, term_stat *tcp, u_char c)
 		case 'A':   /* set display border color */
 			if (tcp->num_param == 1) {
 				scp->border=tcp->param[0] & 0xff;
+#if 0
 				if (scp == sc->cur_scp)
 					sc_set_border(scp, scp->border);
+#endif
 			}
 			break;
 
@@ -570,7 +572,6 @@ scterm_scan_esc(scr_stat *scp, term_stat *tcp, u_char c)
 			 * Update the cursor in the current console...
 			 */
 			if (!ISGRAPHSC(sc->cur_scp)) {
-				sc_set_cursor_image(sc->cur_scp);
 				sc_draw_cursor_image(sc->cur_scp);
 			}
 			crit_exit();

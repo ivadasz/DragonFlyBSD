@@ -963,7 +963,6 @@ scioctl(struct dev_ioctl_args *ap)
 	 * are affected. Update the cursor in the current console...
 	 */
 	if (!ISGRAPHSC(sc->cur_scp)) {
-	    sc_set_cursor_image(sc->cur_scp);
 	    sc_draw_cursor_image(sc->cur_scp);
 	}
 	syscons_unlock();
@@ -1912,12 +1911,13 @@ scrn_update(scr_stat *scp, int show_cursor)
                 sc_remove_cursor_image(scp);
             sc_draw_cursor_image(scp);
         } else {
-            if (and_region(&s, &e, scp->cursor_pos, scp->cursor_pos))
+            if (and_region(&s, &e, scp->cursor_pos, scp->cursor_pos)) {
 		/* cursor didn't move, but has been overwritten */
 		sc_draw_cursor_image(scp);
-	    else if (scp->sc->flags & SC_BLINK_CURSOR)
+	    } else if (scp->sc->flags & SC_BLINK_CURSOR) {
 		/* if it's a blinking cursor, update it */
-		(*scp->rndr->blink_cursor)(scp, scp->cursor_pos, FALSE);
+//		(*scp->rndr->blink_cursor)(scp, scp->cursor_pos, FALSE);
+	    }
         }
     }
 
@@ -2255,9 +2255,6 @@ exchange_scr(sc_softc_t *sc)
     if (sc->old_scp->mode != scp->mode || ISUNKNOWNSC(sc->old_scp))
 	set_mode(scp);
     sc_move_cursor(scp, scp->xpos, scp->ypos);
-    if (!ISGRAPHSC(scp))
-	sc_set_cursor_image(scp);
-    sc_set_border(scp, scp->border);
 
     /* set up the keyboard for the new screen */
     if (sc->old_scp->kbd_mode != scp->kbd_mode)
@@ -2310,17 +2307,7 @@ update_cursor_image(scr_stat *scp)
     /* assert(scp == scp->sc->cur_scp); */
     ++scp->sc->videoio_in_progress;
     (*scp->rndr->draw_cursor)(scp, scp->cursor_oldpos, blink, FALSE, FALSE);
-    (*scp->rndr->set_cursor)(scp, blink);
     (*scp->rndr->draw_cursor)(scp, scp->cursor_pos, blink, TRUE, FALSE);
-    --scp->sc->videoio_in_progress;
-}
-
-void
-sc_set_cursor_image(scr_stat *scp)
-{
-    /* assert(scp == scp->sc->cur_scp); */
-    ++scp->sc->videoio_in_progress;
-    (*scp->rndr->set_cursor)(scp, scp->sc->flags & SC_BLINK_CURSOR);
     --scp->sc->videoio_in_progress;
 }
 
@@ -2389,9 +2376,8 @@ scinit(int unit, int flags)
 	lwkt_gettoken(&tty_token);
 	/* extract the hardware cursor location and hide the cursor for now */
 	(*vidsw[sc->adapter]->read_hw_cursor)(sc->adp, &col, &row);
-//	(*vidsw[sc->adapter]->set_hw_cursor)(sc->adp, -1, -1);
 	if (sc->txtdevsw != NULL)
-	    sc->txtdevsw->setcursor(sc->txtdev_cookie, -1, -1,
+	    sc->txtdevsw->setcursor(sc->txtdev_cookie, -1, -1, 0,
 		TXTDEV_CURSOR_HW);
 	lwkt_reltoken(&tty_token);
 
@@ -2440,7 +2426,6 @@ scinit(int unit, int flags)
 	scp->cursor_pos = scp->cursor_oldpos = row*scp->xsize + col;
 	i = bios_value.cursor_end - bios_value.cursor_start + 1;
 	if (!ISGRAPHSC(scp)) {
-    	    sc_set_cursor_image(scp);
     	    sc_draw_cursor_image(scp);
 	}
     }
@@ -3038,19 +3023,8 @@ set_mode(scr_stat *scp)
     (*vidsw[scp->sc->adapter]->set_mode)(scp->sc->adp, scp->mode);
     /* XXX scp->sc->adp->va_window could have changed */
 
-    sc_set_border(scp, scp->border);
-    sc_set_cursor_image(scp);
-
     lwkt_reltoken(&tty_token);
     return 0;
-}
-
-void
-sc_set_border(scr_stat *scp, int color)
-{
-    ++scp->sc->videoio_in_progress;
-    (*scp->rndr->draw_border)(scp, color);
-    --scp->sc->videoio_in_progress;
 }
 
 void

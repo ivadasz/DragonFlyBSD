@@ -262,9 +262,8 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    }
 
 	    /* move hardware cursor out of the way */
-//	    (*vidsw[adp->va_index]->set_hw_cursor)(adp, -1, -1);
 	    if (sc->txtdevsw != NULL) {
-		sc->txtdevsw->setcursor(sc->txtdev_cookie, -1, -1,
+		sc->txtdevsw->setcursor(sc->txtdev_cookie, -1, -1, 0,
 		    TXTDEV_CURSOR_HW);
 	    }
 	    /* FALL THROUGH */
@@ -322,8 +321,10 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 
     case KDSBORDER:     	/* set border color of this (virtual) console */
 	scp->border = *data;
+#if 0
 	if (scp == scp->sc->cur_scp)
 	    sc_set_border(scp, scp->border);
+#endif
 	lwkt_reltoken(&tty_token);
 	return 0;
     }
