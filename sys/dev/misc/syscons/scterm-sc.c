@@ -554,8 +554,6 @@ scterm_scan_esc(scr_stat *scp, term_stat *tcp, u_char c)
 
 		case 'C':   /* set cursor type & shape */
 			crit_enter();
-			if (!ISGRAPHSC(sc->cur_scp))
-				sc_remove_cursor_image(sc->cur_scp);
 			if (tcp->num_param == 1) {
 				if (tcp->param[0] & 0x01)
 					sc->flags |= SC_BLINK_CURSOR;
@@ -572,7 +570,7 @@ scterm_scan_esc(scr_stat *scp, term_stat *tcp, u_char c)
 			 * Update the cursor in the current console...
 			 */
 			if (!ISGRAPHSC(sc->cur_scp)) {
-				sc_draw_cursor_image(sc->cur_scp);
+				sc_update_cursor_image(sc->cur_scp, TRUE);
 			}
 			crit_exit();
 			break;

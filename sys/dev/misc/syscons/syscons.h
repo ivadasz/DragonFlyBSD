@@ -315,8 +315,7 @@ extern struct linker_set scterm_set;
 
 /* renderer function table */
 typedef void	vr_draw_t(scr_stat *scp, int from, int count, int flip);
-typedef void	vr_draw_cursor_t(scr_stat *scp, int at, int blink,
-				 int on, int flip);
+typedef void	vr_draw_cursor_t(scr_stat *scp, int at, int blink, int on);
 
 typedef struct sc_rndr_sw {
 	vr_draw_t		*draw;
@@ -402,8 +401,7 @@ int		sc_replace_txtdev(void *cookie, struct txtdev_sw *sw,
 
 int		set_mode(scr_stat *scp);
 
-void		sc_draw_cursor_image(scr_stat *scp);
-void		sc_remove_cursor_image(scr_stat *scp);
+void		sc_update_cursor_image(scr_stat *scp, int on);
 int		sc_clean_up(scr_stat *scp);
 int		sc_switch_scr(sc_softc_t *sc, u_int next_scr);
 void		sc_alloc_scr_buffer(scr_stat *scp, int wait, int discard);

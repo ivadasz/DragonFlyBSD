@@ -263,7 +263,7 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 
 	    /* move hardware cursor out of the way */
 	    if (sc->txtdevsw != NULL) {
-		sc->txtdevsw->setcursor(sc->txtdev_cookie, -1, -1, 0,
+		sc->txtdevsw->setcursor(sc->txtdev_cookie, -1, -1,
 		    TXTDEV_CURSOR_HW);
 	    }
 	    /* FALL THROUGH */

@@ -159,7 +159,6 @@ static void sccnupdate(scr_stat *scp);
 static scr_stat *alloc_scp(sc_softc_t *sc, int vty);
 static void init_scp(sc_softc_t *sc, int vty, scr_stat *scp);
 static timeout_t scrn_timer;
-static int and_region(int *s1, int *e1, int s2, int e2);
 static void scrn_update(scr_stat *scp, int show_cursor);
 
 static void do_switch_scr(sc_softc_t *sc);
@@ -169,7 +168,6 @@ static int signal_vt_acq(scr_stat *scp);
 static int finish_vt_rel(scr_stat *scp, int release);
 static int finish_vt_acq(scr_stat *scp);
 static void exchange_scr(sc_softc_t *sc);
-static void update_cursor_image(scr_stat *scp);
 static int save_kbd_state(scr_stat *scp, int unlock);
 static int update_kbd_state(scr_stat *scp, int state, int mask, int unlock);
 static int update_kbd_leds(scr_stat *scp, int which);
@@ -585,7 +583,7 @@ sc_attach_unit(int unit, int flags)
 
     /* initialize cursor */
     if (!ISGRAPHSC(scp))
-    	update_cursor_image(scp);
+	sc_update_cursor_image(scp, TRUE);
 
     /* get screen update going */
     scrn_timer(sc);
@@ -948,8 +946,6 @@ scioctl(struct dev_ioctl_args *ap)
 
     case CONS_CURSORTYPE:   	/* set cursor type blink/noblink */
 	syscons_lock();
-	if (!ISGRAPHSC(sc->cur_scp))
-	    sc_remove_cursor_image(sc->cur_scp);
 	if ((*(int*)data) & 0x01)
 	    sc->flags |= SC_BLINK_CURSOR;
 	else
@@ -963,7 +959,8 @@ scioctl(struct dev_ioctl_args *ap)
 	 * are affected. Update the cursor in the current console...
 	 */
 	if (!ISGRAPHSC(sc->cur_scp)) {
-	    sc_draw_cursor_image(sc->cur_scp);
+	    sc_update_cursor_image(sc->cur_scp, TRUE);
+	    scp->cursor_oldpos = scp->cursor_pos;
 	}
 	syscons_unlock();
 	lwkt_reltoken(&tty_token);
@@ -1609,7 +1606,8 @@ sccnputc(void *private, int c)
 	if (scp->status & BUFFER_SAVED) {
 	    scp->status &= ~BUFFER_SAVED;
 	    scp->status |= CURSOR_ENABLED;
-	    sc_draw_cursor_image(scp);
+	    sc_update_cursor_image(scp, TRUE);
+	    scp->cursor_oldpos = scp->cursor_pos;
 	}
 #if 0
 	tp = VIRTUAL_TTY(scp->sc, scp->index);
@@ -1855,22 +1853,9 @@ scrn_timer(void *arg)
 	callout_reset(&sc->scrn_timer_ch, hz / 25, scrn_timer, sc);
 }
 
-static int
-and_region(int *s1, int *e1, int s2, int e2)
-{
-    if (*e1 < s2 || e2 < *s1)
-	return FALSE;
-    *s1 = imax(*s1, s2);
-    *e1 = imin(*e1, e2);
-    return TRUE;
-}
-
 static void 
 scrn_update(scr_stat *scp, int show_cursor)
 {
-    int s;
-    int e;
-
     /* assert(scp == scp->sc->cur_scp) */
 
     ++scp->sc->videoio_in_progress;
@@ -1902,22 +1887,14 @@ scrn_update(scr_stat *scp, int show_cursor)
 
     /* update cursor image */
     if (scp->status & CURSOR_ENABLED) {
-	s = scp->start;
-	e = scp->end;
         /* did cursor move since last time ? */
         if (scp->cursor_pos != scp->cursor_oldpos) {
             /* do we need to remove old cursor image ? */
-            if (!and_region(&s, &e, scp->cursor_oldpos, scp->cursor_oldpos))
-                sc_remove_cursor_image(scp);
-            sc_draw_cursor_image(scp);
-        } else {
-            if (and_region(&s, &e, scp->cursor_pos, scp->cursor_pos)) {
-		/* cursor didn't move, but has been overwritten */
-		sc_draw_cursor_image(scp);
-	    } else if (scp->sc->flags & SC_BLINK_CURSOR) {
-		/* if it's a blinking cursor, update it */
-//		(*scp->rndr->blink_cursor)(scp, scp->cursor_pos, FALSE);
-	    }
+	    sc_update_cursor_image(scp, TRUE);
+	    scp->cursor_oldpos = scp->cursor_pos;
+        } else  if (scp->sc->flags & SC_BLINK_CURSOR) {
+	    /* if it's a blinking cursor, update it */
+//	    (*scp->rndr->blink_cursor)(scp, scp->cursor_pos, FALSE);
         }
     }
 
@@ -2246,7 +2223,7 @@ exchange_scr(sc_softc_t *sc)
     /* save the current state of video and keyboard */
     sc_move_cursor(sc->old_scp, sc->old_scp->xpos, sc->old_scp->ypos);
     if (!ISGRAPHSC(sc->old_scp))
-	sc_remove_cursor_image(sc->old_scp);
+	sc_update_cursor_image(sc->old_scp, FALSE);
     if (sc->old_scp->kbd_mode == K_XLATE)
 	save_kbd_state(sc->old_scp, TRUE);
 
@@ -2255,6 +2232,8 @@ exchange_scr(sc_softc_t *sc)
     if (sc->old_scp->mode != scp->mode || ISUNKNOWNSC(sc->old_scp))
 	set_mode(scp);
     sc_move_cursor(scp, scp->xpos, scp->ypos);
+    if (!ISGRAPHSC(scp) && (scp->status & CURSOR_ENABLED))
+	sc_update_cursor_image(sc->new_scp, TRUE);
 
     /* set up the keyboard for the new screen */
     if (sc->old_scp->kbd_mode != scp->kbd_mode)
@@ -2277,37 +2256,12 @@ sc_puts(scr_stat *scp, u_char *buf, int len)
 }
 
 void
-sc_draw_cursor_image(scr_stat *scp)
+sc_update_cursor_image(scr_stat *scp, int on)
 {
     /* assert(scp == scp->sc->cur_scp); */
     ++scp->sc->videoio_in_progress;
     (*scp->rndr->draw_cursor)(scp, scp->cursor_pos,
-			      scp->sc->flags & SC_BLINK_CURSOR, TRUE, FALSE);
-    scp->cursor_oldpos = scp->cursor_pos;
-    --scp->sc->videoio_in_progress;
-}
-
-void
-sc_remove_cursor_image(scr_stat *scp)
-{
-    /* assert(scp == scp->sc->cur_scp); */
-    ++scp->sc->videoio_in_progress;
-    (*scp->rndr->draw_cursor)(scp, scp->cursor_oldpos,
-			      scp->sc->flags & SC_BLINK_CURSOR, FALSE, FALSE);
-    --scp->sc->videoio_in_progress;
-}
-
-static void
-update_cursor_image(scr_stat *scp)
-{
-    int blink;
-
-    blink = scp->sc->flags & SC_BLINK_CURSOR;
-
-    /* assert(scp == scp->sc->cur_scp); */
-    ++scp->sc->videoio_in_progress;
-    (*scp->rndr->draw_cursor)(scp, scp->cursor_oldpos, blink, FALSE, FALSE);
-    (*scp->rndr->draw_cursor)(scp, scp->cursor_pos, blink, TRUE, FALSE);
+			      scp->sc->flags & SC_BLINK_CURSOR, on);
     --scp->sc->videoio_in_progress;
 }
 
@@ -2377,7 +2331,7 @@ scinit(int unit, int flags)
 	/* extract the hardware cursor location and hide the cursor for now */
 	(*vidsw[sc->adapter]->read_hw_cursor)(sc->adp, &col, &row);
 	if (sc->txtdevsw != NULL)
-	    sc->txtdevsw->setcursor(sc->txtdev_cookie, -1, -1, 0,
+	    sc->txtdevsw->setcursor(sc->txtdev_cookie, -1, -1,
 		TXTDEV_CURSOR_HW);
 	lwkt_reltoken(&tty_token);
 
@@ -2426,7 +2380,7 @@ scinit(int unit, int flags)
 	scp->cursor_pos = scp->cursor_oldpos = row*scp->xsize + col;
 	i = bios_value.cursor_end - bios_value.cursor_start + 1;
 	if (!ISGRAPHSC(scp)) {
-    	    sc_draw_cursor_image(scp);
+	    sc_update_cursor_image(scp, TRUE);
 	}
     }
 
@@ -2729,7 +2683,7 @@ next_code:
     if (!ISGRAPHSC(scp) && scp->history && scp->status & SLKED) {
 
 	scp->status &= ~CURSOR_ENABLED;
-	sc_remove_cursor_image(scp);
+	sc_update_cursor_image(scp, FALSE);
 
 #ifndef SC_NO_HISTORY
 	if (!(scp->status & BUFFER_SAVED)) {
@@ -2808,7 +2762,8 @@ next_code:
 			    sc_hist_restore(scp);
 			    scp->status &= ~BUFFER_SAVED;
 			    scp->status |= CURSOR_ENABLED;
-			    sc_draw_cursor_image(scp);
+			    sc_update_cursor_image(scp, TRUE);
+			    scp->cursor_oldpos = scp->cursor_pos;
 			}
 			tp = VIRTUAL_TTY(sc, scp->index);
 			if (ISTTYOPEN(tp))

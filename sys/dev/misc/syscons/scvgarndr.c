@@ -102,10 +102,10 @@ vga_txtdraw(scr_stat *scp, int from, int count, int flip)
 }
 
 static void
-vga_txtcursor(scr_stat *scp, int at, int blink, int on, int flip)
+vga_txtcursor(scr_stat *scp, int at, int blink, int on)
 {
 	sc_softc_t *sc = (sc_softc_t *)scp->sc;
-	int cursormode;
+	int cursormode, col, row;
 
 	if (blink) {
 		scp->status |= VR_CURSOR_BLINK;
@@ -117,17 +117,16 @@ vga_txtcursor(scr_stat *scp, int at, int blink, int on, int flip)
 
 	if (on) {
 		scp->status |= VR_CURSOR_ON;
-		if (sc->txtdevsw != NULL) {
-			sc->txtdevsw->setcursor(sc->txtdev_cookie,
-			    at % scp->xsize, at / scp->xsize, flip, cursormode);
-		}
+		col = at % scp->xsize;
+		row = at / scp->xsize;
 	} else {
-		if (scp->status & VR_CURSOR_ON) {
-			if (sc->txtdevsw != NULL) {
-				sc->txtdevsw->setcursor(sc->txtdev_cookie,
-				    -1, -1, flip, cursormode);
-			}
-		}
-		scp->status &= ~VR_CURSOR_ON;
+		col = -1;
+		row = -1;
 	}
+	if (sc->txtdevsw != NULL) {
+		sc->txtdevsw->setcursor(sc->txtdev_cookie,
+		    col, row, cursormode);
+	}
+	if (!on)
+		scp->status &= ~VR_CURSOR_ON;
 }
