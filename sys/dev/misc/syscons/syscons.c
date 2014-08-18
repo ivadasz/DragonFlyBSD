@@ -159,7 +159,7 @@ static void sccnupdate(scr_stat *scp);
 static scr_stat *alloc_scp(sc_softc_t *sc, int vty);
 static void init_scp(sc_softc_t *sc, int vty, scr_stat *scp);
 static timeout_t scrn_timer;
-static void scrn_update(scr_stat *scp, int show_cursor);
+static void scrn_update(scr_stat *scp);
 
 static void do_switch_scr(sc_softc_t *sc);
 static int vt_proc_alive(scr_stat *scp);
@@ -1772,7 +1772,7 @@ sccnupdate(scr_stat *scp)
      */
 
     if (!ISGRAPHSC(scp))
-	scrn_update(scp, TRUE);
+	scrn_update(scp);
 }
 
 static void
@@ -1846,7 +1846,7 @@ scrn_timer(void *arg)
     /* Update the screen */
     scp = sc->cur_scp;		/* cur_scp may have changed... */
     if (!ISGRAPHSC(scp))
-	scrn_update(scp, TRUE);
+	scrn_update(scp);
 
     syscons_unlock();
     if (again)
@@ -1854,7 +1854,7 @@ scrn_timer(void *arg)
 }
 
 static void 
-scrn_update(scr_stat *scp, int show_cursor)
+scrn_update(scr_stat *scp)
 {
     /* assert(scp == scp->sc->cur_scp) */
 
@@ -1863,11 +1863,12 @@ scrn_update(scr_stat *scp, int show_cursor)
 #if 1
     /* debug: XXX */
     if (scp->end >= scp->xsize*scp->ysize) {
-	kprintf("scrn_update(): scp->end %d > size_of_screen!!\n", scp->end);
+	kprintf("%s(): scp->end %d > size_of_screen!!\n",
+	    __func__, scp->end);
 	scp->end = scp->xsize*scp->ysize - 1;
     }
     if (scp->start < 0) {
-	kprintf("scrn_update(): scp->start %d < 0\n", scp->start);
+	kprintf("%s(): scp->start %d < 0\n", __func__, scp->start);
 	scp->start = 0;
     }
 #endif
@@ -1877,20 +1878,11 @@ scrn_update(scr_stat *scp, int show_cursor)
 	(*scp->rndr->draw)(scp, scp->start, scp->end - scp->start + 1, FALSE);
     }
 
-    /* we are not to show the cursor... */
-    if (!show_cursor) {
-        scp->end = 0;
-        scp->start = scp->xsize*scp->ysize - 1;
-	--scp->sc->videoio_in_progress;
-	return;
-    }
-
     /* update cursor image */
     if (scp->status & CURSOR_ENABLED) {
+	sc_update_cursor_image(scp, TRUE);
         /* did cursor move since last time ? */
         if (scp->cursor_pos != scp->cursor_oldpos) {
-            /* do we need to remove old cursor image ? */
-	    sc_update_cursor_image(scp, TRUE);
 	    scp->cursor_oldpos = scp->cursor_pos;
         } else  if (scp->sc->flags & SC_BLINK_CURSOR) {
 	    /* if it's a blinking cursor, update it */
@@ -2232,8 +2224,6 @@ exchange_scr(sc_softc_t *sc)
     if (sc->old_scp->mode != scp->mode || ISUNKNOWNSC(sc->old_scp))
 	set_mode(scp);
     sc_move_cursor(scp, scp->xpos, scp->ypos);
-    if (!ISGRAPHSC(scp) && (scp->status & CURSOR_ENABLED))
-	sc_update_cursor_image(sc->new_scp, TRUE);
 
     /* set up the keyboard for the new screen */
     if (sc->old_scp->kbd_mode != scp->kbd_mode)
