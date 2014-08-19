@@ -88,8 +88,8 @@ MALLOC_DECLARE(M_SYSCONS);
 #define GRAPHICS_MODE	0x08000		/* vty is in a graphics mode */
 //#define PIXEL_MODE	0x10000		/* vty is in a raster text mode */
 //#define SAVER_RUNNING	0x20000		/* screen saver is running */
-#define VR_CURSOR_BLINK	0x40000		/* blinking text cursor */
-#define VR_CURSOR_ON	0x80000		/* text cursor is on */
+//#define VR_CURSOR_BLINK	0x40000		/* blinking text cursor */
+//#define VR_CURSOR_ON	0x80000		/* text cursor is on */
 //#define MOUSE_HIDDEN	0x100000	/* mouse cursor is temporarily hidden */
 
 /* misc defines */
@@ -191,7 +191,6 @@ typedef struct sc_softc {
 typedef struct scr_stat {
 	int		index;			/* index of this vty */
 	struct sc_softc *sc;			/* pointer to softc */
-	struct sc_rndr_sw *rndr;		/* renderer */
 	sc_vtb_t	vtb;
 
 	int 		xpos;			/* current X position */
@@ -272,7 +271,6 @@ typedef struct sc_term_sw {
 	LIST_ENTRY(sc_term_sw)	link;
 	char 			*te_name;	/* name of the emulator */
 	char 			*te_desc;	/* description */
-	char 			*te_renderer;	/* matching renderer */
 	size_t			te_size;	/* size of internal buffer */
 	int			te_refcount;	/* reference counter */
 	sc_term_init_t		*te_init;
@@ -311,66 +309,6 @@ extern struct linker_set scterm_set;
 		NULL,						\
 	};							\
 	DECLARE_MODULE(scterm_##name, scterm_##name##_mod,	\
-		       SI_SUB_DRIVERS, SI_ORDER_MIDDLE)
-
-/* renderer function table */
-typedef void	vr_draw_t(scr_stat *scp, int from, int count, int flip);
-typedef void	vr_draw_cursor_t(scr_stat *scp, int at, int blink, int on);
-
-typedef struct sc_rndr_sw {
-	vr_draw_t		*draw;
-	vr_draw_cursor_t	*draw_cursor;
-} sc_rndr_sw_t;
-
-typedef struct sc_renderer {
-	char			*name;
-	int			model;
-	sc_rndr_sw_t		*rndrsw;
-	LIST_ENTRY(sc_renderer)	link;
-} sc_renderer_t;
-
-extern struct linker_set scrndr_set;
-
-#define RENDERER(name, model, sw, set)				\
-	static struct sc_renderer scrndr_##name##_##model = {	\
-		#name, model, &sw				\
-	};							\
-	DATA_SET(scrndr_set, scrndr_##name##_##model);		\
-	DATA_SET(set, scrndr_##name##_##model)
-
-#define RENDERER_MODULE(name, set)				\
-	SET_DECLARE(set, sc_renderer_t);			\
-	static int						\
-	scrndr_##name##_event(module_t mod, int type, void *data) \
-	{							\
-		sc_renderer_t **list;				\
-		int error = 0;					\
-		switch (type) {					\
-		case MOD_LOAD:					\
-			SET_FOREACH(list, set) {		\
-				error = sc_render_add(*list);	\
-				if (error)			\
-					break;			\
-			}					\
-			break;					\
-		case MOD_UNLOAD:				\
-			SET_FOREACH(list, set) {		\
-				error = sc_render_remove(*list);	\
-				if (error)			\
-					break;			\
-			}					\
-			break;					\
-		default:					\
-			break;					\
-		}						\
-		return error;					\
-	}							\
-	static moduledata_t scrndr_##name##_mod = {		\
-		"scrndr-" #name,				\
-		scrndr_##name##_event,				\
-		NULL,						\
-	};							\
-	DECLARE_MODULE(scrndr_##name, scrndr_##name##_mod, 	\
 		       SI_SUB_DRIVERS, SI_ORDER_MIDDLE)
 
 typedef struct {
@@ -430,10 +368,6 @@ int		sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode,
 				 int xsize, int ysize, int fontsize);
 int		sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data,
 				  int flag);
-
-int		sc_render_add(sc_renderer_t *rndr);
-int		sc_render_remove(sc_renderer_t *rndr);
-sc_rndr_sw_t	*sc_render_match(scr_stat *scp, char *name, int model);
 
 /* scvtb.c */
 void		sc_vtb_init(sc_vtb_t *vtb, int type, int cols, int rows, 

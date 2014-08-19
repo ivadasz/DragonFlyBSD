@@ -89,7 +89,6 @@ static sc_term_sw_t sc_term_sc = {
 	{ NULL, NULL },
 	"sc",					/* emulator name */
 	"syscons terminal",			/* description */
-	"*",					/* matching renderer, any :-) */
 	sizeof(term_stat),			/* softc size */
 	0,
 	scterm_init,

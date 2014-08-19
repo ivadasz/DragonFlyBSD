@@ -48,8 +48,6 @@
 #include "syscons.h"
 #include "../txt/txtdev.h"
 
-SET_DECLARE(scrndr_set, const sc_renderer_t);
-
 int
 sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode, int xsize, int ysize,
 		 int fontsize)
@@ -76,11 +74,6 @@ sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode, int xsize, int ysize,
     if ((error = sc_clean_up(scp))) {
 	crit_exit();
 	return error;
-    }
-
-    if (sc_render_match(scp, scp->sc->adp->va_name, V_INFO_MM_TEXT) == NULL) {
-	crit_exit();
-	return ENODEV;
     }
 
     /* set up scp */
@@ -263,8 +256,9 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 
 	    /* move hardware cursor out of the way */
 	    if (sc->txtdevsw != NULL) {
-		sc->txtdevsw->setcursor(sc->txtdev_cookie, -1, -1,
-		    TXTDEV_CURSOR_HW);
+		sc->txtdevsw->setcurmode(sc->txtdev_cookie,
+		    TXTDEV_CURSOR_BLOCK);
+		sc->txtdevsw->setcursor(sc->txtdev_cookie, -1, -1);
 	    }
 	    /* FALL THROUGH */
 
@@ -331,53 +325,4 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 
     lwkt_reltoken(&tty_token);
     return ENOIOCTL;
-}
-
-static LIST_HEAD(, sc_renderer) sc_rndr_list = 
-	LIST_HEAD_INITIALIZER(sc_rndr_list);
-
-int
-sc_render_add(sc_renderer_t *rndr)
-{
-	LIST_INSERT_HEAD(&sc_rndr_list, rndr, link);
-	return 0;
-}
-
-int
-sc_render_remove(sc_renderer_t *rndr)
-{
-	/*
-	LIST_REMOVE(rndr, link);
-	*/
-	return EBUSY;	/* XXX */
-}
-
-sc_rndr_sw_t *
-sc_render_match(scr_stat *scp, char *name, int model)
-{
-	const sc_renderer_t **list;
-	const sc_renderer_t *p;
-
-	if (!LIST_EMPTY(&sc_rndr_list)) {
-		LIST_FOREACH(p, &sc_rndr_list, link) {
-			if ((strcmp(p->name, name) == 0) &&
-			    (model == p->model)) {
-				scp->status &=
-				    ~(VR_CURSOR_ON | VR_CURSOR_BLINK);
-				return p->rndrsw;
-			}
-		}
-	} else {
-		SET_FOREACH(list, scrndr_set) {
-			p = *list;
-			if ((strcmp(p->name, name) == 0) &&
-			    (model == p->model)) {
-				scp->status &=
-				    ~(VR_CURSOR_ON | VR_CURSOR_BLINK);
-				return p->rndrsw;
-			}
-		}
-	}
-
-	return NULL;
 }

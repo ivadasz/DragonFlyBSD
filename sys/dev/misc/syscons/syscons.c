@@ -151,6 +151,7 @@ static void scinit(int unit, int flags);
 static void scterm(int unit, int flags);
 static void scshutdown(void *arg, int howto);
 static void sc_puts(scr_stat *scp, u_char *buf, int len);
+static void sc_draw_text(scr_stat *scp, int from, int count, int flip);
 static u_int scgetc(sc_softc_t *sc, u_int flags);
 #define SCGETC_CN	1
 #define SCGETC_NONBLOCK	2
@@ -1875,7 +1876,7 @@ scrn_update(scr_stat *scp)
 
     /* update screen image */
     if (scp->start <= scp->end)  {
-	(*scp->rndr->draw)(scp, scp->start, scp->end - scp->start + 1, FALSE);
+	sc_draw_text(scp, scp->start, scp->end - scp->start + 1, FALSE);
     }
 
     /* update cursor image */
@@ -1884,7 +1885,7 @@ scrn_update(scr_stat *scp)
         /* did cursor move since last time ? */
         if (scp->cursor_pos != scp->cursor_oldpos) {
 	    scp->cursor_oldpos = scp->cursor_pos;
-        } else  if (scp->sc->flags & SC_BLINK_CURSOR) {
+        } else if (scp->sc->flags & SC_BLINK_CURSOR) {
 	    /* if it's a blinking cursor, update it */
 //	    (*scp->rndr->blink_cursor)(scp, scp->cursor_pos, FALSE);
         }
@@ -2245,14 +2246,56 @@ sc_puts(scr_stat *scp, u_char *buf, int len)
 
 }
 
+static void
+sc_draw_text(scr_stat *scp, int from, int count, int flip)
+{
+	sc_softc_t *sc = (sc_softc_t *)scp->sc;
+	uint16_t val;
+	int a, c, i;
+
+	if (from + count > scp->xsize*scp->ysize)
+		count = scp->xsize * scp->ysize - from;
+
+	if (flip) {
+		for (i = from; i < from + count; i++) {
+			c = sc_vtb_getc(&scp->vtb, i);
+			a = sc_vtb_geta(&scp->vtb, i);
+			a = (a & 0x8800) | ((a & 0x7000) >> 4)
+			    | ((a & 0x0700) << 4);
+			if (sc->txtdevsw != NULL) {
+				val = c | a;
+				sc->txtdevsw->putchars(sc->txtdev_cookie,
+				    i % scp->xsize, i / scp->xsize, &val, 1);
+			}
+		}
+	} else if (sc->txtdevsw != NULL) {
+		sc->txtdevsw->putchars(sc->txtdev_cookie,
+		    from % scp->xsize, from / scp->xsize,
+		    &scp->vtb.vtb_buffer[from], count);
+	}
+}
+
 void
 sc_update_cursor_image(scr_stat *scp, int on)
 {
-    /* assert(scp == scp->sc->cur_scp); */
-    ++scp->sc->videoio_in_progress;
-    (*scp->rndr->draw_cursor)(scp, scp->cursor_pos,
-			      scp->sc->flags & SC_BLINK_CURSOR, on);
-    --scp->sc->videoio_in_progress;
+	sc_softc_t *sc = (sc_softc_t *)scp->sc;
+	int col, row;
+
+	/* assert(scp == scp->sc->cur_scp); */
+	++sc->videoio_in_progress;
+	if (sc->txtdevsw != NULL) {
+		if (scp->sc->flags & SC_BLINK_CURSOR) {
+			sc->txtdevsw->setcurmode(sc->txtdev_cookie,
+			    TXTDEV_CURSOR_BLINK);
+		} else {
+			sc->txtdevsw->setcurmode(sc->txtdev_cookie,
+			    TXTDEV_CURSOR_BLOCK);
+		}
+		col = on ? scp->cursor_pos % scp->xsize : -1;
+		row = on ? scp->cursor_pos / scp->xsize : -1;
+		sc->txtdevsw->setcursor(sc->txtdev_cookie, col, row);
+	}
+	--sc->videoio_in_progress;
 }
 
 static void
@@ -2320,9 +2363,6 @@ scinit(int unit, int flags)
 	lwkt_gettoken(&tty_token);
 	/* extract the hardware cursor location and hide the cursor for now */
 	(*vidsw[sc->adapter]->read_hw_cursor)(sc->adp, &col, &row);
-	if (sc->txtdevsw != NULL)
-	    sc->txtdevsw->setcursor(sc->txtdev_cookie, -1, -1,
-		TXTDEV_CURSOR_HW);
 	lwkt_reltoken(&tty_token);
 
 	/* set up the first console */
@@ -2538,7 +2578,6 @@ init_scp(sc_softc_t *sc, int vty, scr_stat *scp)
     scp->end = 0;
     scp->tsw = NULL;
     scp->ts = NULL;
-    scp->rndr = NULL;
     scp->border = BG_BLACK;
     scp->kbd_mode = K_XLATE;
     scp->bell_pitch = bios_value.bell_pitch;
@@ -2557,7 +2596,6 @@ int
 sc_init_emulator(scr_stat *scp, char *name)
 {
     sc_term_sw_t *sw;
-    sc_rndr_sw_t *rndr;
     void *p;
     int error;
 
@@ -2569,20 +2607,8 @@ sc_init_emulator(scr_stat *scp, char *name)
 	return EINVAL;
     }
 
-    rndr = NULL;
-    if (strcmp(sw->te_renderer, "*") != 0) {
-	rndr = sc_render_match(scp, sw->te_renderer, scp->model);
-    }
-    if (rndr == NULL) {
-	rndr = sc_render_match(scp, scp->sc->adp->va_name, scp->model);
-	if (rndr == NULL) {
-	    return ENODEV;
-	}
-    }
-
     if (sw == scp->tsw) {
 	error = (*sw->te_init)(scp, &scp->ts, SC_TE_WARM_INIT);
-	scp->rndr = rndr;
 	sc_clear_screen(scp);
 	/* assert(error == 0); */
 	return error;
@@ -2603,7 +2629,6 @@ sc_init_emulator(scr_stat *scp, char *name)
 	kfree(scp->ts, M_SYSCONS);
     scp->tsw = sw;
     scp->ts = p;
-    scp->rndr = rndr;
 
     /* XXX */
     (*sw->te_default_attr)(scp, user_default.std_color, user_default.rev_color);
@@ -3010,8 +3035,8 @@ sc_blink_screen(scr_stat *scp)
 	if (scp->sc->delayed_next_scr)
 	    sc_switch_scr(scp->sc, scp->sc->delayed_next_scr - 1);
     } else {
-	(*scp->rndr->draw)(scp, 0, scp->xsize*scp->ysize,
-			   scp->sc->blink_in_progress & 1);
+	sc_draw_text(scp, 0, scp->xsize*scp->ysize,
+		     scp->sc->blink_in_progress & 1);
 	scp->sc->blink_in_progress--;
     }
 }
@@ -3038,8 +3063,8 @@ blink_screen_callout(void *arg)
 	}
     } else {
 	syscons_lock();
-	(*scp->rndr->draw)(scp, 0, scp->xsize*scp->ysize, 
-			   scp->sc->blink_in_progress & 1);
+	sc_draw_text(scp, 0, scp->xsize*scp->ysize,
+		     scp->sc->blink_in_progress & 1);
 	scp->sc->blink_in_progress--;
 	syscons_unlock();
 	callout_reset(&scp->blink_screen_ch, hz / 10,

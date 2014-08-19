@@ -88,6 +88,7 @@ static txtdev_getmode vga_txt_getmode;
 static txtdev_setmode vga_txt_setmode;
 static txtdev_putchars vga_txt_putchars;
 static txtdev_setcursor vga_txt_setcursor;
+static txtdev_setcurmode vga_txt_setcurmode;
 static txtdev_getname vga_txt_getname;
 static txtdev_restore vga_txt_restore;
 
@@ -96,6 +97,7 @@ struct txtdev_sw txtsw = {
 	vga_txt_setmode,
 	vga_txt_putchars,
 	vga_txt_setcursor,
+	vga_txt_setcurmode,
 	vga_txt_getname,
 	vga_txt_restore
 };
@@ -2364,7 +2366,7 @@ vga_diag(video_adapter_t *adp, int level)
 /* XXX put these values into the struct referenced by cookie */
 static uint16_t saveunder = 0x0000;
 static int savepos = -1;
-static int prevmode = -1;
+static int curmode = TXTDEV_CURSOR_BLINK;
 
 static int
 vga_txt_getmode(void *cookie, struct txtmode *mode)
@@ -2404,51 +2406,43 @@ vga_txt_putchars(void *cookie, int col, int row, uint16_t *buf, int len)
 	for (i = 0; i < len; i++)
 		writew(&vgabuf[at + i], buf[i]);
 
-	if (prevmode == TXTDEV_CURSOR_CHAR && savepos != -1 &&
+	if (curmode == TXTDEV_CURSOR_BLOCK && savepos != -1 &&
 	    savepos >= at && savepos < at + len) {
 		/* charcursor was overwritten, redraw it */
 		int mycol = savepos % 80;
 		int myrow = savepos / 80;
 		savepos = -1;
-		prevmode = -1;
-		vga_txt_setcursor(cookie, mycol, myrow, TXTDEV_CURSOR_CHAR);
+		vga_txt_setcursor(cookie, mycol, myrow);
 	}
 
 	return 0;
 }
 
 static int
-vga_txt_setcursor(void *cookie, int col, int row, int mode)
+vga_txt_setcursor(void *cookie, int col, int row)
 {
 	uint16_t *vgabuf;
 	video_adapter_t *adp = (video_adapter_t *)cookie;
 	int a, c, on;
 	uint16_t val;
 
-	switch (mode) {
-	case TXTDEV_CURSOR_HW:
-		if (prevmode == TXTDEV_CURSOR_CHAR && savepos != -1) {
-		}
+	switch (curmode) {
+	case TXTDEV_CURSOR_BLINK:
 		if (col == -1 || row == -1) {
-			prevmode = -1;
+			savepos = -1;
 		} else {
-			prevmode = TXTDEV_CURSOR_HW;
+			savepos = row * 80 + col;
 		}
-		savepos = -1;
 		return vga_set_hw_cursor(adp, col, row);
-	case TXTDEV_CURSOR_CHAR:
+	case TXTDEV_CURSOR_BLOCK:
 		on = col != -1 || row != -1;
 		vgabuf = (uint16_t *)adp->va_window;
-		if (prevmode == TXTDEV_CURSOR_HW) {
-			/* replacing hw cursor with charcursor */
-			vga_set_hw_cursor(adp, -1, -1);
-			prevmode = -1;
-		} else if (prevmode == TXTDEV_CURSOR_CHAR &&
-		    savepos == row * 80 + col && on) {
+		if (savepos < 0 && !on) {
+			return 0;
+		} else if (savepos == row * 80 + col && on) {
 			/* nothing to do, charcursor is already there */
 			return 0;
-		} else if (prevmode == TXTDEV_CURSOR_CHAR && savepos != -1 &&
-		    savepos != row * 80 + col && on) {
+		} else if (savepos >= 0 && on) {
 			/* moving cursor, remove it from old position */
 			int mycol = savepos % 80;
 			int myrow = savepos / 80;
@@ -2456,18 +2450,15 @@ vga_txt_setcursor(void *cookie, int col, int row, int mode)
 			c = saveunder & 0x00ff;
 			val = c | a;
 			writew(&vgabuf[myrow * 80 + mycol], val);
-			prevmode = -1;
 			savepos = -1;
 		}
 		if (on) {
 			saveunder = readw(&vgabuf[row * 80 + col]);
 			savepos = row * 80 + col;
-			prevmode = TXTDEV_CURSOR_CHAR;
 		} else {
 			col = savepos % 80;
 			row = savepos / 80;
 			savepos = -1;
-			prevmode = -1;
 		}
 		a = saveunder & 0xff00;
 		c = saveunder & 0x00ff;
@@ -2488,6 +2479,32 @@ vga_txt_setcursor(void *cookie, int col, int row, int mode)
 	default:
 		return 1;
 	}
+}
+
+static int
+vga_txt_setcurmode(void *cookie, int mode)
+{
+	int col, row;
+
+	if (curmode == mode)
+		return 0;
+
+	switch (mode) {
+	case TXTDEV_CURSOR_BLINK:
+	case TXTDEV_CURSOR_BLOCK:
+		if (savepos >= 0) {
+			col = savepos % 80;
+			row = savepos / 80;
+			vga_txt_setcursor(cookie, -1, -1);
+			curmode = mode;
+			vga_txt_setcursor(cookie, col, row);
+		}
+		break;
+	default:
+		return 1;
+	}
+
+	return 0;
 }
 
 static char *

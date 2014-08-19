@@ -55,7 +55,6 @@ static sc_term_sw_t sc_term_dumb = {
 	{ NULL, NULL },
 	"dumb",				/* emulator name */
 	"dumb terminal",		/* description */
-	"*",				/* matching renderer */
 	0,				/* softc size */
 	0,
 	dumb_init,
