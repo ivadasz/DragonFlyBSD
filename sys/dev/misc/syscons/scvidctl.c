@@ -92,7 +92,6 @@ sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode, int xsize, int ysize,
     scp->status |= UNKNOWN_MODE;
     scp->status &= ~GRAPHICS_MODE;
     scp->mode = mode;
-    scp->model = V_INFO_MM_TEXT;
     scp->xsize = xsize;
     scp->ysize = ysize;
 

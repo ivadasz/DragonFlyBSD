@@ -217,7 +217,6 @@ typedef struct scr_stat {
 
 	u_char		border;			/* border color */
 	int	 	mode;			/* mode */
-	int		model;			/* memory model */
 	pid_t 		pid;			/* pid of controlling proc */
 	struct proc 	*proc;			/* proc* of controlling proc */
 	struct vt_mode 	smode;			/* switch mode */

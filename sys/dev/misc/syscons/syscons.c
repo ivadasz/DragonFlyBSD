@@ -468,6 +468,11 @@ sc_replace_txtdev(void *cookie, struct txtdev_sw *sw, void *oldcookie)
 	return 0;
 }
 
+/*
+ * XXX Instead call vid_configure from
+ *     /usr/src/sys/platform/pc64/x86_64/machdep.c before calling cninit().
+ *     Then this method can simply check if any txtdev is already registered.
+ */
 /* probe video adapters, return TRUE if found */ 
 static int
 scvidprobe(int unit, int flags, int cons)
