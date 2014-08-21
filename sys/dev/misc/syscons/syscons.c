@@ -923,6 +923,14 @@ scioctl(struct dev_ioctl_args *ap)
     }
 #endif
 
+#ifndef SC_NO_SYSMOUSE
+    error = sc_mouse_ioctl(tp, cmd, data, flag);
+    if (error != ENOIOCTL) {
+	lwkt_reltoken(&tty_token);
+	return error;
+    }
+#endif
+
     scp = SC_STAT(tp->t_dev);
     /* assert(scp != NULL) */
     /* scp is sc_console, if SC_VTY(dev) == SC_CONSOLECTL. */
@@ -1629,7 +1637,6 @@ sccnputc(void *private, int c)
 	    sc_hist_restore(scp);
 	    scp->status &= ~BUFFER_SAVED;
 	    scp->status |= CURSOR_ENABLED;
-	    scp->cursor_oldpos = scp->cursor_pos;
 	}
     }
 #endif /* !SC_NO_HISTORY */

@@ -362,6 +362,12 @@ int		sc_hist_ioctl(struct tty *tp, u_long cmd, caddr_t data,
 			      int flag);
 #endif /* SC_NO_HISTORY */
 
+/* scmouse.c */
+#ifndef SC_NO_SYSMOUSE
+int		sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data,
+			       int flag);
+#endif /* SC_NO_SYSMOUSE */
+
 /* scvidctl.c */
 int		sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode,
 				 int xsize, int ysize, int fontsize);
