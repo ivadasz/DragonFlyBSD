@@ -1610,6 +1610,7 @@ sccnputc(void *private, int c)
 	update_kbd_state(scp, scp->status, SLKED, TRUE);
 #endif
 	if (scp->status & BUFFER_SAVED) {
+	    sc_hist_restore(scp);
 	    scp->status &= ~BUFFER_SAVED;
 	    scp->status |= CURSOR_ENABLED;
 	    sc_update_cursor_image(scp, TRUE);
@@ -1622,6 +1623,14 @@ sccnputc(void *private, int c)
 	    scstart(tp);
 	}
 #endif
+    } else if (scp->status & SLKED) {
+	scp->status &= ~SLKED;
+	if (scp->status & BUFFER_SAVED) {
+	    sc_hist_restore(scp);
+	    scp->status &= ~BUFFER_SAVED;
+	    scp->status |= CURSOR_ENABLED;
+	    scp->cursor_oldpos = scp->cursor_pos;
+	}
     }
 #endif /* !SC_NO_HISTORY */
 

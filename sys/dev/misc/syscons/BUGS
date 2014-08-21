@@ -1,2 +1,1 @@
-- on ttyv0, when scrolling through history and kernel is writing output,
-  display doesn't automatically jump to the end of the buffer.
+- sysmouse support got broken, probably when ripping out scmouse.c
