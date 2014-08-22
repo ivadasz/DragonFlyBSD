@@ -142,7 +142,6 @@ static void sc_get_bios_values(bios_values_t *values);
 static int sc_tone(int hertz);
 static int scvidprobe(int unit, int flags, int cons);
 static int sckbdprobe(int unit, int flags, int cons);
-static char *adapter_name(video_adapter_t *adp);
 static int sc_drvinit(void *ident);
 static int sc_attach_unit(int unit, int flags);
 static void scmeminit(void *arg);
@@ -502,29 +501,6 @@ sckbdprobe(int unit, int flags, int cons)
     return (kbd_find_keyboard("*", unit) >= 0);
 }
 
-static char *
-adapter_name(video_adapter_t *adp)
-{
-    static struct {
-	int type;
-	char *name[2];
-    } names[] = {
-	{ KD_MONO,	{ "MDA",	"MDA" } },
-	{ KD_HERCULES,	{ "Hercules",	"Hercules" } },
-	{ KD_CGA,	{ "CGA",	"CGA" } },
-	{ KD_EGA,	{ "EGA",	"EGA (mono)" } },
-	{ KD_VGA,	{ "VGA",	"VGA (mono)" } },
-	{ KD_TGA,	{ "TGA",	"TGA" } },
-	{ -1,		{ "Unknown",	"Unknown" } },
-    };
-    int i;
-
-    for (i = 0; names[i].type != -1; ++i)
-	if (names[i].type == adp->va_type)
-	    break;
-    return names[i].name[(adp->va_flags & V_ADP_COLOR) ? 0 : 1];
-}
-
 static int
 sc_drvinit(void *ident)
 {
@@ -601,8 +577,15 @@ sc_attach_unit(int unit, int flags)
     kbd_ioctl(sc->kbd, KDSKBMODE, (caddr_t)&scp->kbd_mode);
     update_kbd_state(scp, scp->status, LOCK_MASK, FALSE);
 
-    kprintf("sc%d: %s <%d virtual consoles, flags=0x%x>\n",
-	   unit, adapter_name(sc->adp), sc->vtys, sc->config);
+    /* XXX needs adjustment, when we support multiple outputs simultaneously */
+    if (sc->txtdevsw != NULL) {
+	kprintf("sc%d: %s <%d virtual consoles, flags=0x%x>\n",
+		unit, sc->txtdevsw->getname(sc->txtdev_cookie),
+		sc->vtys, sc->config);
+    } else {
+	kprintf("sc%d: NULL <%d virtual consoles, flags=0x%x>\n",
+		unit, sc->vtys, sc->config);
+    }
     if (bootverbose) {
 	kprintf("sc%d:", unit);
     	if (sc->adapter >= 0)
@@ -957,8 +940,9 @@ scioctl(struct dev_ioctl_args *ap)
 	return ENOTTY;
 
     case GIO_COLOR:     	/* is this a color console ? */
-	*(int *)data = (sc->adp->va_flags & V_ADP_COLOR) ? 1 : 0;
-	lwkt_reltoken(&tty_token);
+//	*(int *)data = (sc->adp->va_flags & V_ADP_COLOR) ? 1 : 0;
+//	lwkt_reltoken(&tty_token);
+	*(int *)data = 1;
 	return 0;
 
     case CONS_CURSORTYPE:   	/* set cursor type blink/noblink */
