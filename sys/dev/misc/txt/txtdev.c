@@ -73,8 +73,8 @@ register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 	myflags = how;
 
 	/* Initialize */
-	mysw->setcursor(mycookie, -1, -1);
-	mysw->setcurmode(mycookie, TXTDEV_CURSOR_BLINK);
+//	mysw->setcursor(mycookie, -1);
+//	mysw->setcurmode(mycookie, TXTDEV_CURSOR_BLINK);
 
 	/* Register with virtual terminal */
 	if (replacing)

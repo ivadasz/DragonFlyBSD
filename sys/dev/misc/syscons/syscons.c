@@ -72,6 +72,9 @@
 #define COLD 0
 #define WARM 1
 
+#define SC_DEFAULT_COLUMNS	80
+#define SC_DEFAULT_ROWS		25
+
 #define KEYCODE_BS		0x0e		/* "<-- Backspace" key, XXX */
 #define WANT_UNLOCK(m) do {	  \
 	if (m)			  \
@@ -351,7 +354,7 @@ static	d_ioctl_t	scioctl;
 static	d_mmap_t	scmmap;
 
 static struct dev_ops sc_ops = {
-	{ "sc", 0, D_TTY },
+	{ "sc", 0, D_TTY | D_MPSAFE },
 	.d_open =	scopen,
 	.d_close =	scclose,
 	.d_read =	scread,
@@ -378,7 +381,7 @@ sc_probe_unit(int unit, int flags)
 }
 
 static struct txtmode sctxtmode = {
-	80, 25
+	SC_DEFAULT_COLUMNS, SC_DEFAULT_ROWS
 };
 
 int
@@ -2243,8 +2246,6 @@ exchange_scr(sc_softc_t *sc)
 
     /* set up the video for the new screen */
     scp = sc->cur_scp = sc->new_scp;
-    if (sc->old_scp->mode != scp->mode || ISUNKNOWNSC(sc->old_scp))
-	set_mode(scp);
     sc_move_cursor(scp, scp->xpos, scp->ypos);
 
     /* set up the keyboard for the new screen */
@@ -2300,7 +2301,7 @@ void
 sc_update_cursor_image(scr_stat *scp, int on)
 {
 	sc_softc_t *sc = (sc_softc_t *)scp->sc;
-	int col, row;
+	int pos;
 
 	/* assert(scp == scp->sc->cur_scp); */
 	++sc->videoio_in_progress;
@@ -2312,9 +2313,8 @@ sc_update_cursor_image(scr_stat *scp, int on)
 			sc->txtdevsw->setcurmode(sc->txtdev_cookie,
 			    TXTDEV_CURSOR_BLOCK);
 		}
-		col = on ? scp->cursor_pos % scp->xsize : -1;
-		row = on ? scp->cursor_pos / scp->xsize : -1;
-		sc->txtdevsw->setcursor(sc->txtdev_cookie, col, row);
+		pos = on ? scp->cursor_pos : -1;
+		sc->txtdevsw->setcursor(sc->txtdev_cookie, pos);
 	}
 	--sc->videoio_in_progress;
 }
@@ -2335,8 +2335,7 @@ scinit(int unit, int flags)
     sc_softc_t *sc;
     scr_stat *scp;
     video_adapter_t *adp;
-    int col;
-    int row;
+    int col, row, pos;
     int i;
 
     /* one time initialization */
@@ -2379,11 +2378,13 @@ scinit(int unit, int flags)
 
     if (!(sc->flags & SC_INIT_DONE) || (adp != sc->adp)) {
 
-	sc->initial_mode = sc->adp->va_initial_mode;
-
 	lwkt_gettoken(&tty_token);
 	/* extract the hardware cursor location and hide the cursor for now */
-	(*vidsw[sc->adapter]->read_hw_cursor)(sc->adp, &col, &row);
+	if (sc->txtdevsw != NULL) {
+	    sc->txtdevsw->getcursor(sc->txtdev_cookie, &pos);
+	} else {
+	    pos = 0;
+	}
 	lwkt_reltoken(&tty_token);
 
 	/* set up the first console */
@@ -2422,6 +2423,8 @@ scinit(int unit, int flags)
 	}
 
 	/* move cursors to the initial positions */
+	col = pos % scp->xsize;
+	row = pos / scp->xsize;
 	if (col >= scp->xsize)
 	    col = 0;
 	if (row >= scp->ysize)
@@ -2461,7 +2464,9 @@ scterm(int unit, int flags)
 
 #if 0 /* XXX */
     /* move the hardware cursor to the upper-left corner */
-    (*vidsw[sc->adapter]->set_hw_cursor)(sc->adp, 0, 0);
+    if (sc->txtdevsw != NULL) {
+	sc->txtdevsw->setcursor(sc->txtdev_cookie, 0);
+    }
 #endif
 
     /* release the keyboard and the video card */
@@ -2573,26 +2578,20 @@ alloc_scp(sc_softc_t *sc, int vty)
 static void
 init_scp(sc_softc_t *sc, int vty, scr_stat *scp)
 {
-    video_info_t info;
+    struct txtmode md = { SC_DEFAULT_COLUMNS, SC_DEFAULT_ROWS };
 
     bzero(scp, sizeof(*scp));
 
     scp->index = vty;
     scp->sc = sc;
     scp->status = 0;
-    scp->mode = sc->initial_mode;
     callout_init_mp(&scp->blink_screen_ch);
     lwkt_gettoken(&tty_token);
-    (*vidsw[sc->adapter]->get_info)(sc->adp, scp->mode, &info);
+    if (sc->txtdevsw != NULL)
+	sc->txtdevsw->getmode(sc->txtdev_cookie, &md);
     lwkt_reltoken(&tty_token);
-    if (info.vi_flags & V_INFO_GRAPHICS) {
-	scp->status |= GRAPHICS_MODE;
-	scp->xsize = info.vi_width/8;
-	scp->ysize = info.vi_height/info.vi_cheight;
-    } else {
-	scp->xsize = info.vi_width;
-	scp->ysize = info.vi_height;
-    }
+    scp->xsize = md.txt_columns;
+    scp->ysize = md.txt_rows;
     sc_vtb_init(&scp->vtb, VTB_MEMORY, 0, 0, NULL, FALSE);
     scp->xpos = scp->ypos = 0;
     scp->start = scp->xsize * scp->ysize - 1;
@@ -2990,32 +2989,6 @@ update_kbd_leds(scr_stat *scp, int which)
     if (error == ENOIOCTL)
 	error = ENODEV;
     return error;
-}
-
-int
-set_mode(scr_stat *scp)
-{
-    video_info_t info;
-
-    lwkt_gettoken(&tty_token);
-    /* reject unsupported mode */
-    if ((*vidsw[scp->sc->adapter]->get_info)(scp->sc->adp, scp->mode, &info)) {
-        lwkt_reltoken(&tty_token);
-	return 1;
-    }
-
-    /* if this vty is not currently showing, do nothing */
-    if (scp != scp->sc->cur_scp) {
-        lwkt_reltoken(&tty_token);
-	return 0;
-    }
-
-    /* setup video hardware for the given mode */
-    (*vidsw[scp->sc->adapter]->set_mode)(scp->sc->adp, scp->mode);
-    /* XXX scp->sc->adp->va_window could have changed */
-
-    lwkt_reltoken(&tty_token);
-    return 0;
 }
 
 void

@@ -85,7 +85,7 @@ MALLOC_DECLARE(M_SYSCONS);
 //#define MOUSE_MOVED	0x01000		/* mouse cursor has moved */
 //#define MOUSE_CUTTING	0x02000		/* mouse cursor is cutting text */
 //#define MOUSE_VISIBLE	0x04000		/* mouse cursor is showing */
-#define GRAPHICS_MODE	0x08000		/* vty is in a graphics mode */
+//#define GRAPHICS_MODE	0x08000		/* vty is in a graphics mode */
 //#define PIXEL_MODE	0x10000		/* vty is in a raster text mode */
 //#define SAVER_RUNNING	0x20000		/* screen saver is running */
 //#define VR_CURSOR_BLINK	0x40000		/* blinking text cursor */
@@ -158,7 +158,6 @@ typedef struct sc_softc {
 
 	int		adapter;
 	struct video_adapter *adp;
-	int		initial_mode;		/* initial video mode */
 
 	int		first_vty;
 	int		vtys;
@@ -216,7 +215,6 @@ typedef struct scr_stat {
 	struct callout	blink_screen_ch;
 
 	u_char		border;			/* border color */
-	int	 	mode;			/* mode */
 	pid_t 		pid;			/* pid of controlling proc */
 	struct proc 	*proc;			/* proc* of controlling proc */
 	struct vt_mode 	smode;			/* switch mode */
@@ -318,10 +316,8 @@ typedef struct {
 } bios_values_t;
 
 /* other macros */
-#define ISTEXTSC(scp)	(!((scp)->status 				\
-			  & (UNKNOWN_MODE | GRAPHICS_MODE)))
-#define ISGRAPHSC(scp)	(((scp)->status 				\
-			  & (UNKNOWN_MODE | GRAPHICS_MODE)))
+#define ISTEXTSC(scp)	(!((scp)->status & UNKNOWN_MODE))
+#define ISGRAPHSC(scp)	((scp)->status & UNKNOWN_MODE)
 #define ISUNKNOWNSC(scp) ((scp)->status & UNKNOWN_MODE)
 
 #define ISMOUSEAVAIL(af) ((af) & V_ADP_FONT)
@@ -335,8 +331,6 @@ int		sc_probe_unit(int unit, int flags);
 int		sc_set_txtdev(void *cookie, struct txtdev_sw *sw);
 int		sc_replace_txtdev(void *cookie, struct txtdev_sw *sw,
 				  void *oldcookie);
-
-int		set_mode(scr_stat *scp);
 
 void		sc_update_cursor_image(scr_stat *scp, int on);
 int		sc_clean_up(scr_stat *scp);
@@ -369,8 +363,6 @@ int		sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data,
 #endif /* SC_NO_SYSMOUSE */
 
 /* scvidctl.c */
-int		sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode,
-				 int xsize, int ysize, int fontsize);
 int		sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data,
 				  int flag);
 
