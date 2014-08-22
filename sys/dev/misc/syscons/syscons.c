@@ -2415,9 +2415,10 @@ scinit(int unit, int flags)
 	sc->cur_scp = scp;
 
 	/* copy screen to temporary buffer */
+	/* only really makes sense for the initial kernel console */
 	if (ISTEXTSC(scp)) {
 	    if (sc->txtdevsw != NULL) {
-		sc->txtdevsw->putchars(sc->txtdev_cookie, 0, 0,
+		sc->txtdevsw->getchars(sc->txtdev_cookie, 0, 0,
 		    scp->vtb.vtb_buffer, scp->xsize * scp->ysize);
 	    }
 	}

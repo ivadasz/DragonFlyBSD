@@ -49,6 +49,8 @@ typedef int txtdev_getmode(void *cookie, struct txtmode *mode);
 typedef int txtdev_setmode(void *cookie, struct txtmode *mode);
 typedef int txtdev_putchars(void *cookie, int col, int row, uint16_t *buf,
 			    int len);
+typedef int txtdev_getchars(void *cookie, int col, int row, uint16_t *buf,
+			    int len);
 typedef int txtdev_setcursor(void *cookie, int pos);
 typedef int txtdev_getcursor(void *cookie, int *pos);
 typedef int txtdev_setcurmode(void *cookie, int mode);
@@ -59,6 +61,7 @@ struct txtdev_sw {
 	txtdev_getmode *getmode;
 	txtdev_setmode *setmode;
 	txtdev_putchars *putchars;
+	txtdev_getchars *getchars;
 	txtdev_setcursor *setcursor;
 	txtdev_getcursor *getcursor;
 	txtdev_setcurmode *setcurmode;

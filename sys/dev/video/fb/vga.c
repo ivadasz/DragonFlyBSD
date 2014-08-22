@@ -89,6 +89,7 @@ static vi_read_hw_cursor_t	vga_read_hw_cursor;
 static txtdev_getmode vga_txt_getmode;
 static txtdev_setmode vga_txt_setmode;
 static txtdev_putchars vga_txt_putchars;
+static txtdev_getchars vga_txt_getchars;
 static txtdev_setcursor vga_txt_setcursor;
 static txtdev_getcursor vga_txt_getcursor;
 static txtdev_setcurmode vga_txt_setcurmode;
@@ -99,6 +100,7 @@ struct txtdev_sw txtsw = {
 	vga_txt_getmode,
 	vga_txt_setmode,
 	vga_txt_putchars,
+	vga_txt_getchars,
 	vga_txt_setcursor,
 	vga_txt_getcursor,
 	vga_txt_setcurmode,
@@ -2435,6 +2437,28 @@ vga_txt_putchars(void *cookie, int col, int row, uint16_t *buf, int len)
 		savepos = -1;
 		vga_txt_setcursor(cookie, pos);
 	}
+
+	return 0;
+}
+
+static int
+vga_txt_getchars(void *cookie, int col, int row, uint16_t *buf, int len)
+{
+	uint16_t *vgabuf;
+	int at, i;
+	video_adapter_t *adp = (video_adapter_t *)cookie;
+
+	vgabuf = (uint16_t *)adp->va_window;
+	at = row * 80 + col;
+
+	if (at >= 80 * 25)
+		return 0;
+
+	if (at + len > 80 * 25)
+		len = 80 * 25 - at;
+
+	for (i = 0; i < len; i++)
+		buf[i] = readw(&vgabuf[at + i]);
 
 	return 0;
 }

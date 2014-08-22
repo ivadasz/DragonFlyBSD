@@ -318,7 +318,6 @@ typedef struct {
 /* other macros */
 #define ISTEXTSC(scp)	(!((scp)->status & UNKNOWN_MODE))
 #define ISGRAPHSC(scp)	((scp)->status & UNKNOWN_MODE)
-#define ISUNKNOWNSC(scp) ((scp)->status & UNKNOWN_MODE)
 
 #define ISMOUSEAVAIL(af) ((af) & V_ADP_FONT)
 #define ISFONTAVAIL(af)	((af) & V_ADP_FONT)
