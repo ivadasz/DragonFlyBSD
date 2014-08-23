@@ -131,6 +131,10 @@ vga_attach_unit(int unit, vga_softc_t *sc, int flags)
 
 	if (curmode == TXTDEV_CURSOR_BLINK) {
 		vga_read_hw_cursor(sc->adp, &col, &row);
+		if (col >= 80)
+			col = 0;
+		if (row >= 25)
+			row = 24;
 		if (col == -1 || row == -1)
 			savepos = -1;
 		else
@@ -2530,6 +2534,8 @@ vga_txt_setcursor(void *cookie, int pos)
 static int
 vga_txt_getcursor(void *cookie, int *pos)
 {
+	if (savepos == -1)
+		*pos = 0;
 	*pos = savepos;
 
 	return 0;

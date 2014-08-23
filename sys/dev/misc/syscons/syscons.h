@@ -207,14 +207,12 @@ typedef struct scr_stat {
 	int		kbd_mode;		/* keyboard I/O mode */
 
 	int		cursor_pos;		/* cursor buffer position */
-	int		cursor_oldpos;		/* cursor old buffer position */
 
 	u_short		bell_duration;
 	u_short		bell_pitch;
 
 	struct callout	blink_screen_ch;
 
-	u_char		border;			/* border color */
 	pid_t 		pid;			/* pid of controlling proc */
 	struct proc 	*proc;			/* proc* of controlling proc */
 	struct vt_mode 	smode;			/* switch mode */

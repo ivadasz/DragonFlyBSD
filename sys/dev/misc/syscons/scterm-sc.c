@@ -534,13 +534,13 @@ scterm_scan_esc(scr_stat *scp, term_stat *tcp, u_char c)
 			break;
 
 		case 'A':   /* set display border color */
+#if 0
 			if (tcp->num_param == 1) {
 				scp->border=tcp->param[0] & 0xff;
-#if 0
 				if (scp == sc->cur_scp)
 					sc_set_border(scp, scp->border);
-#endif
 			}
+#endif
 			break;
 
 		case 'B':   /* set bell pitch and duration */

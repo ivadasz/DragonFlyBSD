@@ -61,7 +61,6 @@ void
 sc_clear_screen(scr_stat *scp)
 {
 	(*scp->tsw->te_clear)(scp);
-	scp->cursor_oldpos = scp->cursor_pos;
 }
 
 /* terminal emulator manager routines */

@@ -116,8 +116,8 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	return 0;
 
     case KDSBORDER:     	/* set border color of this (virtual) console */
-	scp->border = *data;
 #if 0
+	scp->border = *data;
 	if (scp == scp->sc->cur_scp)
 	    sc_set_border(scp, scp->border);
 #endif

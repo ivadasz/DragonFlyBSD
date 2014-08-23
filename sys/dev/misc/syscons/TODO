@@ -4,3 +4,5 @@
 - adjust vidcontrol to scvidctl changes, or write a very simple tool to access
   the remaining syscons ioctls. (CONS_CURSORTYPE, CONS_BELLTYPE, CONS_GETINFO,
   etc.)
+- if SC_CHAR_CURSOR and SC_BLINK_CURSOR are set, we are supposed to draw a
+  blinking block/char cursor. Will need a blink call in the txtdev interface.

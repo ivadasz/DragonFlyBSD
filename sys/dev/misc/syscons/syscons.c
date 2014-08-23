@@ -961,7 +961,6 @@ scioctl(struct dev_ioctl_args *ap)
 	 */
 	if (!ISGRAPHSC(sc->cur_scp)) {
 	    sc_update_cursor_image(sc->cur_scp, TRUE);
-	    scp->cursor_oldpos = scp->cursor_pos;
 	}
 	syscons_unlock();
 	lwkt_reltoken(&tty_token);
@@ -1005,7 +1004,7 @@ scioctl(struct dev_ioctl_args *ap)
 	     */
 	    ptr->mv_grfc.fore = 0;      /* not supported */
 	    ptr->mv_grfc.back = 0;      /* not supported */
-	    ptr->mv_ovscan = scp->border;
+	    ptr->mv_ovscan = BG_BLACK;	/* dummy value */
 	    if (scp == sc->cur_scp)
 	        save_kbd_state(scp, FALSE);
 	    ptr->mk_keylock = scp->status & LOCK_MASK;
@@ -1609,7 +1608,6 @@ sccnputc(void *private, int c)
 	    scp->status &= ~BUFFER_SAVED;
 	    scp->status |= CURSOR_ENABLED;
 	    sc_update_cursor_image(scp, TRUE);
-	    scp->cursor_oldpos = scp->cursor_pos;
 	}
 #if 0
 	tp = VIRTUAL_TTY(scp->sc, scp->index);
@@ -1890,10 +1888,8 @@ scrn_update(scr_stat *scp)
     /* update cursor image */
     if (scp->status & CURSOR_ENABLED) {
 	sc_update_cursor_image(scp, TRUE);
-        /* did cursor move since last time ? */
-        if (scp->cursor_pos != scp->cursor_oldpos) {
-	    scp->cursor_oldpos = scp->cursor_pos;
-        } else if (scp->sc->flags & SC_BLINK_CURSOR) {
+        if (scp->sc->flags & SC_BLINK_CURSOR) {
+	    /* XXX need to add a call to the txtdev interface for blinking */
 	    /* if it's a blinking cursor, update it */
 //	    (*scp->rndr->blink_cursor)(scp, scp->cursor_pos, FALSE);
         }
@@ -2410,13 +2406,7 @@ scinit(int unit, int flags)
 	/* move cursors to the initial positions */
 	col = pos % scp->xsize;
 	row = pos / scp->xsize;
-	if (col >= scp->xsize)
-	    col = 0;
-	if (row >= scp->ysize)
-	    row = scp->ysize - 1;
-	scp->xpos = col;
-	scp->ypos = row;
-	scp->cursor_pos = scp->cursor_oldpos = row*scp->xsize + col;
+	sc_move_cursor(scp, col, row);
 	i = bios_value.cursor_end - bios_value.cursor_start + 1;
 	if (!ISGRAPHSC(scp)) {
 	    sc_update_cursor_image(scp, TRUE);
@@ -2522,8 +2512,6 @@ sc_alloc_scr_buffer(scr_stat *scp, int wait, int discard)
     old = scp->vtb;
     sc_vtb_init(&new, VTB_MEMORY, scp->xsize, scp->ysize, NULL, wait);
     if (!discard && (old.vtb_flags & VTB_VALID)) {
-	/* retain the current cursor position and buffer contants */
-	scp->cursor_oldpos = scp->cursor_pos;
 	/* 
 	 * This works only if the old buffer has the same size as or larger 
 	 * than the new one. XXX
@@ -2583,7 +2571,6 @@ init_scp(sc_softc_t *sc, int vty, scr_stat *scp)
     scp->end = 0;
     scp->tsw = NULL;
     scp->ts = NULL;
-    scp->border = BG_BLACK;
     scp->kbd_mode = K_XLATE;
     scp->bell_pitch = bios_value.bell_pitch;
     scp->bell_duration = BELL_DURATION;
@@ -2783,7 +2770,6 @@ next_code:
 			    scp->status &= ~BUFFER_SAVED;
 			    scp->status |= CURSOR_ENABLED;
 			    sc_update_cursor_image(scp, TRUE);
-			    scp->cursor_oldpos = scp->cursor_pos;
 			}
 			tp = VIRTUAL_TTY(sc, scp->index);
 			if (ISTTYOPEN(tp))
