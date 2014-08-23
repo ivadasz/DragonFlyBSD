@@ -325,9 +325,6 @@ typedef struct {
 
 /* syscons.c */
 int		sc_probe_unit(int unit, int flags);
-int		sc_set_txtdev(void *cookie, struct txtdev_sw *sw);
-int		sc_replace_txtdev(void *cookie, struct txtdev_sw *sw,
-				  void *oldcookie);
 
 void		sc_update_cursor_image(scr_stat *scp, int on);
 int		sc_clean_up(scr_stat *scp);

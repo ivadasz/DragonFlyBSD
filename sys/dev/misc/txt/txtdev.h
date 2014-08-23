@@ -69,7 +69,12 @@ struct txtdev_sw {
 	txtdev_restore *restore;
 };
 
+typedef void txtdev_newdev_cb(void *conscookie, void *oldcookie);
+
 int register_txtdev(void *cookie, struct txtdev_sw *sw, int how);
+int acquire_txtdev(void **cookie, struct txtdev_sw **sw, txtdev_newdev_cb *cb,
+		   void *cc);
+int release_txtdev(void *cookie, struct txtdev_sw *sw);
 
 /* XXX */
 

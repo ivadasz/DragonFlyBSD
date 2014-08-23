@@ -112,6 +112,7 @@ struct txtdev_sw txtsw = {
 static uint16_t saveunder = 0x0000;
 static int savepos = -1;
 static int curmode = TXTDEV_CURSOR_BLINK;
+static int mode_columns = 80, mode_rows = 25;
 
 int
 vga_attach_unit(int unit, vga_softc_t *sc, int flags)
@@ -131,14 +132,14 @@ vga_attach_unit(int unit, vga_softc_t *sc, int flags)
 
 	if (curmode == TXTDEV_CURSOR_BLINK) {
 		vga_read_hw_cursor(sc->adp, &col, &row);
-		if (col >= 80)
+		if (col >= mode_columns)
 			col = 0;
 		if (row >= 25)
 			row = 24;
 		if (col == -1 || row == -1)
 			savepos = -1;
 		else
-			savepos = 80 * row + col;
+			savepos = mode_columns * row + col;
 	}
 
 	if (register_txtdev((void *)sc->adp, &txtsw,
@@ -498,7 +499,7 @@ vga_configure(int flags)
 	if (col == -1 || row == -1)
 	    savepos = -1;
 	else
-	    savepos = 80 * row + col;
+	    savepos = mode_columns * row + col;
     }
 
     if (register_txtdev((void *)&biosadapter, &txtsw,
@@ -2400,8 +2401,8 @@ static int
 vga_txt_getmode(void *cookie, struct txtmode *mode)
 {
 	/* Default VGA textmode */
-	mode->txt_columns = 80;
-	mode->txt_rows = 25;
+	mode->txt_columns = mode_columns;
+	mode->txt_rows = mode_rows;
 
 	return 0;
 }
@@ -2409,7 +2410,7 @@ vga_txt_getmode(void *cookie, struct txtmode *mode)
 static int
 vga_txt_setmode(void *cookie, struct txtmode *mode)
 {
-	if (mode->txt_columns == 80 && mode->txt_rows == 25)
+	if (mode->txt_columns == mode_columns && mode->txt_rows == mode_rows)
 		return 0;
 	else
 		return 1;
@@ -2423,13 +2424,13 @@ vga_txt_putchars(void *cookie, int col, int row, uint16_t *buf, int len)
 	video_adapter_t *adp = (video_adapter_t *)cookie;
 
 	vgabuf = (uint16_t *)adp->va_window;
-	at = row * 80 + col;
+	at = row * mode_columns + col;
 
-	if (at >= 80 * 25)
+	if (at >= mode_columns * mode_rows)
 		return 0;
 
-	if (at + len > 80 * 25)
-		len = 80 * 25 - at;
+	if (at + len > mode_columns * mode_rows)
+		len = mode_columns * mode_rows - at;
 
 	for (i = 0; i < len; i++)
 		writew(&vgabuf[at + i], buf[i]);
@@ -2453,13 +2454,13 @@ vga_txt_getchars(void *cookie, int col, int row, uint16_t *buf, int len)
 	video_adapter_t *adp = (video_adapter_t *)cookie;
 
 	vgabuf = (uint16_t *)adp->va_window;
-	at = row * 80 + col;
+	at = row * mode_columns + col;
 
-	if (at >= 80 * 25)
+	if (at >= mode_columns * mode_rows)
 		return 0;
 
-	if (at + len > 80 * 25)
-		len = 80 * 25 - at;
+	if (at + len > mode_columns * mode_rows)
+		len = mode_columns * mode_rows - at;
 
 	for (i = 0; i < len; i++)
 		buf[i] = readw(&vgabuf[at + i]);
@@ -2483,8 +2484,8 @@ vga_txt_setcursor(void *cookie, int pos)
 			col = row = -1;
 		} else {
 			savepos = pos;
-			col = pos % 80;
-			row = pos / 80;
+			col = pos % mode_columns;
+			row = pos / mode_columns;
 		}
 		return vga_set_hw_cursor(adp, col, row);
 	case TXTDEV_CURSOR_BLOCK:

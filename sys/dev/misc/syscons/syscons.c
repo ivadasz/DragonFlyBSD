@@ -140,7 +140,6 @@ static sc_softc_t *sc_get_softc(int unit, int flags);
 static int sc_get_cons_priority(int *unit, int *flags);
 static void sc_get_bios_values(bios_values_t *values);
 static int sc_tone(int hertz);
-static int scvidprobe(int unit, int flags, int cons);
 static int sckbdprobe(int unit, int flags, int cons);
 static int sc_drvinit(void *ident);
 static int sc_attach_unit(int unit, int flags);
@@ -367,7 +366,14 @@ static struct dev_ops sc_ops = {
 int
 sc_probe_unit(int unit, int flags)
 {
-    if (!scvidprobe(unit, flags, FALSE)) {
+    /*
+     * Access the video adapter driver through the back door!
+     * Video adapter drivers need to be configured before syscons.
+     */
+    vid_configure(0);
+
+    /* Check whether we can successfully acquire a txtdev */
+    if (acquire_txtdev(NULL, NULL, NULL, NULL) != 0) {
 	if (bootverbose)
 	    kprintf("sc%d: no video adapter found.\n", unit);
 	return ENXIO;
@@ -383,112 +389,34 @@ static struct txtmode sctxtmode = {
 	SC_DEFAULT_COLUMNS, SC_DEFAULT_ROWS
 };
 
-int
-sc_set_txtdev(void *cookie, struct txtdev_sw *sw)
+static void
+sc_txtdev_cb(void *sccookie, void *txtcookie)
 {
-	sc_softc_t *sc;
-	struct txtmode;
+	sc_softc_t *sc = (sc_softc_t *)sccookie;
 
 	lwkt_gettoken(&tty_token);
-	sc = sc_get_softc(0, (sc_console_unit == 0) ? SC_KERNEL_CONSOLE : 0);
-	if (sc == NULL) {
-		lwkt_reltoken(&tty_token);
-		kprintf("%s: sc_get_softc(%d, %d) returned NULL\n", __func__,
-		    0, (sc_console_unit == 0) ? SC_KERNEL_CONSOLE : 0);
-		return 1;
+	if (sc->txtdevsw != NULL && txtcookie == sc->txtdev_cookie) {
+		release_txtdev(sc->txtdevsw, sc->txtdev_cookie);
+		sc->txtdevsw = NULL;
+		sc->txtdev_cookie = NULL;
 	}
-
-	if (sc->txtdevsw != NULL) {
-		lwkt_reltoken(&tty_token);
-		return 1;
-	}
-
-	sc->txtdev_cookie = cookie;
-	sc->txtdevsw = sw;
-
-	/* XXX */
-
-	if (sc->txtdevsw != NULL) {
-		kprintf("sc0: txtdev is now set to \"%s\"\n",
-		    sc->txtdevsw->getname(sc->txtdev_cookie));
+	if (acquire_txtdev(&sc->txtdev_cookie, &sc->txtdevsw, sc_txtdev_cb, sc)
+	     == 0) {
 		sc->txtdevsw->restore(sc->txtdev_cookie);
 		if (sc->txtdevsw->setmode(sc->txtdev_cookie, &sctxtmode) != 0) {
-			lwkt_reltoken(&tty_token);
 			kprintf("sc0: setting txtdev mode to %dx%d failed\n",
 			    sctxtmode.txt_columns, sctxtmode.txt_rows);
-			return 1;
 		}
-	} else {
-		kprintf("sc0: txtdev is now set to NULL\n");
-	}
-
-	lwkt_reltoken(&tty_token);
-
-	return 0;
-}
-
-int
-sc_replace_txtdev(void *cookie, struct txtdev_sw *sw, void *oldcookie)
-{
-	sc_softc_t *sc;
-
-	lwkt_gettoken(&tty_token);
-	sc = sc_get_softc(0, (sc_console_unit == 0) ? SC_KERNEL_CONSOLE : 0);
-	if (sc == NULL) {
 		lwkt_reltoken(&tty_token);
-		kprintf("%s: sc_get_softc(%d, %d) returned NULL\n", __func__,
-		    0, (sc_console_unit == 0) ? SC_KERNEL_CONSOLE : 0);
-		return 1;
-	}
-
-	if (sc->txtdevsw != NULL && sc->txtdev_cookie != oldcookie) {
-		lwkt_reltoken(&tty_token);
-		return 1;
-	}
-
-	sc->txtdev_cookie = cookie;
-	sc->txtdevsw = sw;
-
-	/* XXX */
-
-	if (sc->txtdevsw != NULL) {
 		kprintf("sc0: txtdev is now set to \"%s\"\n",
 		    sc->txtdevsw->getname(sc->txtdev_cookie));
-		sc->txtdevsw->restore(sc->txtdev_cookie);
-		if (sc->txtdevsw->setmode(sc->txtdev_cookie, &sctxtmode) != 0) {
-			lwkt_reltoken(&tty_token);
-			kprintf("sc0: setting txtdev mode to %dx%d failed\n",
-			    sctxtmode.txt_columns, sctxtmode.txt_rows);
-			return 1;
-		}
-	} else {
-		kprintf("sc0: txtdev is now set to NULL\n");
+		return;
 	}
 
+	/* Failed to acquire a txtdev */
+	/* XXX Maybe we could also poll txtdev with acquire_txtdev? */
 	lwkt_reltoken(&tty_token);
-
-	return 0;
-}
-
-/*
- * XXX Instead call vid_configure from
- *     /usr/src/sys/platform/pc64/x86_64/machdep.c before calling cninit().
- *     Then this method can simply check if any txtdev is already registered.
- */
-/* probe video adapters, return TRUE if found */ 
-static int
-scvidprobe(int unit, int flags, int cons)
-{
-    /*
-     * Access the video adapter driver through the back door!
-     * Video adapter drivers need to be configured before syscons.
-     * However, when syscons is being probed as the low-level console,
-     * they have not been initialized yet.  We force them to initialize
-     * themselves here. XXX
-     */
-    vid_configure(cons ? VIO_PROBE_ONLY : 0);
-
-    return (vid_find_adapter("*", unit) >= 0);
+	return;
 }
 
 /* probe the keyboard, return TRUE if found */
@@ -1524,8 +1452,18 @@ sccnprobe(struct consdev *cp)
 
     cp->cn_pri = sc_get_cons_priority(&unit, &flags);
 
+    /*
+     * Access the video adapter driver through the back door!
+     * Video adapter drivers need to be configured before syscons.
+     * However, when syscons is being probed as the low-level console,
+     * they have not been initialized yet.  We force them to initialize
+     * themselves here. XXX
+     */
+    vid_configure(VIO_PROBE_ONLY);
+
+    /* Check whether we can successfully acquire a txtdev */
     /* a video card is always required */
-    if (!scvidprobe(unit, flags, TRUE))
+    if (acquire_txtdev(NULL, NULL, NULL, NULL) != 0)
 	cp->cn_pri = CN_DEAD;
 
     /* syscons will become console even when there is no keyboard */
@@ -2348,6 +2286,9 @@ scinit(int unit, int flags)
     sc->adapter = vid_allocate("*", unit, (void *)&sc->adapter);
     sc->adp = vid_get_adapter(sc->adapter);
     /* assert((sc->adapter >= 0) && (sc->adp != NULL)) */
+    if (sc->txtdevsw == NULL) {
+	acquire_txtdev(&sc->txtdev_cookie, &sc->txtdevsw, sc_txtdev_cb, sc);
+    }
     sc->keyboard = sc_allocate_keyboard(sc, unit);
     DPRINTF(1, ("sc%d: keyboard %d\n", unit, sc->keyboard));
     sc->kbd = kbd_get_keyboard(sc->keyboard);

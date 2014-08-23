@@ -37,12 +37,12 @@
 
 #include "txtdev.h"
 
-int	sc_set_txtdev(void *cookie, struct txtdev_sw *sw);
-int	sc_replace_txtdev(void *cookie, struct txtdev_sw *sw, void *oldcookie);
-
+static int owned = 0;
 static int myflags = 0;
 static void *mycookie = NULL;
 static struct txtdev_sw *mysw = NULL;
+static txtdev_newdev_cb *newdevcb = NULL;
+static void *conscookie = NULL;
 
 /* XXX needs a corresponding unregister_txtdev method */
 int
@@ -77,10 +77,64 @@ register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 //	mysw->setcurmode(mycookie, TXTDEV_CURSOR_BLINK);
 
 	/* Register with virtual terminal */
-	if (replacing)
-		sc_replace_txtdev(mycookie, mysw, oldcookie);
-	else
-		sc_set_txtdev(mycookie, mysw);
+	if (replacing && owned) {
+		KASSERT(newdevcb != NULL, ("no way to replace txtdev"));
+
+		/*
+		 * We expect the console to call release_txtdev on the old
+		 * txtdev and then retrieve the new txtdev with acquire_txtdev.
+		 */
+		newdevcb(conscookie, oldcookie);
+	} else if (!owned && newdevcb != NULL) {
+		/*
+		 * We expect the console to call acquire_txtdev to acquire this
+		 * txtdev.
+		 */
+		newdevcb(conscookie, NULL);
+	}
 
 	return 0;
+}
+
+/* use acquire_txtdev(NULL,NULL,NULL) to test whether a txtdev is available */
+int
+acquire_txtdev(void **cookie, struct txtdev_sw **sw, txtdev_newdev_cb *cb,
+    void *cc)
+{
+	if (sw != NULL && cookie != NULL && cb == NULL)
+		return 1;
+
+	if (!owned && mysw != NULL) {
+		if (sw != NULL && cookie != NULL) {
+			*sw = mysw;
+			*cookie = mycookie;
+			newdevcb = cb;
+			conscookie = cc;
+			owned = 1;
+		}
+		return 0;
+	}
+
+	*sw = NULL;
+	*cookie = NULL;
+	if (cb != NULL && newdevcb == NULL) {
+		newdevcb = cb;
+		conscookie = cc;
+		return 2;
+	}
+
+	return 1;
+}
+
+int
+release_txtdev(void *cookie, struct txtdev_sw *sw)
+{
+	if (owned) {
+		owned = 0;
+		newdevcb = NULL;
+		conscookie = NULL;
+		return 0;
+	}
+
+	return 1;
 }
