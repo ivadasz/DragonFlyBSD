@@ -35,6 +35,8 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_fb_helper.h>
 #include <drm/drm_crtc_helper.h>
+#include <dev/misc/txt/dumbfb.h>
+#include <dev/misc/txt/fbinfo.h>
 
 static LINUX_LIST_HEAD(kernel_fb_helper_list);
 
@@ -779,15 +781,38 @@ int drm_fb_helper_pan_display(struct fb_var_screeninfo *var,
 }
 #endif
 
+static void
+do_restore_fbdev_mode(void *context, int pending)
+{
+	struct drm_fb_helper *fb_helper = context;
+	struct drm_device *dev = fb_helper->dev;
+
+	if (!fb_helper->fb)
+		return;
+
+	lockmgr(&dev->mode_config.mutex, LK_EXCLUSIVE);
+	drm_fb_helper_restore_fbdev_mode(fb_helper);
+	lockmgr(&dev->mode_config.mutex, LK_RELEASE);
+}
+
+static void
+sc_restore_fbdev_mode(void *cookie)
+{
+	struct drm_fb_helper *fb_helper = cookie;
+
+	if (!fb_helper->fb)
+		return;
+
+	taskqueue_enqueue(taskqueue_thread[0], &fb_helper->fb_mode_task);
+}
+
 int drm_fb_helper_single_fb_probe(struct drm_fb_helper *fb_helper,
 				  int preferred_bpp)
 {
 	int new_fb = 0;
 	int crtc_count = 0;
 	int i;
-#if 0
 	struct fb_info *info;
-#endif
 	struct drm_fb_helper_surface_size sizes;
 	int gamma_size = 0;
 
@@ -866,13 +891,17 @@ int drm_fb_helper_single_fb_probe(struct drm_fb_helper *fb_helper,
 	if (new_fb < 0)
 		return new_fb;
 
-#if 0
-	info = fb_helper->fbdev;
-#endif
-
 	/* set the fb pointer */
 	for (i = 0; i < fb_helper->crtc_count; i++)
 		fb_helper->crtc_info[i].mode_set.fb = fb_helper->fb;
+
+	TASK_INIT(&fb_helper->fb_mode_task, 0, do_restore_fbdev_mode, fb_helper);
+	info = fb_helper->fbdev;
+	if (info != NULL) {
+		info->cookie = fb_helper;
+		info->restore = (void *)&sc_restore_fbdev_mode;
+		register_dumbfb_txtdev(info);
+	}
 
 #if 0
 	if (new_fb) {

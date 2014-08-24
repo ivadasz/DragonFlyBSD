@@ -31,6 +31,7 @@
 #define DRM_FB_HELPER_H
 
 struct drm_fb_helper;
+struct fb_info;
 
 struct drm_fb_helper_crtc {
 	struct drm_mode_set mode_set;
@@ -71,6 +72,7 @@ struct drm_fb_helper {
 	int connector_count;
 	struct drm_fb_helper_connector **connector_info;
 	struct drm_fb_helper_funcs *funcs;
+	struct task fb_mode_task;
 	struct fb_info *fbdev;
 	u32 pseudo_palette[17];
 	struct list_head kernel_fb_list;
