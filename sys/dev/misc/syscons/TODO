@@ -1,6 +1,5 @@
 - look at smstart() in sysmouse.c. Is the crit_enter() around the tty_token
   actually necessary?
-- move xsize and ysize to the sc_softc_t struct
 - adjust vidcontrol to scvidctl changes, or write a very simple tool to access
   the remaining syscons ioctls. (CONS_CURSORTYPE, CONS_BELLTYPE, CONS_GETINFO,
   etc.)

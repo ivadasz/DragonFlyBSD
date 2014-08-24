@@ -235,7 +235,8 @@ sc_get_softc(int unit, int flags)
 	sc->unit = unit;
 	if (!(sc->flags & SC_INIT_DONE)) {
 		sc->keyboard = -1;
-		sc->adapter = -1;
+		sc->txtdevsw = NULL;
+		sc->txtdev_cookie = NULL;
 		sc->cursor_char = SC_CURSOR_CHAR;
 	}
 	return sc;
@@ -516,8 +517,7 @@ sc_attach_unit(int unit, int flags)
     }
     if (bootverbose) {
 	kprintf("sc%d:", unit);
-    	if (sc->adapter >= 0)
-	    kprintf(" fb%d", sc->adapter);
+	/* XXX print info about the txtdev */
 	if (sc->keyboard >= 0)
 	    kprintf(", kbd%d", sc->keyboard);
 	if (scp->tsw)
@@ -2252,7 +2252,6 @@ scinit(int unit, int flags)
 
     sc_softc_t *sc;
     scr_stat *scp;
-    video_adapter_t *adp;
     int col, row, pos;
     int i;
 
@@ -2267,12 +2266,6 @@ scinit(int unit, int flags)
      * disappeared...
      */
     sc = sc_get_softc(unit, flags & SC_KERNEL_CONSOLE);
-    adp = NULL;
-    if (sc->adapter >= 0) {
-	vid_release(sc->adp, (void *)&sc->adapter);
-	adp = sc->adp;
-	sc->adp = NULL;
-    }
     if (sc->keyboard >= 0) {
 	DPRINTF(5, ("sc%d: releasing kbd%d\n", unit, sc->keyboard));
 	i = kbd_release(sc->kbd, (void *)&sc->keyboard);
@@ -2283,9 +2276,6 @@ scinit(int unit, int flags)
 	}
 	sc->kbd = NULL;
     }
-    sc->adapter = vid_allocate("*", unit, (void *)&sc->adapter);
-    sc->adp = vid_get_adapter(sc->adapter);
-    /* assert((sc->adapter >= 0) && (sc->adp != NULL)) */
     if (sc->txtdevsw == NULL) {
 	acquire_txtdev(&sc->txtdev_cookie, &sc->txtdevsw, sc_txtdev_cb, sc);
     }
@@ -2297,7 +2287,7 @@ scinit(int unit, int flags)
 		unit, sc->kbd->kb_index, sc->kbd->kb_unit, sc->kbd->kb_flags));
     }
 
-    if (!(sc->flags & SC_INIT_DONE) || (adp != sc->adp)) {
+    if (!(sc->flags & SC_INIT_DONE)) {
 
 	lwkt_gettoken(&tty_token);
 	/* extract the hardware cursor location and hide the cursor for now */
@@ -2388,8 +2378,7 @@ scterm(int unit, int flags)
     /* release the keyboard and the video card */
     if (sc->keyboard >= 0)
 	kbd_release(sc->kbd, &sc->keyboard);
-    if (sc->adapter >= 0)
-	vid_release(sc->adp, &sc->adapter);
+    /* XXX release txtdev */
 
     /* 
      * Stop the terminal emulator, if any.  If operating on the
@@ -2416,7 +2405,8 @@ scterm(int unit, int flags)
     }
     bzero(sc, sizeof(*sc));
     sc->keyboard = -1;
-    sc->adapter = -1;
+    sc->txtdevsw = NULL;
+    sc->txtdev_cookie = NULL;
     lwkt_reltoken(&tty_token);
 }
 

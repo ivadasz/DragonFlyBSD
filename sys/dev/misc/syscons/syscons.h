@@ -124,7 +124,6 @@ typedef struct sc_vtb {
 /* softc */
 
 struct keyboard;
-struct video_adapter;
 struct scr_stat;
 struct tty;
 struct dev_ioctl_args;
@@ -155,9 +154,6 @@ typedef struct sc_softc {
 
 	void		*txtdev_cookie;
 	struct txtdev_sw *txtdevsw;
-
-	int		adapter;
-	struct video_adapter *adp;
 
 	int		first_vty;
 	int		vtys;
@@ -397,10 +393,5 @@ int		sc_term_add(sc_term_sw_t *sw);
 int		sc_term_remove(sc_term_sw_t *sw);
 sc_term_sw_t	*sc_term_match(char *name);
 sc_term_sw_t	*sc_term_match_by_number(int index);
-
-/* machine dependent functions */
-#if 0
-sc_softc_t	*sc_find_softc(struct video_adapter *adp, struct keyboard *kbd);
-#endif
 
 #endif /* !_DEV_SYSCONS_SYSCONS_H_ */
