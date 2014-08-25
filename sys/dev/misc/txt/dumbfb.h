@@ -29,12 +29,6 @@
 
 struct fb_info;
 
-/* Blit a monochrome glyph to a 32bit framebuffer */
-/* XXX No way to specify the storage format of the glyph */
-void dumbfb_blit_char_1to32(uint32_t *fb, uint8_t *glyph, uint16_t width,
-			    uint16_t height, uint16_t glyphstride,
-			    uint32_t fbstride, uint32_t bg, uint32_t fg);
-
 /* Wrapper around register_txtdev for registering dumb framebuffers */
 int register_dumbfb_txtdev(struct fb_info *cookie);
 

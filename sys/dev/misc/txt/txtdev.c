@@ -54,8 +54,8 @@ register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 	if (sw == NULL)
 		return 1;
 
-	/* Only allow replacing early attachements */
-	if ((myflags & TXTDEV_IS_EARLY) != 0) {
+//	/* Only allow replacing early attachements */
+//	if ((myflags & TXTDEV_IS_EARLY) != 0) {
 		if ((myflags & TXTDEV_IS_VGA) != 0 &&
 		    (how & TXTDEV_REPLACE_VGA) != 0) {
 			mycookie = NULL;
@@ -63,7 +63,7 @@ register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 			myflags = 0;
 			replacing = 1;
 		}
-	}
+//	}
 
 	if (mycookie != NULL || mysw != NULL)
 		return 1;
