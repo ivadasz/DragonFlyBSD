@@ -2172,6 +2172,8 @@ exchange_scr(sc_softc_t *sc)
     update_kbd_state(scp, scp->status, LOCK_MASK, TRUE);
 
     mark_all(scp);
+    if (sc->txtdevsw != NULL)
+	sc->txtdevsw->restore(sc->txtdev_cookie);
     lwkt_reltoken(&tty_token);
 }
 
