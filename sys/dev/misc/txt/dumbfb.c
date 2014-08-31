@@ -4,6 +4,27 @@
 
 #include "gallant12x22.h"
 
+struct dumbfb_state {
+	struct fb_info *fbi;
+	int cursorpos;
+	int columns;
+	int rows;
+	uint16_t saveunder;
+	uint16_t *buffer;
+};
+
+#if notyet
+static uint16_t early_buffer[80*25];
+static struct dumbfb_state early_txtdev = {
+	.fbi = NULL,
+	.cursorpos = 0,
+	.columns = 80,
+	.rows = 25,
+	.saveunder = 0x0000,
+	.buffer = early_buffer
+};
+#endif
+
 static int dumbfb_setcursor(void *cookie, int pos);
 
 static uint32_t colormap[16] = {
@@ -25,10 +46,6 @@ static uint32_t colormap[16] = {
 	0x00ffffff,	/* HIGHLIGHT WHITE */
 };
 
-static uint16_t mybuffer[80*25];
-static int cursorpos;
-static uint16_t saveunder = 0;
-
 static void
 dumbfb_blit_char_1to32(uint32_t *fb, uint8_t *glyph, uint16_t glyphstride,
     uint16_t fbstride, uint16_t glyphwidth, uint16_t glyphheight,
@@ -48,8 +65,10 @@ dumbfb_blit_char_1to32(uint32_t *fb, uint8_t *glyph, uint16_t glyphstride,
 static int
 dumbfb_getmode(void *cookie, struct txtmode *mode)
 {
-	mode->txt_columns = 80;
-	mode->txt_rows = 25;
+	struct dumbfb_state *st = (struct dumbfb_state *)cookie;
+
+	mode->txt_columns = st->columns;
+	mode->txt_rows = st->rows;
 
 	return 0;
 }
@@ -57,8 +76,11 @@ dumbfb_getmode(void *cookie, struct txtmode *mode)
 static int
 dumbfb_setmode(void *cookie, struct txtmode *mode)
 {
-	if (mode->txt_columns != 80 ||
-	    mode->txt_rows != 25)
+	struct dumbfb_state *st = (struct dumbfb_state *)cookie;
+
+	/* XXX disable mode changing for now */
+	if (mode->txt_columns != st->columns ||
+	    mode->txt_rows != st->rows)
 		return 1;
 
 	return 0;
@@ -67,8 +89,9 @@ dumbfb_setmode(void *cookie, struct txtmode *mode)
 static int
 dumbfb_putchars(void *cookie, int col, int row, uint16_t *buf, int len)
 {
-	struct fb_info *info = (struct fb_info *)cookie;
-	int i, pos;
+	struct dumbfb_state *st = (struct dumbfb_state *)cookie;
+	struct fb_info *info = st->fbi;
+	int tw, th, i, pos;
 	uint32_t bg, fg;
 	uint16_t *tobuf;
 	uint8_t attr, index;
@@ -78,19 +101,21 @@ dumbfb_putchars(void *cookie, int col, int row, uint16_t *buf, int len)
 	uint8_t *font = gallant12x22_data;
 	uint8_t *fb, *myfb, *glyph;
 
+	tw = st->columns;
+	th = st->rows;
 	fb = (uint8_t *)info->vaddr;
-	pos = 80 * row + col;
-	if (pos >= 80 * 25)
+	pos = tw * row + col;
+	if (pos >= tw * th)
 		return 1;
-	if (pos + len > 80 * 25)
-		len = 80 * 25 - pos;
-	tobuf = &mybuffer[pos];
+	if (pos + len > tw * st->rows)
+		len = tw * th - pos;
+	tobuf = &st->buffer[pos];
 
 	for (i = 0; i < len; i++) {
-		if (cursorpos == pos + i) {
-			if (saveunder != buf[i]) {
+		if (st->cursorpos == pos + i) {
+			if (st->saveunder != buf[i]) {
 				tobuf[i] = buf[i];
-				cursorpos = -1;
+				st->cursorpos = -1;
 				dumbfb_setcursor(cookie, pos + i);
 			}
 		} else if (tobuf[i] != buf[i]) {
@@ -100,8 +125,8 @@ dumbfb_putchars(void *cookie, int col, int row, uint16_t *buf, int len)
 			fg = colormap[attr & 0xf];
 			bg = colormap[(attr >> 4) & 0xf];
 			glyph = &font[glyphheight * glyphstride * index];
-			myfb = &fb[((pos + i)/80)*glyphheight*info->stride +
-				   ((pos + i)%80)*glyphwidth*4];
+			myfb = &fb[((pos + i)/tw)*glyphheight*info->stride +
+				   ((pos + i)%tw)*glyphwidth*4];
 			dumbfb_blit_char_1to32((uint32_t *)myfb, glyph,
 			    glyphstride, info->stride, glyphwidth, glyphheight,
 			    bg, fg);
@@ -114,12 +139,17 @@ dumbfb_putchars(void *cookie, int col, int row, uint16_t *buf, int len)
 static int
 dumbfb_getchars(void *cookie, int col, int row, uint16_t *buf, int len)
 {
+#if notyet
+	struct dumbfb_state *st = (struct dumbfb_state *)cookie;
+#endif
+
 	return 1;
 }
 
 static int
 dumbfb_setcursor(void *cookie, int pos)
 {
+	struct dumbfb_state *st = (struct dumbfb_state *)cookie;
 	int v;
 	uint16_t val;
 	uint16_t a, c;
@@ -127,19 +157,20 @@ dumbfb_setcursor(void *cookie, int pos)
 	if (pos < -1)
 		return 1;
 
-	if (cursorpos == pos)
+	if (st->cursorpos == pos)
 		return 0;
 
-	if (cursorpos > 0) {
-		v = cursorpos;
-		cursorpos = -1;
-		dumbfb_putchars(cookie, v%80, v/80, &saveunder, 1);
+	if (st->cursorpos >= 0) {
+		v = st->cursorpos;
+		st->cursorpos = -1;
+		dumbfb_putchars(cookie, v%st->columns, v/st->columns,
+		    &st->saveunder, 1);
 	}
 
-	if (pos > 0) {
-		saveunder = mybuffer[pos];
-		a = saveunder & 0xff00;
-		c = saveunder & 0x00ff;
+	if (pos >= 0) {
+		st->saveunder = st->buffer[pos];
+		a = st->saveunder & 0xff00;
+		c = st->saveunder & 0x00ff;
 		if ((a & 0x7000) == 0x7000) {
 			a &= 0x8f00;
 			if ((a & 0x0700) == 0)
@@ -150,9 +181,10 @@ dumbfb_setcursor(void *cookie, int pos)
 				a &= 0xf000;
 		}
 		val = a | c;
-		dumbfb_putchars(cookie, pos%80, pos/80, &val, 1);
+		dumbfb_putchars(cookie, pos%st->columns, pos/st->columns,
+		    &val, 1);
 	}
-	cursorpos = pos;
+	st->cursorpos = pos;
 
 	return 0;
 }
@@ -160,7 +192,9 @@ dumbfb_setcursor(void *cookie, int pos)
 static int
 dumbfb_getcursor(void *cookie, int *pos)
 {
-	*pos = cursorpos;
+	struct dumbfb_state *st = (struct dumbfb_state *)cookie;
+
+	*pos = st->cursorpos;
 
 	return 0;
 }
@@ -168,6 +202,10 @@ dumbfb_getcursor(void *cookie, int *pos)
 static int
 dumbfb_setcurmode(void *cookie, int mode)
 {
+#if notyet
+	struct dumbfb_state *st = (struct dumbfb_state *)cookie;
+#endif
+
 	/* only supporting block mode for now */
 
 	return 0;
@@ -176,13 +214,20 @@ dumbfb_setcurmode(void *cookie, int mode)
 static char *
 dumbfb_getname(void *cookie)
 {
-	return "kms";
+#if notyet
+	struct dumbfb_state *st = (struct dumbfb_state *)cookie;
+#endif
+
+	/* XXX retrieve device name from struct dumbfb_state */
+
+	return "dumbfb";
 }
 
 static void
 dumbfb_restore(void *cookie)
 {
-	struct fb_info *fb = (struct fb_info *)cookie;
+	struct dumbfb_state *st = (struct dumbfb_state *)cookie;
+	struct fb_info *fb = st->fbi;
 
 	fb->restore(fb->cookie);
 }
@@ -202,15 +247,23 @@ struct txtdev_sw dumbfbsw = {
 int
 register_dumbfb_txtdev(struct fb_info *info)
 {
+	struct dumbfb_state *st;
 	int how;
-	int i, j;
+	int error, i, j;
+
+	st = kmalloc(sizeof(struct dumbfb_state), M_DEVBUF, M_ZERO | M_WAITOK);
+	st->buffer = kmalloc(80*25*sizeof(*st->buffer), M_DEVBUF,
+	    M_ZERO | M_WAITOK);
+	st->fbi = info;
+	st->columns = 80;
+	st->rows = 25;
+	st->cursorpos = -1;
+	st->saveunder = 0x0000;
 
 	if (info->is_vga_boot_display)
 		how = TXTDEV_REPLACE_VGA;
 	else
 		how = 0;
-
-	cursorpos = -1;
 
 	for (i = 0; i < info->height; i++) {
 		for (j = 0; j < info->width; j++) {
@@ -218,5 +271,11 @@ register_dumbfb_txtdev(struct fb_info *info)
 		}
 	}
 
-	return register_txtdev((void *)info, &dumbfbsw, how);
+	error = register_txtdev((void *)st, &dumbfbsw, how);
+	if (error != 0) {
+		kfree(st->buffer, M_DEVBUF);
+		kfree(st, M_DEVBUF);
+	}
+
+	return error;
 }
