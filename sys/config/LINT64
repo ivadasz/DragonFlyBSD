@@ -2166,6 +2166,7 @@ device		tbridge		# regression testing
 # Virtio support
 #
 device		virtio
+device		virtio_balloon
 device		virtio_blk
 device		vtnet
 device		virtio_pci

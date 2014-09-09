@@ -2394,6 +2394,7 @@ bus/u4b/audio/uaudio_pcm.c		optional snd_uaudio usb
 #
 # virtio support
 #
+dev/virtual/virtio/balloon/virtio_balloon.c	optional virtio_balloon virtio
 dev/virtual/virtio/block/virtio_blk.c	optional virtio_blk virtio
 dev/virtual/virtio/net/if_vtnet.c	optional vtnet virtio
 dev/virtual/virtio/pci/virtio_pci.c	optional virtio_pci virtio

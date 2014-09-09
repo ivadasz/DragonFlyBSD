@@ -23,6 +23,9 @@
 # SUCH DAMAGE.
 #
 
-SUBDIR= virtio pci balloon block net
+KMOD=	virtio_balloon
+SRCS=	virtio_balloon.c
+SRCS+=	virtio_bus_if.h virtio_if.h
+SRCS+=	bus_if.h device_if.h 
 
-.include <bsd.subdir.mk>
+.include <bsd.kmod.mk>
