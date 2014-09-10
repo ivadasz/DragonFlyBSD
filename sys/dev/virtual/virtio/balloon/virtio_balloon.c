@@ -252,9 +252,9 @@ vtballoon_config_change(device_t dev)
 
 	sc = device_get_softc(dev);
 
-	lwkt_serialize_enter(&sc->vtballoon_slz);
+//	lwkt_serialize_enter(&sc->vtballoon_slz);
 	wakeup_one(sc);
-	lwkt_serialize_exit(&sc->vtballoon_slz);
+//	lwkt_serialize_exit(&sc->vtballoon_slz);
 
 	return (1);
 }
@@ -393,13 +393,13 @@ vtballoon_send_page_frames(struct vtballoon_softc *sc, struct virtqueue *vq,
 
 	error = virtqueue_enqueue(vq, vq, &sg, 1, 0);
 	KASSERT(error == 0, ("error enqueuing page frames to virtqueue"));
+	lwkt_serialize_enter(&sc->vtballoon_slz);
 	virtqueue_notify(vq, &sc->vtballoon_slz);
 
 	/*
 	 * Inflate and deflate operations are done synchronously. The
 	 * interrupt handler will wake us up.
 	 */
-	lwkt_serialize_enter(&sc->vtballoon_slz);
 	while ((c = virtqueue_dequeue(vq, NULL)) == NULL)
 		zsleep(sc, &sc->vtballoon_slz, 0, "vtbspf", 0);
 	lwkt_serialize_exit(&sc->vtballoon_slz);
