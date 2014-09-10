@@ -41,12 +41,12 @@ __FBSDID("$FreeBSD: head/sys/dev/virtio/balloon/virtio_balloon.c 267858 2014-06-
 #include <sys/lock.h>
 #include <sys/queue.h>
 #include <sys/serialize.h>
+#include <sys/bus.h>
+#include <sys/rman.h>
 
 #include <vm/vm.h>
 #include <vm/vm_page.h>
-
-#include <sys/bus.h>
-#include <sys/rman.h>
+#include <vm/vm_page2.h>
 
 #include <dev/virtual/virtio/virtio/virtio.h>
 #include <dev/virtual/virtio/virtio/virtqueue.h>
@@ -70,6 +70,9 @@ struct vtballoon_softc {
 	struct thread		*vtballoon_td;
 	uint32_t		*vtballoon_page_frames;
 	int			 vtballoon_timeout;
+
+	struct sysctl_ctx_list	 vtballoon_sysctl_ctx;
+	struct sysctl_oid	*vtballoon_sysctl_tree;
 };
 
 static struct virtio_feature_desc vtballoon_feature_desc[] = {
@@ -87,7 +90,7 @@ static int	vtballoon_config_change(device_t);
 static void	vtballoon_negotiate_features(struct vtballoon_softc *);
 static int	vtballoon_alloc_virtqueues(struct vtballoon_softc *);
 
-static void	vtballoon_vq_intr(void *);
+static int	vtballoon_vq_intr(void *);
 
 static void	vtballoon_inflate(struct vtballoon_softc *, int);
 static void	vtballoon_deflate(struct vtballoon_softc *, int);
@@ -176,13 +179,7 @@ vtballoon_attach(device_t dev)
 	vtballoon_negotiate_features(sc);
 
 	sc->vtballoon_page_frames = kmalloc(VTBALLOON_PAGES_PER_REQUEST *
-	    sizeof(uint32_t), M_DEVBUF, M_NOWAIT | M_ZERO);
-	if (sc->vtballoon_page_frames == NULL) {
-		error = ENOMEM;
-		device_printf(dev,
-		    "cannot allocate page frame request array\n");
-		goto fail;
-	}
+	    sizeof(uint32_t), M_DEVBUF, M_WAITOK | M_ZERO);
 
 	error = vtballoon_alloc_virtqueues(sc);
 	if (error) {
@@ -190,13 +187,13 @@ vtballoon_attach(device_t dev)
 		goto fail;
 	}
 
-	error = virtio_setup_intr(dev, INTR_TYPE_MISC);
+	error = virtio_setup_intr(dev, &sc->vtballoon_slz);
 	if (error) {
 		device_printf(dev, "cannot setup virtqueue interrupts\n");
 		goto fail;
 	}
 
-	error = kthread_add(vtballoon_thread, sc, NULL, &sc->vtballoon_td,
+	error = lwkt_create(vtballoon_thread, sc, &sc->vtballoon_td, NULL,
 	    0, 0, "virtio_balloon");
 	if (error) {
 		device_printf(dev, "cannot create balloon kthread\n");
@@ -219,6 +216,11 @@ vtballoon_detach(device_t dev)
 	struct vtballoon_softc *sc;
 
 	sc = device_get_softc(dev);
+
+	if (sc->vtballoon_sysctl_tree) {
+		sysctl_ctx_free(&sc->vtballoon_sysctl_ctx);
+		sc->vtballoon_sysctl_tree = NULL;
+	}
 
 	if (sc->vtballoon_td != NULL) {
 		lwkt_serialize_enter(&sc->vtballoon_slz);
@@ -287,16 +289,18 @@ vtballoon_alloc_virtqueues(struct vtballoon_softc *sc)
 	return (virtio_alloc_virtqueues(dev, 0, nvqs, vq_info));
 }
 
-static void
+static int
 vtballoon_vq_intr(void *xsc)
 {
 	struct vtballoon_softc *sc;
 
 	sc = xsc;
 
-	lwkt_serialize_enter(&sc->vtballoon_slz);
+//	lwkt_serialize_enter(&sc->vtballoon_slz);
 	wakeup_one(sc);
-	lwkt_serialize_exit(&sc->vtballoon_slz);
+//	lwkt_serialize_exit(&sc->vtballoon_slz);
+
+	return (1);
 }
 
 static void
@@ -322,7 +326,7 @@ vtballoon_inflate(struct vtballoon_softc *sc, int npages)
 
 		KASSERT(m->queue == PQ_NONE,
 		    ("%s: allocated page %p on queue", __func__, m));
-		TAILQ_INSERT_TAIL(&sc->vtballoon_pages, m, plinks.q);
+		TAILQ_INSERT_TAIL(&sc->vtballoon_pages, m, pageq);
 	}
 
 	if (i > 0)
@@ -350,8 +354,8 @@ vtballoon_deflate(struct vtballoon_softc *sc, int npages)
 		sc->vtballoon_page_frames[i] =
 		    VM_PAGE_TO_PHYS(m) >> VIRTIO_BALLOON_PFN_SHIFT;
 
-		TAILQ_REMOVE(&sc->vtballoon_pages, m, plinks.q);
-		TAILQ_INSERT_TAIL(&free_pages, m, plinks.q);
+		TAILQ_REMOVE(&sc->vtballoon_pages, m, pageq);
+		TAILQ_INSERT_TAIL(&free_pages, m, pageq);
 	}
 
 	if (i > 0) {
@@ -359,7 +363,7 @@ vtballoon_deflate(struct vtballoon_softc *sc, int npages)
 		vtballoon_send_page_frames(sc, vq, i);
 
 		while ((m = TAILQ_FIRST(&free_pages)) != NULL) {
-			TAILQ_REMOVE(&free_pages, m, plinks.q);
+			TAILQ_REMOVE(&free_pages, m, pageq);
 			vtballoon_free_page(sc, m);
 		}
 	}
@@ -389,7 +393,7 @@ vtballoon_send_page_frames(struct vtballoon_softc *sc, struct virtqueue *vq,
 
 	error = virtqueue_enqueue(vq, vq, &sg, 1, 0);
 	KASSERT(error == 0, ("error enqueuing page frames to virtqueue"));
-	virtqueue_notify(vq);
+	virtqueue_notify(vq, &sc->vtballoon_slz);
 
 	/*
 	 * Inflate and deflate operations are done synchronously. The
@@ -426,7 +430,7 @@ vtballoon_alloc_page(struct vtballoon_softc *sc)
 {
 	vm_page_t m;
 
-	m = vm_page_alloc(NULL, 0, VM_ALLOC_NORMAL | VM_ALLOC_NOOBJ);
+	m = vm_page_alloc(NULL, 0, VM_ALLOC_NORMAL);
 	if (m != NULL)
 		sc->vtballoon_current_npages++;
 
@@ -538,8 +542,14 @@ vtballoon_add_sysctl(struct vtballoon_softc *sc)
 	struct sysctl_oid_list *child;
 
 	dev = sc->vtballoon_dev;
-	ctx = device_get_sysctl_ctx(dev);
-	tree = device_get_sysctl_tree(dev);
+	sysctl_ctx_init(&sc->vtballoon_sysctl_ctx);
+	sc->vtballoon_sysctl_tree = SYSCTL_ADD_NODE(&sc->vtballoon_sysctl_ctx,
+	    SYSCTL_STATIC_CHILDREN(_hw),
+	    OID_AUTO,
+	    device_get_nameunit(sc->vtballoon_dev),
+	    CTLFLAG_RD, 0, "");
+	ctx = &sc->vtballoon_sysctl_ctx;
+	tree = sc->vtballoon_sysctl_tree;
 	child = SYSCTL_CHILDREN(tree);
 
 	SYSCTL_ADD_UINT(ctx, child, OID_AUTO, "desired",
