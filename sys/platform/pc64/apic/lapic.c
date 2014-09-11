@@ -579,8 +579,10 @@ apic_ipi(int dest_type, int vector, int delivery_mode)
 
 	rflags = read_rflags();
 	cpu_disable_intr();
-	while ((lapic->icr_lo & APIC_DELSTAT_MASK) != 0) {
-		cpu_pause();
+	if (!vmm_guest) {
+		while ((lapic->icr_lo & APIC_DELSTAT_MASK) != 0) {
+			cpu_pause();
+		}
 	}
 	icr_lo = (lapic->icr_lo & APIC_ICRLO_RESV_MASK) | dest_type | 
 		delivery_mode | vector;
@@ -596,22 +598,38 @@ single_apic_ipi(int cpu, int vector, int delivery_mode)
 	unsigned long rflags;
 	u_long  icr_lo;
 	u_long  icr_hi;
+	uint64_t data;
 
 	rflags = read_rflags();
 	cpu_disable_intr();
-	while ((lapic->icr_lo & APIC_DELSTAT_MASK) != 0) {
-		cpu_pause();
+	if (!vmm_guest) {
+		while ((lapic->icr_lo & APIC_DELSTAT_MASK) != 0) {
+			cpu_pause();
+		}
 	}
-	icr_hi = lapic->icr_hi & ~APIC_ID_MASK;
-	icr_hi |= (CPUID_TO_APICID(cpu) << 24);
-	lapic->icr_hi = icr_hi;
+	if (kvm_featurehigh != 0) {
+		icr_hi = (CPUID_TO_APICID(cpu) << 24);
+		data = icr_hi;
+		data <<= 32;
 
-	/* build ICR_LOW */
-	icr_lo = (lapic->icr_lo & APIC_ICRLO_RESV_MASK) |
-		 APIC_DEST_DESTFLD | delivery_mode | vector;
+		/* build ICR_LOW */
+		icr_lo = APIC_DEST_DESTFLD | delivery_mode | vector;
+		data |= icr_lo;
 
-	/* write APIC ICR */
-	lapic->icr_lo = icr_lo;
+		/* write APIC ICR */
+		wrmsr(MSR_HV_X64_ICR, data);
+	} else {
+		icr_hi = lapic->icr_hi & ~APIC_ID_MASK;
+		icr_hi |= (CPUID_TO_APICID(cpu) << 24);
+		lapic->icr_hi = icr_hi;
+
+		/* build ICR_LOW */
+		icr_lo = (lapic->icr_lo & APIC_ICRLO_RESV_MASK) |
+			 APIC_DEST_DESTFLD | delivery_mode | vector;
+
+		/* write APIC ICR */
+		lapic->icr_lo = icr_lo;
+	}
 	write_rflags(rflags);
 }
 

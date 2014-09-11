@@ -630,4 +630,7 @@
 #define MSR_KVM_STEAL_TIME	0x4b564d03
 #define MSR_KVM_EOI_EN		0x4b564d04
 
+/* Common Virtualization MSRs */
+#define	MSR_HV_X64_ICR		0x40000071
+
 #endif /* !_CPU_SPECIALREG_H_ */
