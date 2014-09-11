@@ -178,8 +178,15 @@ vtballoon_attach(device_t dev)
 	virtio_set_feature_desc(dev, vtballoon_feature_desc);
 	vtballoon_negotiate_features(sc);
 
-	sc->vtballoon_page_frames = kmalloc(VTBALLOON_PAGES_PER_REQUEST *
-	    sizeof(uint32_t), M_DEVBUF, M_WAITOK | M_ZERO);
+	sc->vtballoon_page_frames = contigmalloc(VTBALLOON_PAGES_PER_REQUEST *
+	    sizeof(uint32_t), M_DEVBUF, M_WAITOK | M_ZERO,
+	    0, BUS_SPACE_MAXADDR, 4, 0x1000);
+	if (sc->vtballoon_page_frames == NULL) {
+		error = ENOMEM;
+		device_printf(dev,
+		    "cannot allocate page frame request array\n");
+		goto fail;
+	}
 
 	error = vtballoon_alloc_virtqueues(sc);
 	if (error) {
@@ -238,7 +245,8 @@ vtballoon_detach(device_t dev)
 	}
 
 	if (sc->vtballoon_page_frames != NULL) {
-		kfree(sc->vtballoon_page_frames, M_DEVBUF);
+		contigfree(sc->vtballoon_page_frames,
+		    VTBALLOON_PAGES_PER_REQUEST * sizeof(uint32_t), M_DEVBUF);
 		sc->vtballoon_page_frames = NULL;
 	}
 
