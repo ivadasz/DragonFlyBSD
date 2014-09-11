@@ -37,7 +37,7 @@
 #include <machine/limits.h>
 #include <machine/smp.h>
 #include <machine/md_var.h>
-#include <machine/pmap.h>
+#include <vm/pmap.h>
 #include <machine/specialreg.h>
 #include <machine_base/apic/lapic.h>
 #include <machine_base/apic/ioapic.h>
@@ -55,6 +55,7 @@
 #define KTR_LAPIC	KTR_ALL
 #endif
 KTR_INFO_MASTER(lapic);
+KTR_INFO(KTR_LAPIC, lapic, kvm_eoi, 0, "kvm_eoi");
 KTR_INFO(KTR_LAPIC, lapic, mem_eoi, 0, "mem_eoi");
 KTR_INFO(KTR_LAPIC, lapic, msr_eoi, 0, "msr_eoi");
 #define log_lapic(name)     KTR_LOG(lapic_ ## name)
@@ -135,6 +136,9 @@ struct deadlines {
 };
 struct deadlines *tsc_deadlines = NULL;
 
+/* KVM PV-EOI */
+static void	lapic_kvm_eoi(void);
+
 static void	lapic_mem_eoi(void);
 static int	lapic_mem_ipi(int dest_type, int vector, int delivery_mode);
 static void	lapic_mem_single_ipi(int cpu, int vector, int delivery_mode);
@@ -175,6 +179,7 @@ lapic_init(boolean_t bsp)
 {
 	uint32_t timer;
 	u_int   temp;
+	struct mdglobaldata *md = mdcpu;
 
 	if (bsp) {
 		/* Decide whether we want to use TSC Deadline mode. */
@@ -423,6 +428,13 @@ lapic_init(boolean_t bsp)
 		}
 	} else if (!lapic_use_tscdeadline) {
 		lapic_timer_set_divisor(lapic_timer_divisor_idx);
+	}
+
+	bzero(&md->gd_kvmeoi, sizeof(md->gd_kvmeoi));
+	if (kvm_feature & KVM_FEATURE_PV_EOI) {
+		kprintf("enabling MSR_KVM_EOI_EN on cpu %d\n", mycpuid);
+		wrmsr(MSR_KVM_EOI_EN, vtophys(&md->gd_kvmeoi) | 1ULL);
+		lapic_eoi = lapic_kvm_eoi;
 	}
 
 	if (bootverbose)
@@ -1209,6 +1221,14 @@ lapic_msr_eoi(void)
 {
 	log_lapic(msr_eoi);
 	LAPIC_MSR_WRITE(MSR_X2APIC_EOI, 0);
+}
+
+static void
+lapic_kvm_eoi(void)
+{
+	log_lapic(kvm_eoi);
+	if (atomic_testandclear_int(&mdcpu->gd_kvmeoi, 0) == 0)
+		LAPIC_MSR_WRITE(MSR_X2APIC_EOI, 0);
 }
 
 static void

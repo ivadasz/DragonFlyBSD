@@ -59,6 +59,8 @@ u_int	amd_feature;		/* AMD feature flags */
 u_int	amd_feature2;		/* AMD feature flags */
 u_int	via_feature_rng;	/* VIA RNG features */
 u_int	via_feature_xcrypt;	/* VIA ACE features */
+u_int	kvm_feature;		/* KVM feature flags */
+u_int	kvm_featurehigh;	/* Highest arg to KVM feature CPUID */
 u_int	cpu_high;		/* Highest arg to CPUID */
 u_int	cpu_exthigh;		/* Highest arg to extended CPUID */
 u_int	cpu_id;			/* Stepping ID */

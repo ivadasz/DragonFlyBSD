@@ -248,6 +248,7 @@ ASSYM(GD_SAVEFPU, offsetof(struct mdglobaldata, gd_savefpu));
 ASSYM(GD_OTHER_CPUS, offsetof(struct mdglobaldata, mi.gd_other_cpus));
 ASSYM(GD_SS_EFLAGS, offsetof(struct mdglobaldata, gd_ss_eflags));
 ASSYM(GD_REQFLAGS, offsetof(struct mdglobaldata, mi.gd_reqflags));
+ASSYM(GD_KVM_EOI, offsetof(struct mdglobaldata, gd_kvmeoi));
 
 ASSYM(RQF_IPIQ, RQF_IPIQ);
 ASSYM(RQF_INTPEND, RQF_INTPEND);

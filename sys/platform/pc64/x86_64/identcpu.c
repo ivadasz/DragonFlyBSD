@@ -419,6 +419,21 @@ printcpuinfo(void)
 				    , cpu_mwait_feature);
 			}
 
+			if (kvm_feature != 0) {
+				kprintf("\n  KVM Features=0x%pb%i",
+				    "\020"
+				    "\001CLOCKSOURCE"
+				    "\002NOPIODELAY"
+				    "\003MMUOP"
+				    "\004CLOCKSOURCE2"
+				    "\005ASYNCPF"
+				    "\006STEALTIME"
+				    "\007PVEOI"
+				    "\008PVUNHALT"
+				    "\031CLOCKSOURCESTABLE",
+				    kvm_feature);
+			}
+
 			if (cpu_vendor_id == CPU_VENDOR_CENTAUR)
 				print_via_padlock_info();
 			/*
@@ -595,6 +610,20 @@ identify_cpu(void)
 	if (cpu_exthigh >= 0x80000008) {
 		do_cpuid(0x80000008, regs);
 		cpu_procinfo2 = regs[2];
+	}
+
+	do_cpuid(0x40000000, regs);
+	if (regs[1] == KVM_SIGNATURE_EBX &&
+	    regs[2] == KVM_SIGNATURE_ECX &&
+	    regs[3] == KVM_SIGNATURE_EDX) {
+		if (regs[0] == 0)
+			kvm_featurehigh = 0x40000001;
+		else
+			kvm_featurehigh = regs[0];
+	}
+	if (kvm_featurehigh >= 0x40000001) {
+		do_cpuid(0x40000001, regs);
+		kvm_feature = regs[0];
 	}
 
 	/* XXX */
