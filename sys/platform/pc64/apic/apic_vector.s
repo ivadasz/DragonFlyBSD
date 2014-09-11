@@ -122,7 +122,10 @@ IDTVEC(ioapic_intr##irq_num) ;						\
 	FAKE_MCOUNT(TF_RIP(%rsp)) ;					\
 	MASK_LEVEL_IRQ(irq_num) ;					\
 	movq	lapic, %rax ;						\
+	btrl	$0, PCPU(kvmeoi) ;					\
+	jc	didpveoi ## irq_num ;					\
 	movl	$0, LA_EOI(%rax) ;					\
+didpveoi ## irq_num: ;							\
 	movq	PCPU(curthread),%rbx ;					\
 	testl	$-1,TD_NEST_COUNT(%rbx) ;				\
 	jne	1f ;							\
@@ -189,7 +192,10 @@ Xspuriousint:
 Xinvltlb:
 	APIC_PUSH_FRAME
 	movq	lapic, %rax
+	btrl	$0, PCPU(kvmeoi)
+	jc	didpveoi
 	movl	$0, LA_EOI(%rax)	/* End Of Interrupt to APIC */
+didpveoi:
 	FAKE_MCOUNT(TF_RIP(%rsp))
 	subq	$8,%rsp			/* make same as interrupt frame */
 	movq	%rsp,%rdi		/* pass frame by reference */
@@ -215,7 +221,10 @@ Xinvltlb:
 Xcpustop:
 	APIC_PUSH_FRAME
 	movq	lapic, %rax
+	btrl	$0, PCPU(kvmeoi)
+	jc	didpveoi_cpustop
 	movl	$0, LA_EOI(%rax)	/* End Of Interrupt to APIC */
+didpveoi_cpustop:
 
 	movl	PCPU(cpuid), %eax
 	imull	$PCB_SIZE, %eax
@@ -307,7 +316,10 @@ Xcpustop:
 Xipiq:
 	APIC_PUSH_FRAME
 	movq	lapic, %rax
+	btrl	$0, PCPU(kvmeoi)
+	jc	didpveoi_ipiq
 	movl	$0, LA_EOI(%rax)	/* End Of Interrupt to APIC */
+didpveoi_ipiq:
 	FAKE_MCOUNT(TF_RIP(%rsp))
 
 	incl    PCPU(cnt) + V_IPI
@@ -337,7 +349,10 @@ Xipiq:
 Xtimer:
 	APIC_PUSH_FRAME
 	movq	lapic, %rax
+	btrl	$0, PCPU(kvmeoi)
+	jc	didpveoi_timer
 	movl	$0, LA_EOI(%rax)	/* End Of Interrupt to APIC */
+didpveoi_timer:
 	FAKE_MCOUNT(TF_RIP(%rsp))
 
 	subq	$8,%rsp			/* make same as interrupt frame */

@@ -104,6 +104,7 @@ lapic_init(boolean_t bsp)
 {
 	uint32_t timer;
 	u_int   temp;
+	struct mdglobaldata *md = mdcpu;
 
 	/*
 	 * Install vectors
@@ -276,6 +277,12 @@ lapic_init(boolean_t bsp)
 		}
 	} else {
 		lapic_timer_set_divisor(lapic_timer_divisor_idx);
+	}
+
+	bzero(&md->gd_kvmeoi, sizeof(md->gd_kvmeoi));
+	if (kvm_feature & KVM_FEATURE_PV_EOI) {
+		kprintf("enabling MSR_KVM_EOI_EN on cpu %d\n", mycpuid);
+		wrmsr(MSR_KVM_EOI_EN, vtophys(&md->gd_kvmeoi) | 1ULL);
 	}
 
 	if (bootverbose)

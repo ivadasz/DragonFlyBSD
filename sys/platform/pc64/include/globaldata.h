@@ -94,6 +94,7 @@ struct mdglobaldata {
 	register_t	gd_user_gs;	/* current user gs in MSR */
 	cpumask_t	gd_invltlb_ret;
 	u_long		gd_ipending[3];
+	u_int		gd_kvmeoi __aligned(4);
 };
 
 #define MDGLOBALDATA_BASEALLOC_SIZE	\
