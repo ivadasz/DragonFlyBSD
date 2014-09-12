@@ -1236,10 +1236,13 @@ tsc_mpsync_test(void)
 		return;
 	}
 
+	/* XXX Check for AMD > 15h 0x0h-0xfh cpu */
+#if 0
 	if (cpu_vendor_id != CPU_VENDOR_INTEL) {
 		/* XXX only Intel works */
 		return;
 	}
+#endif
 
 	kprintf("TSC testing MP synchronization ...\n");
 	tsc_mpsync = 1;
