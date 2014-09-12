@@ -608,12 +608,14 @@ single_apic_ipi(int cpu, int vector, int delivery_mode)
 		}
 	}
 	if (kvm_featurehigh != 0) {
-		icr_hi = (CPUID_TO_APICID(cpu) << 24);
+		icr_hi = lapic->icr_hi & ~APIC_ID_MASK;
+		icr_hi |= (CPUID_TO_APICID(cpu) << 24);
 		data = icr_hi;
 		data <<= 32;
 
 		/* build ICR_LOW */
-		icr_lo = APIC_DEST_DESTFLD | delivery_mode | vector;
+		icr_lo = (lapic->icr_lo & APIC_ICRLO_RESV_MASK) |
+			 APIC_DEST_DESTFLD | delivery_mode | vector;
 		data |= icr_lo;
 
 		/* write APIC ICR */
