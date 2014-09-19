@@ -438,6 +438,9 @@ vtballoon_alloc_page(struct vtballoon_softc *sc)
 {
 	vm_page_t m;
 
+	if (vm_page_count_target())
+		return (NULL);
+
 	m = vm_page_alloc(NULL, 0, VM_ALLOC_NORMAL);
 	if (m != NULL)
 		sc->vtballoon_current_npages++;
@@ -501,10 +504,14 @@ vtballoon_sleep(struct vtballoon_softc *sc)
 		timeout = sc->vtballoon_timeout;
 		sc->vtballoon_timeout = 0;
 
-		if (current > desired)
+		if (current > desired) {
+			zsleep(sc, &sc->vtballoon_slz, 0, "vtbdel", 1);
 			break;
-		if (current < desired && timeout == 0)
+		}
+		if (current < desired && timeout == 0) {
+			zsleep(sc, &sc->vtballoon_slz, 0, "vtbdel", 1);
 			break;
+		}
 
 		zsleep(sc, &sc->vtballoon_slz, 0, "vtbslp", timeout);
 	}
