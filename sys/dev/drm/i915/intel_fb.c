@@ -43,7 +43,7 @@ static int intelfb_create(struct intel_fbdev *ifbdev,
 #endif
 	struct fb_info *info;
 	struct drm_framebuffer *fb;
-	struct drm_mode_fb_cmd2 mode_cmd;
+	struct drm_mode_fb_cmd2 mode_cmd = {};
 	struct drm_i915_gem_object *obj;
 	device_t vga_dev;
 	int size, ret;
