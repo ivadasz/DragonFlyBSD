@@ -127,6 +127,7 @@ SYSCTL_INT(_machdep, OID_AUTO, enable_panic_key, CTLFLAG_RW, &enable_panic_key,
 #define ISTTYOPEN(tp)	((tp) && ((tp)->t_state & TS_ISOPEN))
 
 static	int	debugger;
+static	int	entering_debugger;
 static	cdev_t	cctl_dev;
 #if 0
 static	timeout_t blink_screen_callout;
@@ -151,6 +152,7 @@ static void scstart(struct tty *tp);
 static void scinit(int unit, int flags);
 static void scterm(int unit, int flags);
 static void scshutdown(void *arg, int howto);
+static void sc_restore_txtdev(sc_softc_t *sc);
 static void sc_puts(scr_stat *scp, u_char *buf, int len);
 static void sc_draw_text(scr_stat *scp, int from, int count, int flip);
 static u_int scgetc(sc_softc_t *sc, u_int flags);
@@ -403,7 +405,7 @@ sc_txtdev_cb(void *sccookie, void *txtcookie)
 	}
 	if (acquire_txtdev(&sc->txtdev_cookie, &sc->txtdevsw, sc_txtdev_cb, sc)
 	     == 0) {
-		sc->txtdevsw->restore(sc->txtdev_cookie);
+		sc_restore_txtdev(sc);
 		if (sc->txtdevsw->setmode(sc->txtdev_cookie, &sctxtmode) != 0) {
 			kprintf("sc0: setting txtdev mode to %dx%d failed\n",
 			    sctxtmode.txt_columns, sctxtmode.txt_rows);
@@ -1599,12 +1601,14 @@ sccndbctl(void *private, int on)
     /* assert(sc_console_unit >= 0) */
     /* try to switch to the kernel console screen */
     if (on && debugger == 0) {
+	++entering_debugger;
 	/*
 	 * TRY to make sure the screen saver is stopped, 
 	 * and the screen is updated before switching to 
 	 * the vty0.
 	 */
 	scrn_timer(NULL);
+#if 0
 	if (!cold
 	    && sc_console->sc->cur_scp->smode.mode == VT_AUTO
 	    && sc_console->smode.mode == VT_AUTO) {
@@ -1612,6 +1616,14 @@ sccndbctl(void *private, int on)
 	    sc_switch_scr(sc_console->sc, sc_console->index);
 	    syscons_unlock();
 	}
+#else
+	if (!cold && sc_console) {
+	    syscons_lock();
+	    sc_switch_scr(sc_console->sc, sc_console->index);
+	    syscons_unlock();
+	}
+#endif
+	--entering_debugger;
     }
     if (on)
 	++debugger;
@@ -1871,7 +1883,7 @@ sc_switch_scr(sc_softc_t *sc, u_int next_scr)
      * still going to use a spinlock but it no longer uses tokens so
      * we should be ok.
      */
-    if (sc->switch_in_progress &&
+    if (!entering_debugger && sc->switch_in_progress &&
 	(cur_scp->smode.mode == VT_PROCESS) &&
 	cur_scp->proc) {
 	if (cur_scp->proc != pfindn(cur_scp->pid)) {
@@ -1970,7 +1982,7 @@ sc_switch_scr(sc_softc_t *sc, u_int next_scr)
      * as the current or the current vty has been closed (but showing).
      */
     tp = VIRTUAL_TTY(sc, cur_scp->index);
-    if ((cur_scp->index != next_scr)
+    if (!entering_debugger && (cur_scp->index != next_scr)
 	&& ISTTYOPEN(tp)
 	&& (cur_scp->smode.mode == VT_AUTO)
 	&& ISGRAPHSC(cur_scp)) {
@@ -2011,11 +2023,13 @@ sc_switch_scr(sc_softc_t *sc, u_int next_scr)
     }
 
     /* has controlling process died? */
-    vt_proc_alive(sc->old_scp);
-    vt_proc_alive(sc->new_scp);
+    if (!entering_debugger) {
+	vt_proc_alive(sc->old_scp);
+	vt_proc_alive(sc->new_scp);
+    }
 
     /* wait for the controlling process to release the screen, if necessary */
-    if (signal_vt_rel(sc->old_scp)) {
+    if (!entering_debugger && signal_vt_rel(sc->old_scp)) {
 	return 0;
     }
 
@@ -2172,9 +2186,20 @@ exchange_scr(sc_softc_t *sc)
     update_kbd_state(scp, scp->status, LOCK_MASK, TRUE);
 
     mark_all(scp);
-    if (sc->txtdevsw != NULL)
-	sc->txtdevsw->restore(sc->txtdev_cookie);
+    if (sc->txtdevsw != NULL) {
+	sc_restore_txtdev(sc);
+    }
     lwkt_reltoken(&tty_token);
+}
+
+static void
+sc_restore_txtdev(sc_softc_t *sc)
+{
+	if (debugger > 0 || panicstr || shutdown_in_progress ||
+	    entering_debugger)
+		sc->txtdevsw->restore(sc->txtdev_cookie, 1);
+	else
+		sc->txtdevsw->restore(sc->txtdev_cookie, 0);
 }
 
 static void
@@ -2419,11 +2444,17 @@ scshutdown(void *arg, int howto)
 
     lwkt_gettoken(&tty_token);
     syscons_lock();
+#if 0
     if (!cold && sc_console
 	&& sc_console->sc->cur_scp->smode.mode == VT_AUTO 
 	&& sc_console->smode.mode == VT_AUTO) {
 	sc_switch_scr(sc_console->sc, sc_console->index);
     }
+#else
+    if (!cold && sc_console) {
+	sc_switch_scr(sc_console->sc, sc_console->index);
+    }
+#endif
     shutdown_in_progress = TRUE;
     syscons_unlock();
     lwkt_reltoken(&tty_token);

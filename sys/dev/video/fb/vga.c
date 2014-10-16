@@ -2574,7 +2574,7 @@ vga_txt_getname(void *cookie)
 }
 
 static void
-vga_txt_restore(void *cookie)
+vga_txt_restore(void *cookie, int emergency)
 {
 	/* Nothing */
 }

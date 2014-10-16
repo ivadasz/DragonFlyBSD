@@ -796,12 +796,17 @@ do_restore_fbdev_mode(void *context, int pending)
 }
 
 static void
-sc_restore_fbdev_mode(void *cookie)
+sc_restore_fbdev_mode(void *cookie, int emergency)
 {
 	struct drm_fb_helper *fb_helper = cookie;
 
 	if (!fb_helper->fb)
 		return;
+
+	if (emergency) {
+		drm_fb_helper_restore_fbdev_mode(fb_helper);
+		return;
+	}
 
 	taskqueue_enqueue(taskqueue_thread[0], &fb_helper->fb_mode_task);
 }

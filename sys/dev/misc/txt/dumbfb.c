@@ -224,12 +224,12 @@ dumbfb_getname(void *cookie)
 }
 
 static void
-dumbfb_restore(void *cookie)
+dumbfb_restore(void *cookie, int emergency)
 {
 	struct dumbfb_state *st = (struct dumbfb_state *)cookie;
 	struct fb_info *fb = st->fbi;
 
-	fb->restore(fb->cookie);
+	fb->restore(fb->cookie, emergency);
 }
 
 struct txtdev_sw dumbfbsw = {
