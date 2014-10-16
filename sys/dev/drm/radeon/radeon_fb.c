@@ -239,9 +239,9 @@ static int radeonfb_create(struct radeon_fbdev *rfbdev,
 	tmp = radeon_bo_gpu_offset(rbo) - rdev->mc.vram_start;
 	info->vaddr = (vm_offset_t)rbo->kptr;
 	info->paddr = rdev->mc.aper_base + tmp;
-	info->width = sizes->surface_width;
-	info->height = sizes->surface_height;
-	info->stride = sizes->surface_width * (sizes->surface_bpp/8);
+	info->width = sizes->fb_width;
+	info->height = sizes->fb_height;
+	info->stride = mode_cmd.pitches[0];
 	info->depth = sizes->surface_bpp;
 	info->is_vga_boot_display = vga_pci_is_boot_display(vga_dev);
 

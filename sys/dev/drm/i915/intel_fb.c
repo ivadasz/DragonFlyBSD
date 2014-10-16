@@ -91,11 +91,11 @@ static int intelfb_create(struct intel_fbdev *ifbdev,
 	info = kmalloc(sizeof(struct fb_info), DRM_MEM_KMS, M_WAITOK | M_ZERO);
 	info->width = sizes->fb_width;
 	info->height = sizes->fb_height;
-	info->stride = sizes->fb_width * (sizes->surface_bpp/8);
+	info->stride = mode_cmd.pitches[0];
 	info->depth = sizes->surface_bpp;
 	info->paddr = dev->agp->base + obj->gtt_offset;
 	info->is_vga_boot_display = vga_pci_is_boot_display(vga_dev);
-	info->vaddr = (vm_offset_t)pmap_mapdev_attr(info->paddr, info->height * info->stride, VM_MEMATTR_WRITE_COMBINING);
+	info->vaddr = (vm_offset_t)pmap_mapdev_attr(info->paddr, sizes->surface_height * info->stride, VM_MEMATTR_WRITE_COMBINING);
 
 	ret = intel_framebuffer_init(dev, &ifbdev->ifb, &mode_cmd, obj);
 	if (ret)
