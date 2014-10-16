@@ -221,7 +221,7 @@ static int radeonfb_create(struct radeon_fbdev *rfbdev,
 
 	rbo = gem_to_radeon_bo(gobj);
 
-	info = kmalloc(sizeof(*info), DRM_MEM_KMS, M_WAITOK | M_ZERO);
+	info = kmalloc(sizeof(*info), M_DRM, M_WAITOK | M_ZERO);
 
 	ret = radeon_framebuffer_init(rdev->ddev, &rfbdev->rfb, &mode_cmd, gobj);
 	if (ret) {

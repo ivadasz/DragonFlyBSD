@@ -88,7 +88,7 @@ static int intelfb_create(struct intel_fbdev *ifbdev,
 	info->par = ifbdev;
 #endif
 	vga_dev = device_get_parent(dev->dev);
-	info = kmalloc(sizeof(struct fb_info), DRM_MEM_KMS, M_WAITOK | M_ZERO);
+	info = kmalloc(sizeof(struct fb_info), M_DRM, M_WAITOK | M_ZERO);
 	info->width = sizes->fb_width;
 	info->height = sizes->fb_height;
 	info->stride = mode_cmd.pitches[0];
