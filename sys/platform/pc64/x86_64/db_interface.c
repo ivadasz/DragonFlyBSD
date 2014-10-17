@@ -352,8 +352,10 @@ Debugger(const char *msg)
 	 * OK if the call is for the debugger hotkey but not if the call
 	 * is a weak form of panicing.
 	 */
+#if 0
 	if (cons_unavail && !(boothowto & RB_GDB))
 	    return;
+#endif
 
 	if (!in_Debugger) {
 	    in_Debugger = 1;

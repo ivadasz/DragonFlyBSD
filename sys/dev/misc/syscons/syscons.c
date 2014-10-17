@@ -1619,7 +1619,9 @@ sccndbctl(void *private, int on)
 #else
 	if (!cold && sc_console) {
 	    syscons_lock();
+	    kprintf("%s: switching to console\n", __func__);
 	    sc_switch_scr(sc_console->sc, sc_console->index);
+	    kprintf("%s: switched to console successfully\n", __func__);
 	    syscons_unlock();
 	}
 #endif
@@ -2037,7 +2039,8 @@ sc_switch_scr(sc_softc_t *sc, u_int next_scr)
     exchange_scr(sc);
 
     /* wake up processes waiting for this vty */
-    wakeup((caddr_t)&sc->cur_scp->smode);
+    if (!entering_debugger)
+	wakeup((caddr_t)&sc->cur_scp->smode);
 
     /* wait for the controlling process to acknowledge, if necessary */
     if (!entering_debugger && signal_vt_acq(sc->cur_scp)) {
