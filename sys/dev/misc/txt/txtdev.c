@@ -31,8 +31,8 @@
 #include <sys/conf.h>
 #include <sys/types.h>
 #include <sys/malloc.h>
-#include <sys/spinlock.h>
-#include <sys/spinlock2.h>
+#include <sys/globaldata.h>
+#include <sys/mutex2.h>
 #include <sys/proc.h>
 #include <sys/priv.h>
 #include <sys/kernel.h>
@@ -45,7 +45,7 @@ static void *mycookie = NULL;
 static struct txtdev_sw *mysw = NULL;
 static txtdev_newdev_cb *newdevcb = NULL;
 static void *conscookie = NULL;
-static struct spinlock txt_mtx = SPINLOCK_INITIALIZER(&txt_mtx, "txtmtx");
+static struct mtx txt_mtx = MTX_INITIALIZER;
 
 /* XXX needs a corresponding unregister_txtdev method */
 int
@@ -57,7 +57,7 @@ register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 	if (sw == NULL)
 		return 1;
 
-	spin_lock(&txt_mtx);
+	mtx_spinlock(&txt_mtx);
 
 //	/* Only allow replacing early attachements */
 //	if ((myflags & TXTDEV_IS_EARLY) != 0) {
@@ -71,7 +71,7 @@ register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 //	}
 
 	if (mycookie != NULL || mysw != NULL) {
-		spin_unlock(&txt_mtx);
+		mtx_spinunlock(&txt_mtx);
 		return 1;
 	}
 
@@ -91,18 +91,15 @@ register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 		 * We expect the console to call release_txtdev on the old
 		 * txtdev and then retrieve the new txtdev with acquire_txtdev.
 		 */
-		spin_unlock(&txt_mtx);
 		newdevcb(conscookie, oldcookie);
 	} else if (!owned && newdevcb != NULL) {
 		/*
 		 * We expect the console to call acquire_txtdev to acquire this
 		 * txtdev.
 		 */
-		spin_unlock(&txt_mtx);
 		newdevcb(conscookie, NULL);
-	} else {
-		spin_unlock(&txt_mtx);
 	}
+	mtx_spinunlock(&txt_mtx);
 
 	return 0;
 }
@@ -115,7 +112,7 @@ acquire_txtdev(void **cookie, struct txtdev_sw **sw, txtdev_newdev_cb *cb,
 	if (sw != NULL && cookie != NULL && cb == NULL)
 		return 1;
 
-	spin_lock(&txt_mtx);
+	mtx_spinlock(&txt_mtx);
 
 	if (!owned && mysw != NULL) {
 		if (sw != NULL && cookie != NULL) {
@@ -125,7 +122,7 @@ acquire_txtdev(void **cookie, struct txtdev_sw **sw, txtdev_newdev_cb *cb,
 			conscookie = cc;
 			owned = 1;
 		}
-		spin_unlock(&txt_mtx);
+		mtx_spinunlock(&txt_mtx);
 		return 0;
 	}
 
@@ -134,25 +131,26 @@ acquire_txtdev(void **cookie, struct txtdev_sw **sw, txtdev_newdev_cb *cb,
 	if (cb != NULL && newdevcb == NULL) {
 		newdevcb = cb;
 		conscookie = cc;
-		spin_unlock(&txt_mtx);
+		mtx_spinunlock(&txt_mtx);
 		return 2;
 	}
 
-	spin_unlock(&txt_mtx);
+	mtx_spinunlock(&txt_mtx);
 	return 1;
 }
 
 int
 release_txtdev(void *cookie, struct txtdev_sw *sw)
 {
-	spin_lock(&txt_mtx);
+	mtx_spinlock(&txt_mtx);
 	if (owned) {
 		owned = 0;
 		newdevcb = NULL;
 		conscookie = NULL;
+		mtx_spinunlock(&txt_mtx);
 		return 0;
 	}
 
-	spin_unlock(&txt_mtx);
+	mtx_spinunlock(&txt_mtx);
 	return 1;
 }
