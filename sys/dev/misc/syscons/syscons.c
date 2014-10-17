@@ -2040,7 +2040,7 @@ sc_switch_scr(sc_softc_t *sc, u_int next_scr)
     wakeup((caddr_t)&sc->cur_scp->smode);
 
     /* wait for the controlling process to acknowledge, if necessary */
-    if (signal_vt_acq(sc->cur_scp)) {
+    if (!entering_debugger && signal_vt_acq(sc->cur_scp)) {
 	return 0;
     }
 

@@ -112,6 +112,7 @@ kdb_trap(int type, int code, struct x86_64_saved_state *regs)
 	 * our breakpoints by disarming our breakpoints and fixing up
 	 * %eip.
 	 */
+#if 0
 	if (cons_unavail && ddb_mode) {
 	    if (type == T_TRCTRAP) {
 		regs->tf_rflags &= ~PSL_T;
@@ -119,6 +120,7 @@ kdb_trap(int type, int code, struct x86_64_saved_state *regs)
 	    }
 	    return (0);
 	}
+#endif
 
 	switch (type) {
 	    case T_BPTFLT:	/* breakpoint */
