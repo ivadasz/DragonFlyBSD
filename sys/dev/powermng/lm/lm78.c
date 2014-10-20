@@ -61,6 +61,7 @@ void wb_w83627ehf_refresh_nvolt(struct lm_softc *, int);
 void wb_refresh_temp(struct lm_softc *, int);
 void wb_refresh_fanrpm(struct lm_softc *, int);
 void wb_nct6776f_refresh_fanrpm(struct lm_softc *, int);
+void wb_nct6791d_refresh_fanrpm(struct lm_softc *, int);
 void wb_w83792d_refresh_fanrpm(struct lm_softc *, int);
 
 void as_refresh_temp(struct lm_softc *, int);
@@ -206,6 +207,34 @@ struct lm_sensor nct6776f_sensors[] = {
 	{ "", SENSOR_FANRPM, 6, 0x5a, wb_nct6776f_refresh_fanrpm },
 	{ "", SENSOR_FANRPM, 6, 0x5c, wb_nct6776f_refresh_fanrpm },
 	{ "", SENSOR_FANRPM, 6, 0x5e, wb_nct6776f_refresh_fanrpm },
+
+	{ NULL }
+};
+
+struct lm_sensor nct6791d_sensors[] = {
+	/* Voltage */
+	{ "VCore", SENSOR_VOLTS_DC, 0, 0x20, lm_refresh_volt, RFACT_NONE / 2},
+	{ "+12V", SENSOR_VOLTS_DC, 0, 0x21, lm_refresh_volt, RFACT(56, 10) / 2 },
+	{ "+3.3V", SENSOR_VOLTS_DC, 0, 0x22, lm_refresh_volt, RFACT(34, 34) / 2 },
+	{ "+3.3V", SENSOR_VOLTS_DC, 0, 0x23, lm_refresh_volt, RFACT(34, 34) / 2 },
+	{ "-12V", SENSOR_VOLTS_DC, 0, 0x24, wb_w83627ehf_refresh_nvolt },
+	{ "", SENSOR_VOLTS_DC, 0, 0x25, lm_refresh_volt, RFACT_NONE / 2 },
+	{ "", SENSOR_VOLTS_DC, 0, 0x26, lm_refresh_volt, RFACT_NONE / 2 },
+	{ "3.3VSB", SENSOR_VOLTS_DC, 5, 0x50, lm_refresh_volt, RFACT(34, 34) / 2 },
+	{ "VBAT", SENSOR_VOLTS_DC, 5, 0x51, lm_refresh_volt, RFACT_NONE / 2 },
+
+	/* Temperature */
+	{ "SYSTIN", SENSOR_TEMP, 0, 0x27, lm_refresh_temp },
+	{ "CPUTIN", SENSOR_TEMP, 1, 0x50, wb_refresh_temp },
+//	{ "", SENSOR_TEMP, 2, 0x50, wb_refresh_temp },
+
+	/* Fans */
+	{ "", SENSOR_FANRPM, 4, 0xb0, wb_nct6791d_refresh_fanrpm },
+	{ "", SENSOR_FANRPM, 4, 0xb2, wb_nct6791d_refresh_fanrpm },
+	{ "", SENSOR_FANRPM, 4, 0xb4, wb_nct6791d_refresh_fanrpm },
+	{ "", SENSOR_FANRPM, 4, 0xb6, wb_nct6791d_refresh_fanrpm },
+	{ "", SENSOR_FANRPM, 4, 0xb8, wb_nct6791d_refresh_fanrpm },
+	{ "", SENSOR_FANRPM, 4, 0xba, wb_nct6791d_refresh_fanrpm },
 
 	{ NULL }
 };
@@ -553,6 +582,9 @@ wb_match(struct lm_softc *sc)
 		if (sc->sioid == WBSIO_ID_NCT6776F) {
 			cdesc = "NCT6776F";
 			lm_setup_sensors(sc, nct6776f_sensors);
+		} else if (sc->sioid == WBSIO_ID_NCT6791D) {
+			cdesc = "NCT6791D";
+			lm_setup_sensors(sc, nct6791d_sensors);
 		} else {
 			cdesc = "W83627DHG";
 			lm_setup_sensors(sc, w83627dhg_sensors);
@@ -930,6 +962,25 @@ wb_nct6776f_refresh_fanrpm(struct lm_softc *sc, int n)
 	} else {
 		sensor->flags &= ~SENSOR_FINVALID;
 		sensor->value = (datah << 8) | datal;
+	}
+}
+
+void
+wb_nct6791d_refresh_fanrpm(struct lm_softc *sc, int n)
+{
+	struct ksensor *sensor = &sc->sensors[n];
+	int datah, datal, val;
+
+	datah = sc->lm_readreg(sc, sc->lm_sensors[n].reg);
+	datal = sc->lm_readreg(sc, sc->lm_sensors[n].reg + 1);
+
+	if (datah == 0xff) {
+		sensor->flags |= SENSOR_FINVALID;
+		sensor->value = 0;
+	} else {
+		sensor->flags &= ~SENSOR_FINVALID;
+		val = (datah << 5) | (datal & 0x1f);
+		sensor->value = (val == 0) ? 0 : (1350000U / val);
 	}
 }
 
