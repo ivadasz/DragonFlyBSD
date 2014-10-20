@@ -45,6 +45,7 @@
 #define WBSIO_ID_W83687THF	0x85
 #define WBSIO_ID_W83697HF	0x60
 #define WBSIO_ID_NCT6776F	0xc3
+#define WBSIO_ID_NCT6791D	0xc8
 
 /* Logical Device Number (LDN) Assignments */
 #define WBSIO_LDN_HM		0x0b
@@ -52,3 +53,6 @@
 /* Hardware Monitor Control Registers (LDN B) */
 #define WBSIO_HM_ADDR_MSB	0x60	/* Address [15:8] */
 #define WBSIO_HM_ADDR_LSB	0x61	/* Address [7:0] */
+
+/* io space lock (for NCT6791D) */
+#define WBSIO_NCT6791D_IO_SPACE_LOCK	0x28
