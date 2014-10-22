@@ -3193,13 +3193,15 @@ list_scan(int s, int long_ssids)
 
 		sr = (const struct ieee80211req_scan_result *) cp;
 		vp = cp + sr->isr_ie_off;
+#if 0
 		if (sr->isr_meshid_len) {
 			idp = vp + sr->isr_ssid_len;
 			idlen = sr->isr_meshid_len;
 		} else {
+#endif
 			idp = vp;
 			idlen = sr->isr_ssid_len;
-		}
+//		}
 		printf("%-*.*s  %s  %3d  %3dM %3d:%-3d  %3d %-4.4s"
 			, (int)ssidmax
 			, copy_essid(ssid, ssidmax, idp, idlen)
