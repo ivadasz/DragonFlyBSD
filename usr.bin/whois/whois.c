@@ -282,7 +282,7 @@ whois(const char *query, const char *hostname, int flags)
 	if (sfi == NULL || sfo == NULL)
 		err(EX_OSERR, "fdopen()");
 	if (strcmp(hostname, GERMNICHOST) == 0) {
-		fprintf(sfo, "-T dn,ace -C US-ASCII %s\r\n", query);
+		fprintf(sfo, "-T dn,ace -C UTF-8 %s\r\n", query);
 	} else {
 		fprintf(sfo, "%s\r\n", query);
 	}
