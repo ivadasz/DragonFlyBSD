@@ -82,6 +82,7 @@ SUBDIR=	${SUBDIR_ORDERED} \
 	${_libsmutil} \
 	libstand \
 	libtcplay \
+	libteken \
 	libtelnet \
 	libusb \
 	libu4bhid \
