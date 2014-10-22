@@ -1884,6 +1884,14 @@ sccnputc(void *private, int c)
 	    scstart(tp);
 	}
 #endif
+    } else if (scp->status & SLKED) {
+	scp->status &= ~SLKED;
+	if (scp->status & BUFFER_SAVED) {
+	    if (!sc_hist_restore(scp))
+		sc_remove_cutmarking(scp);
+	    scp->status &= ~BUFFER_SAVED;
+	    scp->status |= CURSOR_ENABLED;
+	}
     }
 #endif /* !SC_NO_HISTORY */
 
