@@ -52,8 +52,8 @@ static void vknet_blastaway(ioinfo_t ios, ioinfo_t iod);
 static void *vknet_stream(void *arg);
 static void vknet_connect(ioinfo_t ios,
 			  const char *localSide, const char *localBridge);
-static void vknet_execssh(int fdin, int fdout, int compressOpt, 
-			  const char *remoteSide, const char *remoteBridge);
+static pid_t vknet_execssh(int fdin, int fdout, int compressOpt,
+			   const char *remoteSide, const char *remoteBridge);
 static void usage(void);
 
 pthread_mutex_t MasterLock;
@@ -71,6 +71,7 @@ main(int ac, char **av)
 	int c;
 	int retriesOpt = -1;
 	int timeoutOpt = -1;
+	pid_t sshpid = -1;
 	struct ioinfo ios;
 	struct ioinfo iod;
 
@@ -132,7 +133,7 @@ retry:
 			perror("pipe");
 			exit(1);
 		}
-		vknet_execssh(fds[1], fds[1], compressOpt,
+		sshpid = vknet_execssh(fds[1], fds[1], compressOpt,
 			      remoteSide, remoteBridge);
 		close(fds[1]);
 		iod.fdin = fds[0];
@@ -143,6 +144,16 @@ retry:
 	 * Blast away, timeout/retry on failure
 	 */
 	vknet_blastaway(&ios, &iod);
+
+	if (sshpid > 0) {
+		if (kill(sshpid, SIGTERM) != 0) {
+			perror("kill");
+			exit(1);
+		}
+		while (waitpid(sshpid, NULL, 0) <= 0)
+			;
+		sshpid = -1;
+	}
 
 	/*
 	 * Handle timeout/retries
@@ -424,7 +435,7 @@ vknet_connect(ioinfo_t io, const char *localSide, const char *localBridge)
 /*
  * Connect to the remote machine with ssh and set up a stream
  */
-static void
+static pid_t
 vknet_execssh(int fdin, int fdout, int compressOpt, 
 	      const char *remoteSide, const char *remoteBridge)
 {
@@ -438,7 +449,7 @@ vknet_execssh(int fdin, int fdout, int compressOpt,
 	 * Fork / parent returns.
 	 */
 	if ((pid = fork()) > 0)
-		return;
+		return pid;
 	if (pid < 0) {
 		perror("fork");
 		exit(1);
@@ -482,6 +493,8 @@ vknet_execssh(int fdin, int fdout, int compressOpt,
 	av[ac++] = remotePath;
 	av[ac++] = NULL;
 	execv("/usr/bin/ssh", (void *)av);
+	perror("execv");
+	exit(1);
 }
 
 /*
