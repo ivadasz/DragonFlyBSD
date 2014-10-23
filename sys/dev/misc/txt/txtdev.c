@@ -57,10 +57,13 @@ struct txtdev_output {
 	SLIST_ENTRY(txtdev_output)	next;
 };
 
+static void txtdevinit(void *arg);
+
 static SLIST_HEAD(, txtdev_output) txtdev_lst = SLIST_HEAD_INITIALIZER(txtdev_lst);
 
 static struct txtdev_output boot_output;
 static struct mtx txt_mtx = MTX_INITIALIZER;
+static int hot = 0;
 
 static d_open_t		txtdev_open;
 static d_close_t	txtdev_close;
@@ -80,6 +83,26 @@ static struct dev_ops txtdev_cdevsw = {
 	.d_mmap =	txtdev_mmap,
 	.d_mmap_single = txtdev_mmap_single,
 };
+
+static void
+txtdevinit(void *arg)
+{
+	struct txtdev_output *np;
+
+	mtx_spinlock(&txt_mtx);
+	hot = 1;
+	/* create device nodes */
+	SLIST_FOREACH(np, &txtdev_lst, next) {
+		if (np->flags & TXTDEV_IS_DEAD)
+			continue;
+		np->devnode = make_dev(&txtdev_cdevsw, np->unit, 0, 0,
+		    S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP, "txtdev/output%d",
+		    np->unit);
+	}
+	mtx_spinunlock(&txt_mtx);
+}
+
+SYSINIT(txtdevinit, SI_SUB_DRIVERS, SI_ORDER_ANY, txtdevinit, NULL);
 
 /* XXX needs a corresponding unregister_txtdev method */
 int
@@ -137,8 +160,10 @@ register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 				continue;
 			if (np->flags & TXTDEV_IS_VGA) {
 				np->flags |= TXTDEV_IS_DEAD;
-				destroy_dev(np->devnode);
-				np->devnode = NULL;
+				if (np->devnode != NULL) {
+					destroy_dev(np->devnode);
+					np->devnode = NULL;
+				}
 				if (np->releasecb != NULL) {
 					np->releasecb(np->conscookie,
 					    np->cookie);
@@ -147,8 +172,13 @@ register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 			}
 		}
 	}
-	out->devnode = make_dev(&txtdev_cdevsw, out->unit, 0, 0,
-	    S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP, "txtdev/output%d", out->unit);
+
+	/* Don't try to create device nodes during early boot */
+	if (hot) {
+		out->devnode = make_dev(&txtdev_cdevsw, out->unit, 0, 0,
+		    S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP, "txtdev/output%d",
+		    out->unit);
+	}
 
 	mtx_spinunlock(&txt_mtx);
 	return 0;
