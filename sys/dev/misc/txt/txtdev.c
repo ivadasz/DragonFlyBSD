@@ -97,7 +97,7 @@ register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 		SLIST_INSERT_HEAD(&txtdev_lst, out, next);
 	} else {
 		SLIST_FOREACH(np, &txtdev_lst, next) {
-			if (SLIST_NEXT(np, next) == SLIST_FIRST(&txtdev_lst) ||
+			if (SLIST_NEXT(np, next) == NULL ||
 			    SLIST_NEXT(np, next)->unit > i)
 				break;
 		}
