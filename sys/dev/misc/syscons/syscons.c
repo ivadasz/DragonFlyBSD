@@ -175,6 +175,7 @@ static void exchange_scr(sc_softc_t *sc);
 static int save_kbd_state(scr_stat *scp, int unlock);
 static int update_kbd_state(scr_stat *scp, int state, int mask, int unlock);
 static int update_kbd_leds(scr_stat *scp, int which);
+static void sc_allocate_txtdev(sc_softc_t *sc);
 static int sc_allocate_keyboard(sc_softc_t *sc, int unit);
 
 /*
@@ -376,7 +377,7 @@ sc_probe_unit(int unit, int flags)
     vid_configure(0);
 
     /* Check whether we can successfully acquire a txtdev */
-    if (acquire_txtdev(NULL, NULL, NULL, NULL) != 0) {
+    if (available_txtdev()) {
 	if (bootverbose)
 	    kprintf("sc%d: no video adapter found.\n", unit);
 	return ENXIO;
@@ -393,31 +394,20 @@ static struct txtmode sctxtmode = {
 };
 
 static void
-sc_txtdev_cb(void *sccookie, void *txtcookie)
+sc_txtdev_release(void *sccookie, void *txtcookie)
 {
 	sc_softc_t *sc = (sc_softc_t *)sccookie;
 
 	lwkt_gettoken(&tty_token);
+	syscons_lock();
 	if (sc->txtdevsw != NULL && txtcookie == sc->txtdev_cookie) {
-		release_txtdev(sc->txtdevsw, sc->txtdev_cookie);
+		release_txtdev(sc->txtdev_cookie, sc->txtdevsw);
 		sc->txtdevsw = NULL;
 		sc->txtdev_cookie = NULL;
 	}
-	if (acquire_txtdev(&sc->txtdev_cookie, &sc->txtdevsw, sc_txtdev_cb, sc)
-	     == 0) {
-		sc_restore_txtdev(sc);
-		if (sc->txtdevsw->setmode(sc->txtdev_cookie, &sctxtmode) != 0) {
-			kprintf("sc0: setting txtdev mode to %dx%d failed\n",
-			    sctxtmode.txt_columns, sctxtmode.txt_rows);
-		}
-		lwkt_reltoken(&tty_token);
-		kprintf("sc0: txtdev is now set to \"%s\"\n",
-		    sc->txtdevsw->getname(sc->txtdev_cookie));
-		return;
-	}
-
-	/* Failed to acquire a txtdev */
-	/* XXX Maybe we could also poll txtdev with acquire_txtdev? */
+	/* Try to allocate a new txtdev */
+	sc_allocate_txtdev(sc);
+	syscons_unlock();
 	lwkt_reltoken(&tty_token);
 	return;
 }
@@ -1465,7 +1455,7 @@ sccnprobe(struct consdev *cp)
 
     /* Check whether we can successfully acquire a txtdev */
     /* a video card is always required */
-    if (acquire_txtdev(NULL, NULL, NULL, NULL) != 0)
+    if (!available_txtdev())
 	cp->cn_pri = CN_DEAD;
 
     /* syscons will become console even when there is no keyboard */
@@ -1816,6 +1806,8 @@ static void
 scrn_update(scr_stat *scp)
 {
     /* assert(scp == scp->sc->cur_scp) */
+
+    sc_allocate_txtdev(scp->sc);
 
     ++scp->sc->videoio_in_progress;
 
@@ -2306,9 +2298,7 @@ scinit(int unit, int flags)
 	}
 	sc->kbd = NULL;
     }
-    if (sc->txtdevsw == NULL) {
-	acquire_txtdev(&sc->txtdev_cookie, &sc->txtdevsw, sc_txtdev_cb, sc);
-    }
+    sc_allocate_txtdev(sc);
     sc->keyboard = sc_allocate_keyboard(sc, unit);
     DPRINTF(1, ("sc%d: keyboard %d\n", unit, sc->keyboard));
     sc->kbd = kbd_get_keyboard(sc->keyboard);
@@ -3004,6 +2994,31 @@ blink_screen_callout(void *arg)
     }
 }
 #endif
+
+/*
+ * Allocate display output.
+ */
+static void
+sc_allocate_txtdev(sc_softc_t *sc)
+{
+	if (sc->txtdevsw != NULL)
+		return;
+
+	lwkt_gettoken(&tty_token);
+	if (acquire_txtdev(&sc->txtdev_cookie, &sc->txtdevsw,
+	    sc_txtdev_release, sc) == 0) {
+		sc_restore_txtdev(sc);
+		if (sc->txtdevsw->setmode(sc->txtdev_cookie, &sctxtmode) != 0) {
+			kprintf("sc0: setting txtdev mode to %dx%d failed\n",
+			    sctxtmode.txt_columns, sctxtmode.txt_rows);
+		}
+		lwkt_reltoken(&tty_token);
+		kprintf("sc0: txtdev is now set to \"%s\"\n",
+		    sc->txtdevsw->getname(sc->txtdev_cookie));
+		return;
+	}
+	lwkt_reltoken(&tty_token);
+}
 
 /*
  * Allocate active keyboard. Try to allocate "kbdmux" keyboard first, and,

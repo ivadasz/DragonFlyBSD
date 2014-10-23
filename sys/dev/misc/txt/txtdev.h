@@ -33,6 +33,7 @@ enum {
 	TXTDEV_IS_EARLY = 1,
 	TXTDEV_IS_VGA = 2,
 	TXTDEV_REPLACE_VGA = 4,
+	TXTDEV_IS_DEAD = 8,
 };
 
 enum {
@@ -69,10 +70,11 @@ struct txtdev_sw {
 	txtdev_restore *restore;
 };
 
-typedef void txtdev_newdev_cb(void *conscookie, void *oldcookie);
+typedef void txtdev_release_cb(void *conscookie, void *cookie);
 
 int register_txtdev(void *cookie, struct txtdev_sw *sw, int how);
-int acquire_txtdev(void **cookie, struct txtdev_sw **sw, txtdev_newdev_cb *cb,
+int available_txtdev(void);
+int acquire_txtdev(void **cookie, struct txtdev_sw **sw, txtdev_release_cb *cb,
 		   void *cc);
 int release_txtdev(void *cookie, struct txtdev_sw *sw);
 

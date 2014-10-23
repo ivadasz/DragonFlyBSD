@@ -31,6 +31,7 @@
 #include <sys/conf.h>
 #include <sys/types.h>
 #include <sys/malloc.h>
+#include <sys/queue.h>
 #include <sys/globaldata.h>
 #include <sys/mutex2.h>
 #include <sys/proc.h>
@@ -39,118 +40,164 @@
 
 #include "txtdev.h"
 
-static int owned = 0;
-static int myflags = 0;
-static void *mycookie = NULL;
-static struct txtdev_sw *mysw = NULL;
-static txtdev_newdev_cb *newdevcb = NULL;
-static void *conscookie = NULL;
+/*
+ * kbdmux keyboard
+ */
+struct txtdev_output {
+	int				flags;
+	void				*cookie;
+	struct txtdev_sw		*sw;
+	txtdev_release_cb		*releasecb;
+	void				*conscookie;
+	int				unit;
+	SLIST_ENTRY(txtdev_output)	next;
+};
+
+static SLIST_HEAD(, txtdev_output) txtdev_lst = SLIST_HEAD_INITIALIZER(txtdev_lst);
+
+static struct txtdev_output boot_output;
 static struct mtx txt_mtx = MTX_INITIALIZER;
 
 /* XXX needs a corresponding unregister_txtdev method */
 int
 register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 {
-	void *oldcookie = mycookie;
-	int replacing = 0;
+	struct txtdev_output *out, *np;
+	int i = 0;
 
 	if (sw == NULL)
 		return 1;
 
 	mtx_spinlock(&txt_mtx);
 
-//	/* Only allow replacing early attachements */
-//	if ((myflags & TXTDEV_IS_EARLY) != 0) {
-		if ((myflags & TXTDEV_IS_VGA) != 0 &&
-		    (how & TXTDEV_REPLACE_VGA) != 0) {
-			mycookie = NULL;
-			mysw = NULL;
-			myflags = 0;
-			replacing = 1;
+	SLIST_FOREACH(np, &txtdev_lst, next) {
+		if (np->unit != i)
+			break;
+		i++;
+	}
+
+	/* allocate new output */
+	if (boot_output.sw == NULL) {
+		out = &boot_output;
+	} else {
+		out = kmalloc(sizeof(struct txtdev_output), M_DEVBUF,
+		    M_ZERO | M_WAITOK);
+	}
+
+	/* initialize output properties */
+	out->flags = how;
+	out->cookie = cookie;
+	out->sw = sw;
+	out->releasecb = NULL;
+	out->conscookie = NULL;
+	out->unit = i;
+
+	/* insert new output into the list */
+	if (SLIST_EMPTY(&txtdev_lst) || SLIST_FIRST(&txtdev_lst)->unit > i) {
+		SLIST_INSERT_HEAD(&txtdev_lst, out, next);
+	} else {
+		SLIST_FOREACH(np, &txtdev_lst, next) {
+			if (SLIST_NEXT(np, next) == SLIST_FIRST(&txtdev_lst) ||
+			    SLIST_NEXT(np, next)->unit > i)
+				break;
 		}
-//	}
-
-	if (mycookie != NULL || mysw != NULL) {
-		mtx_spinunlock(&txt_mtx);
-		return 1;
+		SLIST_INSERT_AFTER(np, out, next);
 	}
 
-	mycookie = cookie;
-	mysw = sw;
-	myflags = how;
-
-	/* Initialize */
-//	mysw->setcursor(mycookie, -1);
-//	mysw->setcurmode(mycookie, TXTDEV_CURSOR_BLINK);
-
-	/* Register with virtual terminal */
-	if (replacing && owned) {
-		KASSERT(newdevcb != NULL, ("no way to replace txtdev"));
-
-		/*
-		 * We expect the console to call release_txtdev on the old
-		 * txtdev and then retrieve the new txtdev with acquire_txtdev.
-		 */
-		newdevcb(conscookie, oldcookie);
-	} else if (!owned && newdevcb != NULL) {
-		/*
-		 * We expect the console to call acquire_txtdev to acquire this
-		 * txtdev.
-		 */
-		newdevcb(conscookie, NULL);
+	/* mark VGA output as dead */
+	if (how & TXTDEV_REPLACE_VGA) {
+		SLIST_FOREACH(np, &txtdev_lst, next) {
+			if (np == out)
+				continue;
+			if (np->flags & TXTDEV_IS_VGA) {
+				np->flags |= TXTDEV_IS_DEAD;
+				if (np->releasecb != NULL)
+					np->releasecb(np->conscookie,
+					    np->cookie);
+				break;
+			}
+		}
 	}
+
 	mtx_spinunlock(&txt_mtx);
-
 	return 0;
 }
 
-/* use acquire_txtdev(NULL,NULL,NULL) to test whether a txtdev is available */
+/* Check whether a txtdev is available */
 int
-acquire_txtdev(void **cookie, struct txtdev_sw **sw, txtdev_newdev_cb *cb,
+available_txtdev(void)
+{
+	struct txtdev_output *np;
+	int val = 0;
+
+	mtx_spinlock(&txt_mtx);
+
+	SLIST_FOREACH(np, &txtdev_lst, next) {
+		if (!(np->flags & TXTDEV_IS_DEAD)) {
+			val = 1;
+			break;
+		}
+	}
+
+	mtx_spinunlock(&txt_mtx);
+	return val;
+}
+
+/* try to acquire a txtdev, returns 0 on success */
+int
+acquire_txtdev(void **cookie, struct txtdev_sw **sw, txtdev_release_cb *cb,
     void *cc)
 {
-	if (sw != NULL && cookie != NULL && cb == NULL)
+	struct txtdev_output *np, *chosen;
+
+	if (cb == NULL)
 		return 1;
 
 	mtx_spinlock(&txt_mtx);
 
-	if (!owned && mysw != NULL) {
-		if (sw != NULL && cookie != NULL) {
-			*sw = mysw;
-			*cookie = mycookie;
-			newdevcb = cb;
-			conscookie = cc;
-			owned = 1;
+	if (SLIST_EMPTY(&txtdev_lst))
+		return 1;
+
+	chosen = NULL;
+	SLIST_FOREACH(np, &txtdev_lst, next) {
+		if (np->flags & TXTDEV_IS_DEAD)
+			continue;
+		if (np->releasecb == NULL) {
+			chosen = np;
+			break;
 		}
-		mtx_spinunlock(&txt_mtx);
-		return 0;
 	}
 
-	*sw = NULL;
-	*cookie = NULL;
-	if (cb != NULL && newdevcb == NULL) {
-		newdevcb = cb;
-		conscookie = cc;
+	if (chosen == NULL) {
 		mtx_spinunlock(&txt_mtx);
-		return 2;
+		return 1;
 	}
+
+	np->releasecb = cb;
+	np->conscookie = cc;
+	*sw = np->sw;
+	*cookie = np->cookie;
 
 	mtx_spinunlock(&txt_mtx);
-	return 1;
+	return 0;
 }
 
 int
 release_txtdev(void *cookie, struct txtdev_sw *sw)
 {
+	struct txtdev_output *np;
+	int val = 1;
+
 	mtx_spinlock(&txt_mtx);
-	if (owned) {
-		owned = 0;
-		newdevcb = NULL;
-		conscookie = NULL;
-		mtx_spinunlock(&txt_mtx);
-		return 0;
+	SLIST_FOREACH(np, &txtdev_lst, next) {
+		if (np->cookie == cookie && np->sw == sw) {
+			np->releasecb = NULL;
+			np->conscookie = NULL;
+			val = 0;
+			break;
+		}
 	}
 
 	mtx_spinunlock(&txt_mtx);
-	return 1;
+	return val;
 }
