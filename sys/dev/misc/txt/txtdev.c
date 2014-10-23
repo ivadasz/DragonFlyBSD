@@ -109,11 +109,14 @@ register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 		SLIST_FOREACH(np, &txtdev_lst, next) {
 			if (np == out)
 				continue;
+			if (np->flags & TXTDEV_IS_DEAD)
+				continue;
 			if (np->flags & TXTDEV_IS_VGA) {
 				np->flags |= TXTDEV_IS_DEAD;
-				if (np->releasecb != NULL)
+				if (np->releasecb != NULL) {
 					np->releasecb(np->conscookie,
 					    np->cookie);
+				}
 				break;
 			}
 		}
