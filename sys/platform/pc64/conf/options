@@ -23,6 +23,8 @@ CPU_DISABLE_AVX		opt_cpu.h
 # The cpu type
 #
 HAMMER_CPU		opt_cpu.h
+DEBUG_TXTDEV		opt_txtdev.h
+MAXTXTDEV		opt_txtdev.h
 MAXCONS			opt_syscons.h
 SC_DEBUG_LEVEL		opt_syscons.h
 SC_DISABLE_DDBKEY	opt_syscons.h

@@ -24,7 +24,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-//#include "opt_txtdev.h"
+#include "opt_txtdev.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -37,11 +37,14 @@
 #include <sys/proc.h>
 #include <sys/priv.h>
 #include <sys/kernel.h>
+#include <sys/devfs.h>
+#include <sys/stat.h>
+//#include <sys/txtdevio.h>
 
 #include "txtdev.h"
 
 /*
- * kbdmux keyboard
+ * txtdev output
  */
 struct txtdev_output {
 	int				flags;
@@ -50,6 +53,7 @@ struct txtdev_output {
 	txtdev_release_cb		*releasecb;
 	void				*conscookie;
 	int				unit;
+	cdev_t				devnode;
 	SLIST_ENTRY(txtdev_output)	next;
 };
 
@@ -57,6 +61,25 @@ static SLIST_HEAD(, txtdev_output) txtdev_lst = SLIST_HEAD_INITIALIZER(txtdev_ls
 
 static struct txtdev_output boot_output;
 static struct mtx txt_mtx = MTX_INITIALIZER;
+
+static d_open_t		txtdev_open;
+static d_close_t	txtdev_close;
+static d_read_t		txtdev_read;
+static d_write_t	txtdev_write;
+static d_ioctl_t	txtdev_ioctl;
+static d_mmap_t		txtdev_mmap;
+static d_mmap_single_t		txtdev_mmap_single;
+
+static struct dev_ops txtdev_cdevsw = {
+	{ "txtdev", 0, D_MPSAFE },
+	.d_open =	txtdev_open,
+	.d_close =	txtdev_close,
+	.d_read =	txtdev_read,
+	.d_write =	txtdev_write,
+	.d_ioctl =	txtdev_ioctl,
+	.d_mmap =	txtdev_mmap,
+	.d_mmap_single = txtdev_mmap_single,
+};
 
 /* XXX needs a corresponding unregister_txtdev method */
 int
@@ -91,6 +114,7 @@ register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 	out->releasecb = NULL;
 	out->conscookie = NULL;
 	out->unit = i;
+	out->devnode = NULL;
 
 	/* insert new output into the list */
 	if (SLIST_EMPTY(&txtdev_lst) || SLIST_FIRST(&txtdev_lst)->unit > i) {
@@ -113,6 +137,8 @@ register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 				continue;
 			if (np->flags & TXTDEV_IS_VGA) {
 				np->flags |= TXTDEV_IS_DEAD;
+				destroy_dev(np->devnode);
+				np->devnode = NULL;
 				if (np->releasecb != NULL) {
 					np->releasecb(np->conscookie,
 					    np->cookie);
@@ -121,6 +147,8 @@ register_txtdev(void *cookie, struct txtdev_sw *sw, int how)
 			}
 		}
 	}
+	out->devnode = make_dev(&txtdev_cdevsw, out->unit, 0, 0,
+	    S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP, "txtdev/output%d", out->unit);
 
 	mtx_spinunlock(&txt_mtx);
 	return 0;
@@ -203,4 +231,45 @@ release_txtdev(void *cookie, struct txtdev_sw *sw)
 
 	mtx_spinunlock(&txt_mtx);
 	return val;
+}
+
+int
+txtdev_open(struct dev_open_args *ap)
+{
+	return (ENODEV);
+}
+
+int
+txtdev_close(struct dev_close_args *ap)
+{
+	return (ENODEV);
+}
+
+int
+txtdev_read(struct dev_read_args *ap)
+{
+	return (ENODEV);
+}
+
+int
+txtdev_write(struct dev_write_args *ap)
+{
+	return (ENODEV);
+}
+
+int
+txtdev_ioctl(struct dev_ioctl_args *ap)
+{
+	return (ENODEV);
+}
+
+int
+txtdev_mmap(struct dev_mmap_args *ap)
+{
+	return (ENODEV);
+}
+int
+txtdev_mmap_single(struct dev_mmap_single_args *ap)
+{
+	return (ENODEV);
 }
