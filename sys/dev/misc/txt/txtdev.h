@@ -57,6 +57,7 @@ typedef int txtdev_getcursor(void *cookie, int *pos);
 typedef int txtdev_setcurmode(void *cookie, int mode);
 typedef char *txtdev_getname(void *cookie);
 typedef void txtdev_restore(void *cookie, int emergency);
+typedef void txtdev_powersave(void *cookie, int on);
 
 struct txtdev_sw {
 	txtdev_getmode *getmode;
@@ -68,6 +69,7 @@ struct txtdev_sw {
 	txtdev_setcurmode *setcurmode;
 	txtdev_getname *getname;
 	txtdev_restore *restore;
+	txtdev_powersave *powersave;
 };
 
 typedef void txtdev_release_cb(void *conscookie, void *cookie);
