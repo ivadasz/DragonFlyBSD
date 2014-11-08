@@ -32,6 +32,11 @@
 
 #define pr_fmt(fmt) "[TTM] " fmt
 
+#include <sys/systm.h>
+#include <sys/types.h>
+#include <machine/thread.h>
+#include <sys/globaldata.h>
+
 #include <drm/ttm/ttm_module.h>
 #include <drm/ttm/ttm_bo_driver.h>
 #include <drm/ttm/ttm_placement.h>
@@ -141,6 +146,8 @@ static int ttm_bo_wait_unreserved(struct ttm_buffer_object *bo,
 	int flags, ret;
 
 	ret = 0;
+	if (!ttm_bo_is_reserved(bo))
+		return (ret);
 	if (interruptible) {
 		flags = PCATCH;
 		wmsg = "ttbowi";
@@ -148,11 +155,19 @@ static int ttm_bo_wait_unreserved(struct ttm_buffer_object *bo,
 		flags = 0;
 		wmsg = "ttbowu";
 	}
-	while (ttm_bo_is_reserved(bo)) {
-		ret = -lksleep(bo, &bo->glob->lru_lock, 0, wmsg, 0);
+	while (1) {
+		tsleep_interlock(&bo->event_queue, flags);
+		if (!ttm_bo_is_reserved(bo)) {
+			crit_enter();
+			tsleep_remove(curthread);
+			crit_exit();
+			break;
+		}
+		ret = -tsleep(&bo->event_queue, flags | PINTERLOCKED, wmsg, 0);
 		if (ret != 0)
 			break;
 	}
+
 	return (ret);
 }
 
@@ -284,17 +299,14 @@ int ttm_bo_reserve(struct ttm_buffer_object *bo,
 	int put_count = 0;
 	int ret;
 
-	lockmgr(&glob->lru_lock, LK_EXCLUSIVE);
 	ret = ttm_bo_reserve_nolru(bo, interruptible, no_wait, use_sequence,
 				   sequence);
 	if (likely(ret == 0)) {
+		lockmgr(&glob->lru_lock, LK_EXCLUSIVE);
 		put_count = ttm_bo_del_from_lru(bo);
 		lockmgr(&glob->lru_lock, LK_RELEASE);
 		ttm_bo_list_ref_sub(bo, put_count, true);
-	} else {
-		lockmgr(&glob->lru_lock, LK_RELEASE);
 	}
-
 
 	return ret;
 }
@@ -335,14 +347,12 @@ int ttm_bo_reserve_slowpath(struct ttm_buffer_object *bo,
 	struct ttm_bo_global *glob = bo->glob;
 	int put_count, ret;
 
-	lockmgr(&glob->lru_lock, LK_EXCLUSIVE);
 	ret = ttm_bo_reserve_slowpath_nolru(bo, interruptible, sequence);
 	if (likely(!ret)) {
+		lockmgr(&glob->lru_lock, LK_EXCLUSIVE);
 		put_count = ttm_bo_del_from_lru(bo);
 		lockmgr(&glob->lru_lock, LK_RELEASE);
 		ttm_bo_list_ref_sub(bo, put_count, true);
-	} else {
-		lockmgr(&glob->lru_lock, LK_RELEASE);
 	}
 	return ret;
 }
@@ -717,8 +727,10 @@ static int ttm_bo_delayed_delete(struct ttm_bo_device *bdev, bool remove_all)
 
 		ret = ttm_bo_reserve_nolru(entry, false, true, false, 0);
 		if (remove_all && ret) {
+			lockmgr(&glob->lru_lock, LK_RELEASE);
 			ret = ttm_bo_reserve_nolru(entry, false, false,
 						   false, 0);
+			lockmgr(&glob->lru_lock, LK_EXCLUSIVE);
 		}
 
 		if (!ret)
