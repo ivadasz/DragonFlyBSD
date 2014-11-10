@@ -529,7 +529,7 @@ int radeon_cs_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 	struct radeon_cs_parser parser;
 	int r;
 
-	lockmgr(&rdev->exclusive_lock, LK_EXCLUSIVE);
+	lockmgr(&rdev->exclusive_lock, LK_SHARED);
 	if (!rdev->accel_working) {
 		lockmgr(&rdev->exclusive_lock, LK_RELEASE);
 		return -EBUSY;
