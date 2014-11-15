@@ -295,7 +295,6 @@ int ttm_bo_reserve(struct ttm_buffer_object *bo,
 		lockmgr(&glob->lru_lock, LK_RELEASE);
 	}
 
-
 	return ret;
 }
 
@@ -591,7 +590,7 @@ static void ttm_bo_cleanup_refs_or_queue(struct ttm_buffer_object *bo)
 		driver->sync_obj_unref(&sync_obj);
 	}
 	schedule_delayed_work(&bdev->wq,
-			      ((hz / 100) < 1) ? 1 : hz / 100);
+			      ((HZ / 100) < 1) ? 1 : HZ / 100);
 }
 
 /**
@@ -753,7 +752,7 @@ static void ttm_bo_delayed_workqueue(struct work_struct *work)
 
 	if (ttm_bo_delayed_delete(bdev, false)) {
 		schedule_delayed_work(&bdev->wq,
-				      ((hz / 100) < 1) ? 1 : hz / 100);
+				      ((HZ / 100) < 1) ? 1 : HZ / 100);
 	}
 }
 
@@ -823,7 +822,7 @@ void ttm_bo_unlock_delayed_workqueue(struct ttm_bo_device *bdev, int resched)
 {
 	if (resched)
 		schedule_delayed_work(&bdev->wq,
-				      ((hz / 100) < 1) ? 1 : hz / 100);
+				      ((HZ / 100) < 1) ? 1 : HZ / 100);
 }
 EXPORT_SYMBOL(ttm_bo_unlock_delayed_workqueue);
 
