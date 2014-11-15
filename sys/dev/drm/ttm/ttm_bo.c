@@ -137,23 +137,13 @@ static void ttm_bo_release_list(struct kref *list_kref)
 static int ttm_bo_wait_unreserved(struct ttm_buffer_object *bo,
 				  bool interruptible)
 {
-	const char *wmsg;
-	int flags, ret;
-
-	ret = 0;
 	if (interruptible) {
-		flags = PCATCH;
-		wmsg = "ttbowi";
+		return wait_event_interruptible(bo->event_queue,
+					       !ttm_bo_is_reserved(bo));
 	} else {
-		flags = 0;
-		wmsg = "ttbowu";
+		wait_event(bo->event_queue, !ttm_bo_is_reserved(bo));
+		return 0;
 	}
-	while (ttm_bo_is_reserved(bo)) {
-		ret = -lksleep(bo, &bo->glob->lru_lock, 0, wmsg, 0);
-		if (ret != 0)
-			break;
-	}
-	return (ret);
 }
 
 void ttm_bo_add_to_lru(struct ttm_buffer_object *bo)
@@ -284,15 +274,13 @@ int ttm_bo_reserve(struct ttm_buffer_object *bo,
 	int put_count = 0;
 	int ret;
 
-	lockmgr(&glob->lru_lock, LK_EXCLUSIVE);
 	ret = ttm_bo_reserve_nolru(bo, interruptible, no_wait, use_sequence,
 				   sequence);
 	if (likely(ret == 0)) {
+		lockmgr(&glob->lru_lock, LK_EXCLUSIVE);
 		put_count = ttm_bo_del_from_lru(bo);
 		lockmgr(&glob->lru_lock, LK_RELEASE);
 		ttm_bo_list_ref_sub(bo, put_count, true);
-	} else {
-		lockmgr(&glob->lru_lock, LK_RELEASE);
 	}
 
 	return ret;
@@ -334,14 +322,12 @@ int ttm_bo_reserve_slowpath(struct ttm_buffer_object *bo,
 	struct ttm_bo_global *glob = bo->glob;
 	int put_count, ret;
 
-	lockmgr(&glob->lru_lock, LK_EXCLUSIVE);
 	ret = ttm_bo_reserve_slowpath_nolru(bo, interruptible, sequence);
 	if (likely(!ret)) {
+		lockmgr(&glob->lru_lock, LK_EXCLUSIVE);
 		put_count = ttm_bo_del_from_lru(bo);
 		lockmgr(&glob->lru_lock, LK_RELEASE);
 		ttm_bo_list_ref_sub(bo, put_count, true);
-	} else {
-		lockmgr(&glob->lru_lock, LK_RELEASE);
 	}
 	return ret;
 }
@@ -716,8 +702,10 @@ static int ttm_bo_delayed_delete(struct ttm_bo_device *bdev, bool remove_all)
 
 		ret = ttm_bo_reserve_nolru(entry, false, true, false, 0);
 		if (remove_all && ret) {
+			lockmgr(&glob->lru_lock, LK_RELEASE);
 			ret = ttm_bo_reserve_nolru(entry, false, false,
 						   false, 0);
+			lockmgr(&glob->lru_lock, LK_EXCLUSIVE);
 		}
 
 		if (!ret)
@@ -1126,8 +1114,7 @@ int ttm_bo_mem_space(struct ttm_buffer_object *bo,
 }
 EXPORT_SYMBOL(ttm_bo_mem_space);
 
-static
-int ttm_bo_move_buffer(struct ttm_buffer_object *bo,
+static int ttm_bo_move_buffer(struct ttm_buffer_object *bo,
 			struct ttm_placement *placement,
 			bool interruptible,
 			bool no_wait_gpu)

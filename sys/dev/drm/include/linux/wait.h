@@ -40,8 +40,18 @@ init_waitqueue_head(wait_queue_head_t *eq)
 	spin_init(&eq->lock, "linux_waitqueue");
 }
 
-#define wake_up(eq)		wakeup_one(eq)
-#define wake_up_all(eq)		wakeup(eq)
+#define wake_up(eq)			\
+do {					\
+	spin_lock(&(eq)->lock);		\
+	wakeup_one(eq);			\
+	spin_unlock(&(eq)->lock);	\
+} while(0)
+#define wake_up_all(eq)			\
+do {					\
+	spin_lock(&(eq)->lock);		\
+	wakeup(eq);			\
+	spin_unlock(&(eq)->lock);	\
+} while(0)
 
 /*
  * wait_event_timeout:
@@ -60,6 +70,7 @@ init_waitqueue_head(wait_queue_head_t *eq)
 ({									\
 	int start_jiffies, elapsed_jiffies, remaining_jiffies, ret;	\
 	bool timeout_expired = false;					\
+	bool interrupted = false;					\
 	long retval;							\
 									\
 	start_jiffies = ticks;						\
@@ -71,6 +82,10 @@ init_waitqueue_head(wait_queue_head_t *eq)
 									\
 		ret = ssleep(&wq, &wq.lock, flags,			\
 					"lwe", timeout_jiffies);	\
+		if (ret == EINTR || ret == ERESTART) {			\
+			interrupted = true;				\
+			break;						\
+		}							\
 		if (ret == EWOULDBLOCK) {				\
 			timeout_expired = true;				\
 			break;						\
@@ -80,13 +95,17 @@ init_waitqueue_head(wait_queue_head_t *eq)
 									\
 	elapsed_jiffies = ticks - start_jiffies;			\
 	remaining_jiffies = timeout_jiffies - elapsed_jiffies;		\
-	if (remaining_jiffies == 0)					\
+	if (remaining_jiffies <= 0)					\
 		remaining_jiffies = 1;					\
 									\
 	if (timeout_expired)						\
 		retval = 0;						\
-	else 								\
+	else if (interrupted)						\
+		retval = -ERESTARTSYS;					\
+	else if (timeout_jiffies > 0)					\
 		retval = remaining_jiffies;				\
+	else								\
+		retval = 1;						\
 									\
 	retval;								\
 })
@@ -96,6 +115,16 @@ init_waitqueue_head(wait_queue_head_t *eq)
 
 #define wait_event_timeout(wq, condition, timeout)			\
 		__wait_event_common(wq, condition, timeout, 0)
+
+#define wait_event_interruptible(wq, condition)				\
+({									\
+	int ret;							\
+									\
+	ret = __wait_event_common(wq, condition, 0, PCATCH);		\
+	if (ret != -ERESTARTSYS)					\
+		ret = 0;						\
+	ret;								\
+})
 
 #define wait_event_interruptible_timeout(wq, condition, timeout)	\
 		__wait_event_common(wq, condition, timeout, PCATCH)
