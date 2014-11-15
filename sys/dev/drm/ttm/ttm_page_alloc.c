@@ -784,7 +784,7 @@ static int ttm_get_pages(vm_page_t *pages, unsigned npages, int flags,
 }
 
 static void ttm_page_pool_init_locked(struct ttm_page_pool *pool, int flags,
-				      char *name)
+		char *name)
 {
 	lockinit(&pool->lock, "ttmpool", 0, LK_CANRECURSE);
 	pool->fill_lock = false;
@@ -797,8 +797,8 @@ static void ttm_page_pool_init_locked(struct ttm_page_pool *pool, int flags,
 int ttm_page_alloc_init(struct ttm_mem_global *glob, unsigned max_pages)
 {
 
-	if (_manager != NULL)
-		kprintf("[TTM] manager != NULL\n");
+	WARN_ON(_manager);
+
 	pr_info("Initializing pool allocator\n");
 
 	_manager = kmalloc(sizeof(*_manager), M_DRM, M_WAITOK | M_ZERO);

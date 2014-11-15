@@ -293,7 +293,7 @@ int ttm_tt_swapin(struct ttm_tt *ttm)
 				if (rv != VM_PAGER_OK) {
 					vm_page_free(from_page);
 					ret = -EIO;
-					goto err_ret;
+					goto out_err;
 				}
 			} else {
 				vm_page_zero_invalid(from_page, TRUE);
@@ -303,7 +303,7 @@ int ttm_tt_swapin(struct ttm_tt *ttm)
 		if (unlikely(to_page == NULL)) {
 			ret = -ENOMEM;
 			vm_page_wakeup(from_page);
-			goto err_ret;
+			goto out_err;
 		}
 		pmap_copy_page(VM_PAGE_TO_PHYS(from_page),
 			       VM_PAGE_TO_PHYS(to_page));
@@ -316,12 +316,12 @@ int ttm_tt_swapin(struct ttm_tt *ttm)
 		vm_object_deallocate(obj);
 	ttm->swap_storage = NULL;
 	ttm->page_flags &= ~TTM_PAGE_FLAG_SWAPPED;
-	return (0);
 
-err_ret:
+	return 0;
+out_err:
 	vm_object_pip_wakeup(obj);
 	VM_OBJECT_WUNLOCK(obj);
-	return (ret);
+	return ret;
 }
 
 int ttm_tt_swapout(struct ttm_tt *ttm, vm_object_t persistent_swap_storage)
