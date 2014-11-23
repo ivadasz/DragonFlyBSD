@@ -53,6 +53,7 @@ struct vtblk_request {
 	struct virtio_blk_outhdr	 vbr_hdr;
 	struct bio			*vbr_bp;
 	uint8_t				 vbr_ack;
+	uint8_t				 vbr_barrier;
 
 	TAILQ_ENTRY(vtblk_request)	 vbr_link;
 };
@@ -87,6 +88,7 @@ struct vtblk_softc {
 				 vtblk_req_free;
 	TAILQ_HEAD(, vtblk_request)
 				 vtblk_req_ready;
+	struct vtblk_request	*vtblk_req_ordered;
 
 	int			 vtblk_sector_size;
 	int			 vtblk_max_nsegs;
@@ -282,6 +284,8 @@ vtblk_attach(device_t dev)
 
 	if (virtio_with_feature(dev, VIRTIO_BLK_F_RO))
 		sc->vtblk_flags |= VTBLK_FLAG_READONLY;
+	if (virtio_with_feature(dev, VIRTIO_BLK_F_BARRIER))
+		sc->vtblk_flags |= VTBLK_FLAG_BARRIER;
 	if (virtio_with_feature(dev, VIRTIO_BLK_F_CONFIG_WCE))
 		sc->vtblk_flags |= VTBLK_FLAG_WC_CONFIG;
 
@@ -702,6 +706,7 @@ vtblk_bio_request(struct vtblk_softc *sc)
 	bio = bioq_takefirst(bioq);
 	req->vbr_bp = bio;
 	req->vbr_ack = -1;
+	req->vbr_barrier = 0;
 	req->vbr_hdr.ioprio = 1;
 	bp = bio->bio_buf;
 
@@ -723,8 +728,12 @@ vtblk_bio_request(struct vtblk_softc *sc)
 		break;
 	}
 
-	if (bp->b_flags & B_ORDERED)
-		req->vbr_hdr.type |= VIRTIO_BLK_T_BARRIER;
+	if (bp->b_flags & B_ORDERED) {
+		if ((sc->vtblk_flags & VTBLK_FLAG_BARRIER) == 0)
+			req->vbr_barrier = 1;
+		else
+			req->vbr_hdr.type |= VIRTIO_BLK_T_BARRIER;
+	}
 
 	return (req);
 }
@@ -735,12 +744,26 @@ vtblk_execute_request(struct vtblk_softc *sc, struct vtblk_request *req)
 	struct sglist *sg;
 	struct bio *bio;
 	struct buf *bp;
-	int writable, error;
+	int ordered, writable, error;
 
 	sg = sc->vtblk_sglist;
 	bio = req->vbr_bp;
 	bp = bio->bio_buf;
+	ordered = 0;
 	writable = 0;
+
+	if (sc->vtblk_req_ordered != NULL)
+		return (EBUSY);
+
+	if (req->vbr_barrier) {
+		/*
+		 * This request will be executed once all
+		 * the in-flight requests are completed.
+		 */
+		if (!virtqueue_empty(sc->vtblk_vq))
+			return (EBUSY);
+		ordered = 1;
+	}
 
 	/*
 	 * sglist is live throughout this subroutine.
@@ -771,6 +794,8 @@ vtblk_execute_request(struct vtblk_softc *sc, struct vtblk_request *req)
 
 	error = virtqueue_enqueue(sc->vtblk_vq, req, sg,
 				  sg->sg_nseg - writable, writable);
+	if (error == 0 && ordered)
+		sc->vtblk_req_ordered = req;
 
 	sglist_reset(sg);
 
@@ -808,6 +833,12 @@ retry:
 	while ((req = virtqueue_dequeue(vq, NULL)) != NULL) {
 		bio = req->vbr_bp;
 		bp = bio->bio_buf;
+
+		if (sc->vtblk_req_ordered != NULL) {
+			/* This should be the only outstanding request. */
+			KKASSERT(sc->vtblk_req_ordered == req);
+			sc->vtblk_req_ordered = NULL;
+		}
 
 		if (req->vbr_ack == VIRTIO_BLK_S_OK)
 			bp->b_resid = 0;
@@ -979,6 +1010,7 @@ vtblk_drain_vq(struct vtblk_softc *sc, int skip_done)
 		vtblk_enqueue_request(sc, req);
 	}
 
+	sc->vtblk_req_ordered = NULL;
 	KASSERT(virtqueue_empty(vq), ("virtqueue not empty"));
 }
 
