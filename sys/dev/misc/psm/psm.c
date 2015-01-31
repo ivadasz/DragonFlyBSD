@@ -2478,6 +2478,7 @@ psmintr(void *arg)
 			continue;
 
 		getmicrouptime(&now);
+#if 0
 		if ((pb->inputbytes > 0) &&
 		    timevalcmp(&now, &sc->inputtimeout, >)) {
 			VLOG(3, (LOG_DEBUG, "psmintr: delay too long; "
@@ -2486,6 +2487,7 @@ psmintr(void *arg)
 			sc->syncerrors = 0;
 			sc->pkterrors = 0;
 		}
+#endif
 		sc->inputtimeout.tv_sec = PSM_INPUT_TIMEOUT / 1000000;
 		sc->inputtimeout.tv_usec = PSM_INPUT_TIMEOUT % 1000000;
 		timevaladd(&sc->inputtimeout, &now);
