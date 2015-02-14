@@ -8025,7 +8025,7 @@ elfcore_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
 #if defined (HAVE_PRSTATUS_T_PR_WHO)
       elf_tdata (abfd)->core->lwpid = prstat.pr_who;
 #else
-      elf_tdata (abfd)->core->lwpid = prstat.pr_pid;
+      elf_tdata (abfd)->core->lwpid = prstat.pr_pid + 1;
 #endif
     }
 #if defined (HAVE_PRSTATUS32_T)
