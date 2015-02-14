@@ -1058,7 +1058,9 @@ _slabrealloc(void *ptr, size_t size)
 			if (big->base == ptr) {
 				size = (size + PAGE_MASK) & ~(size_t)PAGE_MASK;
 				bigbytes = big->bytes;
-				if (bigbytes == size) {
+				if (bigbytes == size ||
+				    (size > 2*PAGE_SIZE && (size & 8191) == 0 &&
+				     bigbytes == size + 4096)) {
 					bigalloc_unlock(ptr);
 					return(ptr);
 				}
