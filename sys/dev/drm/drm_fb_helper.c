@@ -230,9 +230,12 @@ bool drm_fb_helper_restore_fbdev_mode(struct drm_fb_helper *fb_helper)
 {
 	bool error = false;
 	int i, ret;
+
+	drm_warn_on_modeset_not_all_locked(fb_helper->dev);
+
 	for (i = 0; i < fb_helper->crtc_count; i++) {
 		struct drm_mode_set *mode_set = &fb_helper->crtc_info[i].mode_set;
-		ret = drm_crtc_helper_set_config(mode_set);
+		ret = drm_mode_set_config_internal(mode_set);
 		if (ret)
 			error = true;
 	}
@@ -272,6 +275,28 @@ int drm_fb_helper_panic(struct notifier_block *n, unsigned long ununsed,
 static struct notifier_block paniced = {
 	.notifier_call = drm_fb_helper_panic,
 };
+
+#endif
+
+static bool drm_fb_helper_is_bound(struct drm_fb_helper *fb_helper)
+{
+	struct drm_device *dev = fb_helper->dev;
+	struct drm_crtc *crtc;
+	int bound = 0, crtcs_bound = 0;
+
+	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
+		if (crtc->fb)
+			crtcs_bound++;
+		if (crtc->fb == fb_helper->fb)
+			bound++;
+	}
+
+	if (bound < crtcs_bound)
+		return false;
+	return true;
+}
+
+#if 0
 
 /**
  * drm_fb_helper_restore - restore the framebuffer console (kernel) config
@@ -370,7 +395,7 @@ static void drm_fb_helper_off(struct fb_info *info, int dpms_mode)
 	 * For each CRTC in this fb, find all associated encoders
 	 * and turn them off, then turn off the CRTC.
 	 */
-	sx_xlock(&dev->mode_config.mutex);
+	mutex_lock(&dev->mode_config.mutex);
 	for (i = 0; i < fb_helper->crtc_count; i++) {
 		crtc = fb_helper->crtc_info[i].mode_set.crtc;
 		crtc_funcs = crtc->helper_private;
@@ -397,7 +422,7 @@ static void drm_fb_helper_off(struct fb_info *info, int dpms_mode)
 		}
 		crtc_funcs->dpms(crtc, DRM_MODE_DPMS_OFF);
 	}
-	sx_xunlock(&dev->mode_config.mutex);
+	mutex_unlock(&dev->mode_config.mutex);
 }
 #endif
 
@@ -779,15 +804,38 @@ int drm_fb_helper_pan_display(struct fb_var_screeninfo *var,
 }
 #endif
 
+static void
+do_restore_fbdev_mode(void *context, int pending)
+{
+	struct drm_fb_helper *fb_helper = context;
+	struct drm_device *dev = fb_helper->dev;
+
+	if (!fb_helper->fb)
+		return;
+
+	drm_modeset_lock_all(dev);
+	drm_fb_helper_restore_fbdev_mode(fb_helper);
+	drm_modeset_unlock_all(dev);
+}
+
+static void
+sc_restore_fbdev_mode(void *cookie)
+{
+	struct drm_fb_helper *fb_helper = cookie;
+
+	if (!fb_helper->fb)
+		return;
+
+	taskqueue_enqueue(taskqueue_thread[0], &fb_helper->fb_mode_task);
+}
+
 int drm_fb_helper_single_fb_probe(struct drm_fb_helper *fb_helper,
 				  int preferred_bpp)
 {
-	int new_fb = 0;
+	int ret = 0;
 	int crtc_count = 0;
 	int i;
-#if 0
 	struct fb_info *info;
-#endif
 	struct drm_fb_helper_surface_size sizes;
 	int gamma_size = 0;
 
@@ -862,30 +910,26 @@ int drm_fb_helper_single_fb_probe(struct drm_fb_helper *fb_helper,
 	}
 
 	/* push down into drivers */
-	new_fb = (*fb_helper->funcs->fb_probe)(fb_helper, &sizes);
-	if (new_fb < 0)
-		return new_fb;
+	ret = (*fb_helper->funcs->fb_probe)(fb_helper, &sizes);
+	if (ret < 0)
+		return ret;
 
-#if 0
 	info = fb_helper->fbdev;
-#endif
 
 	/* set the fb pointer */
 	for (i = 0; i < fb_helper->crtc_count; i++)
-		fb_helper->crtc_info[i].mode_set.fb = fb_helper->fb;
+		if (fb_helper->crtc_info[i].mode_set.num_connectors)
+			fb_helper->crtc_info[i].mode_set.fb = fb_helper->fb;
+
+	TASK_INIT(&fb_helper->fb_mode_task, 0, do_restore_fbdev_mode, fb_helper);
+	info->cookie = fb_helper;
+	info->restore = (void *)&sc_restore_fbdev_mode;
+	if (register_framebuffer(info) < 0)
+		return -EINVAL;
 
 #if 0
-	if (new_fb) {
-		info->var.pixclock = 0;
-		if (register_framebuffer(info) < 0)
-			return -EINVAL;
-
-		dev_info(fb_helper->dev->dev, "fb%d: %s frame buffer device\n",
-				info->node, info->fix.id);
-
-	} else {
-		drm_fb_helper_set_par(info);
-	}
+	dev_info(fb_helper->dev->dev, "fb%d: %s frame buffer device\n",
+			info->node, info->fix.id);
 
 	/* Switch back to kernel console on panic */
 	/* multi card linked list maybe */
@@ -895,13 +939,12 @@ int drm_fb_helper_single_fb_probe(struct drm_fb_helper *fb_helper,
 					       &paniced);
 		register_sysrq_key('v', &sysrq_drm_fb_helper_restore_op);
 	}
-	if (new_fb)
-		list_add(&fb_helper->kernel_fb_list, &kernel_fb_helper_list);
+
+	list_add(&fb_helper->kernel_fb_list, &kernel_fb_helper_list);
 #endif
 
 	return 0;
 }
-EXPORT_SYMBOL(drm_fb_helper_single_fb_probe);
 
 #if 0
 void drm_fb_helper_fill_fix(struct fb_info *info, uint32_t pitch,
@@ -1362,6 +1405,7 @@ static void drm_setup_crtcs(struct drm_fb_helper *fb_helper)
 	for (i = 0; i < fb_helper->crtc_count; i++) {
 		modeset = &fb_helper->crtc_info[i].mode_set;
 		modeset->num_connectors = 0;
+		modeset->fb = NULL;
 	}
 
 	for (i = 0; i < fb_helper->connector_count; i++) {
@@ -1378,6 +1422,19 @@ static void drm_setup_crtcs(struct drm_fb_helper *fb_helper)
 			modeset->mode = drm_mode_duplicate(dev,
 							   fb_crtc->desired_mode);
 			modeset->connectors[modeset->num_connectors++] = fb_helper->connector_info[i]->connector;
+			modeset->fb = fb_helper->fb;
+		}
+	}
+
+	/* Clear out any old modes if there are no more connected outputs. */
+	for (i = 0; i < fb_helper->crtc_count; i++) {
+		modeset = &fb_helper->crtc_info[i].mode_set;
+		if (modeset->num_connectors == 0) {
+			BUG_ON(modeset->fb);
+			BUG_ON(modeset->num_connectors);
+			if (modeset->mode)
+				drm_mode_destroy(dev, modeset->mode);
+			modeset->mode = NULL;
 		}
 	}
 
@@ -1405,9 +1462,6 @@ bool drm_fb_helper_initial_config(struct drm_fb_helper *fb_helper, int bpp_sel)
 	struct drm_device *dev = fb_helper->dev;
 	int count = 0;
 
-	/* disable all the possible outputs/crtcs before entering KMS mode */
-	drm_helper_disable_unused_functions(fb_helper->dev);
-
 	drm_fb_helper_parse_command_line(fb_helper);
 
 	count = drm_fb_helper_probe_connector_modes(fb_helper,
@@ -1429,23 +1483,14 @@ int drm_fb_helper_hotplug_event(struct drm_fb_helper *fb_helper)
 	struct drm_device *dev = fb_helper->dev;
 	int count = 0;
 	u32 max_width, max_height, bpp_sel;
-	bool bound = false, crtcs_bound = false;
-	struct drm_crtc *crtc;
 
 	if (!fb_helper->fb)
 		return 0;
 
-	lockmgr(&dev->mode_config.mutex, LK_EXCLUSIVE);
-	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
-		if (crtc->fb)
-			crtcs_bound = true;
-		if (crtc->fb == fb_helper->fb)
-			bound = true;
-	}
-
-	if (!bound && crtcs_bound) {
+	mutex_lock(&fb_helper->dev->mode_config.mutex);
+	if (!drm_fb_helper_is_bound(fb_helper)) {
 		fb_helper->delayed_hotplug = true;
-		lockmgr(&dev->mode_config.mutex, LK_RELEASE);
+		mutex_unlock(&fb_helper->dev->mode_config.mutex);
 		return 0;
 	}
 	DRM_DEBUG_KMS("\n");
@@ -1456,9 +1501,18 @@ int drm_fb_helper_hotplug_event(struct drm_fb_helper *fb_helper)
 
 	count = drm_fb_helper_probe_connector_modes(fb_helper, max_width,
 						    max_height);
-	drm_setup_crtcs(fb_helper);
-	lockmgr(&dev->mode_config.mutex, LK_RELEASE);
+	mutex_unlock(&fb_helper->dev->mode_config.mutex);
 
+	drm_modeset_lock_all(dev);
+	drm_setup_crtcs(fb_helper);
+	drm_modeset_unlock_all(dev);
+
+#if 1
 	return drm_fb_helper_single_fb_probe(fb_helper, bpp_sel);
+#else
+	drm_fb_helper_set_par(fb_helper->fbdev);
+
+	return 0;
+#endif
 }
 

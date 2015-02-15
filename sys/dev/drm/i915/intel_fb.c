@@ -60,11 +60,12 @@ static int intelfb_create(struct drm_fb_helper *helper,
 	struct drm_device *dev = ifbdev->helper.dev;
 #if 0
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct fb_info *info;
 #endif
+	struct fb_info *info;
 	struct drm_framebuffer *fb;
 	struct drm_mode_fb_cmd2 mode_cmd = {};
 	struct drm_i915_gem_object *obj;
+	device_t vga_dev;
 	int size, ret;
 
 	/* we don't do packed 24bpp */
@@ -108,6 +109,19 @@ static int intelfb_create(struct drm_fb_helper *helper,
 
 	info->par = ifbdev;
 #endif
+	vga_dev = device_get_parent(dev->dev);
+	info = kmalloc(sizeof(struct fb_info), M_DRM, M_WAITOK | M_ZERO);
+	info->width = sizes->fb_width;
+	info->height = sizes->fb_height;
+//	info->stride = sizes->surface_width * (sizes->surface_bpp/8);
+	info->stride = mode_cmd.pitches[0];
+	info->depth = sizes->surface_bpp;
+	info->paddr = dev->agp->base + obj->gtt_offset;
+	info->is_vga_boot_display = vga_pci_is_boot_display(vga_dev);
+	info->vaddr =
+	    (vm_offset_t)pmap_mapdev_attr(info->paddr,
+		sizes->surface_height * info->stride,
+		VM_MEMATTR_WRITE_COMBINING);
 
 	ret = intel_framebuffer_init(dev, &ifbdev->ifb, &mode_cmd, obj);
 	if (ret)
@@ -116,9 +130,9 @@ static int intelfb_create(struct drm_fb_helper *helper,
 	fb = &ifbdev->ifb.base;
 
 	ifbdev->helper.fb = fb;
-#if 0
 	ifbdev->helper.fbdev = info;
 
+#if 0
 	strcpy(info->fix.id, "inteldrmfb");
 
 	info->flags = FBINFO_DEFAULT | FBINFO_CAN_FORCE_OUTPUT;

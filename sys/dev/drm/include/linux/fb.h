@@ -29,4 +29,18 @@
 
 #include <linux/backlight.h>
 
+struct fb_info {
+	vm_offset_t vaddr;
+	vm_paddr_t paddr;
+	uint16_t width;
+	uint16_t height;
+	uint16_t stride;
+	uint16_t depth;
+	int is_vga_boot_display;
+	void *cookie;
+	void(*restore)(void *);
+};
+
+extern int register_framebuffer(struct fb_info *fb_info);
+
 #endif	/* _LINUX_FB_H_ */
