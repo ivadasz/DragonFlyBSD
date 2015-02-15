@@ -112,6 +112,7 @@ kdb_trap(int type, int code, struct x86_64_saved_state *regs)
 	 * our breakpoints by disarming our breakpoints and fixing up
 	 * %eip.
 	 */
+#if 0
 	if (cons_unavail && ddb_mode) {
 	    if (type == T_TRCTRAP) {
 		regs->tf_rflags &= ~PSL_T;
@@ -119,6 +120,7 @@ kdb_trap(int type, int code, struct x86_64_saved_state *regs)
 	    }
 	    return (0);
 	}
+#endif
 
 	switch (type) {
 	    case T_BPTFLT:	/* breakpoint */
@@ -350,8 +352,10 @@ Debugger(const char *msg)
 	 * OK if the call is for the debugger hotkey but not if the call
 	 * is a weak form of panicing.
 	 */
+#if 0
 	if (cons_unavail && !(boothowto & RB_GDB))
 	    return;
+#endif
 
 	if (!in_Debugger) {
 	    in_Debugger = 1;

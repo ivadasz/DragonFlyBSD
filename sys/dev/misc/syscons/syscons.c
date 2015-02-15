@@ -142,6 +142,7 @@ SYSCTL_INT(_machdep, OID_AUTO, enable_panic_key, CTLFLAG_RW, &enable_panic_key,
 #define ISTTYOPEN(tp)	((tp) && ((tp)->t_state & TS_ISOPEN))
 
 static	int	debugger;
+static int	entering_debugger;
 static	cdev_t	cctl_dev;
 #if 0
 static	timeout_t blink_screen_callout;
@@ -302,7 +303,7 @@ register_framebuffer(struct fb_info *info)
 
     if (sc->fbi != NULL) {
 	sc_update_render(sc->cur_scp);
-	sc->fbi->restore(sc->fbi->cookie);
+	sc->fbi->restore(sc->fbi->cookie, 0);
     }
 
     lwkt_reltoken(&tty_token);
@@ -1722,12 +1723,14 @@ sccndbctl(void *private, int on)
     /* assert(sc_console_unit >= 0) */
     /* try to switch to the kernel console screen */
     if (on && debugger == 0) {
+	++entering_debugger;
 	/*
 	 * TRY to make sure the screen saver is stopped, 
 	 * and the screen is updated before switching to 
 	 * the vty0.
 	 */
 	scrn_timer(NULL);
+#if 0
 	if (!cold
 	    && sc_console->sc->cur_scp->smode.mode == VT_AUTO
 	    && sc_console->smode.mode == VT_AUTO) {
@@ -1736,6 +1739,14 @@ sccndbctl(void *private, int on)
 	    sc_switch_scr(sc_console->sc, sc_console->index);
 	    syscons_unlock();
 	}
+#else
+	if (!cold && sc_console) {
+	    syscons_lock();
+	    sc_switch_scr(sc_console->sc, sc_console->index);
+	    syscons_unlock();
+	}
+#endif
+	--entering_debugger;
     }
     if (on)
 	++debugger;
@@ -2373,7 +2384,7 @@ sc_switch_scr(sc_softc_t *sc, u_int next_scr)
      * still going to use a spinlock but it no longer uses tokens so
      * we should be ok.
      */
-    if (sc->switch_in_progress &&
+    if (!entering_debugger && sc->switch_in_progress &&
 	(cur_scp->smode.mode == VT_PROCESS) &&
 	cur_scp->proc) {
 	if (cur_scp->proc != pfindn(cur_scp->pid)) {
@@ -2472,7 +2483,7 @@ sc_switch_scr(sc_softc_t *sc, u_int next_scr)
      * as the current or the current vty has been closed (but showing).
      */
     tp = VIRTUAL_TTY(sc, cur_scp->index);
-    if ((cur_scp->index != next_scr)
+    if (!entering_debugger && (cur_scp->index != next_scr)
 	&& ISTTYOPEN(tp)
 	&& (cur_scp->smode.mode == VT_AUTO)
 	&& ISGRAPHSC(cur_scp)) {
@@ -2513,11 +2524,13 @@ sc_switch_scr(sc_softc_t *sc, u_int next_scr)
     }
 
     /* has controlling process died? */
-    vt_proc_alive(sc->old_scp);
-    vt_proc_alive(sc->new_scp);
+    if (!entering_debugger) {
+	vt_proc_alive(sc->old_scp);
+	vt_proc_alive(sc->new_scp);
+    }
 
     /* wait for the controlling process to release the screen, if necessary */
-    if (signal_vt_rel(sc->old_scp)) {
+    if (!entering_debugger && signal_vt_rel(sc->old_scp)) {
 	return 0;
     }
 
@@ -2525,10 +2538,11 @@ sc_switch_scr(sc_softc_t *sc, u_int next_scr)
     exchange_scr(sc);
 
     /* wake up processes waiting for this vty */
-    wakeup((caddr_t)&sc->cur_scp->smode);
+    if (!entering_debugger)
+	wakeup((caddr_t)&sc->cur_scp->smode);
 
     /* wait for the controlling process to acknowledge, if necessary */
-    if (signal_vt_acq(sc->cur_scp)) {
+    if (!entering_debugger && signal_vt_acq(sc->cur_scp)) {
 	return 0;
     }
 
@@ -2689,7 +2703,12 @@ exchange_scr(sc_softc_t *sc)
 
     mark_all(scp);
     if (scp->sc->fbi != NULL) {
-	scp->sc->fbi->restore(scp->sc->fbi->cookie);
+	if (debugger > 0 || panicstr || shutdown_in_progress ||
+	    entering_debugger) {
+	    scp->sc->fbi->restore(scp->sc->fbi->cookie, 1);
+	} else {
+	    scp->sc->fbi->restore(scp->sc->fbi->cookie, 0);
+	}
     }
     lwkt_reltoken(&tty_token);
 }

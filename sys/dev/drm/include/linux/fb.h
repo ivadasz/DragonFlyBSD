@@ -38,7 +38,7 @@ struct fb_info {
 	uint16_t depth;
 	int is_vga_boot_display;
 	void *cookie;
-	void(*restore)(void *);
+	void(*restore)(void *, int);
 };
 
 extern int register_framebuffer(struct fb_info *fb_info);
