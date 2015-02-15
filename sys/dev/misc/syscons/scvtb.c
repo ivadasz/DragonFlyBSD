@@ -182,7 +182,7 @@ sc_vtb_putchar(sc_vtb_t *vtb, uint16_t *p, int c, int a)
 int
 sc_vtb_pos(sc_vtb_t *vtb, int pos, int offset)
 {
-	return ((pos + offset + vtb->vtb_size)%vtb->vtb_size);
+	return vtb_wrap(vtb, pos, offset);
 }
 
 void
@@ -225,9 +225,9 @@ sc_vtb_append(sc_vtb_t *vtb1, int from, sc_vtb_t *vtb2, int count)
 				     vtb2->vtb_buffer + vtb2->vtb_tail,
 				     len*sizeof(uint16_t));
 		} else {
-			sc_vtb_bcopy(vtb1->vtb_buffer + from,
-			      vtb2->vtb_buffer + vtb2->vtb_tail,
-			      len*sizeof(uint16_t));
+			memmove(vtb2->vtb_buffer + vtb2->vtb_tail,
+			    vtb1->vtb_buffer + from,
+			    len*sizeof(uint16_t));
 		}
 		from += len;
 		count -= len;
@@ -265,8 +265,8 @@ sc_vtb_move(sc_vtb_t *vtb, int from, int to, int count)
 		sc_vtb_bcopy(vtb->vtb_buffer + from, vtb->vtb_buffer + to,
 			 count*sizeof(uint16_t)); 
 	} else {
-		sc_vtb_bcopy(vtb->vtb_buffer + from, vtb->vtb_buffer + to,
-		      count*sizeof(uint16_t));
+		memmove(vtb->vtb_buffer + to, vtb->vtb_buffer + from,
+		    count*sizeof(uint16_t));
 	}
 }
 
@@ -284,17 +284,11 @@ sc_vtb_delete(sc_vtb_t *vtb, int at, int count, int c, int attr)
 				 vtb->vtb_buffer + at,
 				 len*sizeof(uint16_t)); 
 		} else {
-			sc_vtb_bcopy(vtb->vtb_buffer + at + count,
-			      vtb->vtb_buffer + at,
-			      len*sizeof(uint16_t)); 
+			memmove(vtb->vtb_buffer + at,
+			    vtb->vtb_buffer + at + count, len*sizeof(uint16_t));
 		}
 	}
-	if (vtb->vtb_type == VTB_FRAMEBUFFER)
-		fillw_io(attr | c, vtb->vtb_buffer + at + len,
-			 vtb->vtb_size - at - len);
-	else
-		fillw(attr | c, vtb->vtb_buffer + at + len,
-		      vtb->vtb_size - at - len);
+	sc_vtb_erase(vtb, at + len, vtb->vtb_size - at - len, c, attr);
 }
 
 void
@@ -308,13 +302,10 @@ sc_vtb_ins(sc_vtb_t *vtb, int at, int count, int c, int attr)
 				 vtb->vtb_buffer + at + count,
 				 (vtb->vtb_size - at - count)*sizeof(uint16_t));
 		} else {
-			sc_vtb_bcopy(vtb->vtb_buffer + at,
-			      vtb->vtb_buffer + at + count,
-			      (vtb->vtb_size - at - count)*sizeof(uint16_t)); 
+			memmove(vtb->vtb_buffer + at + count,
+			    vtb->vtb_buffer + at,
+			    (vtb->vtb_size - at - count)*sizeof(uint16_t));
 		}
 	}
-	if (vtb->vtb_type == VTB_FRAMEBUFFER)
-		fillw_io(attr | c, vtb->vtb_buffer + at, count);
-	else
-		fillw(attr | c, vtb->vtb_buffer + at, count);
+	sc_vtb_erase(vtb, at, count, c, attr);
 }
