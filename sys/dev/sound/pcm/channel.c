@@ -472,7 +472,7 @@ chn_wrintr(struct pcm_channel *c)
  */
 
 int
-chn_write(struct pcm_channel *c, struct uio *buf)
+chn_write(struct pcm_channel *c, struct uio *buf, int ioflag)
 {
 	struct snd_dbuf *bs = c->bufsoft;
 	void *off;
@@ -482,6 +482,11 @@ chn_write(struct pcm_channel *c, struct uio *buf)
 
 	ret = 0;
 	timeout = chn_timeout * hz;
+
+	if (ioflag & O_NONBLOCK)
+		c->flags |= CHN_F_NBIO;
+	else
+		c->flags &= ~CHN_F_NBIO;
 
 	while (ret == 0 && buf->uio_resid > 0) {
 		sz = min(buf->uio_resid, sndbuf_getfree(bs));
@@ -507,7 +512,7 @@ chn_write(struct pcm_channel *c, struct uio *buf)
 				if (ret != 0)
 					c->flags |= CHN_F_DEAD;
 			}
-		} else if (c->flags & (CHN_F_NBIO | CHN_F_NOTRIGGER)) {
+		} else if ((ioflag & O_NONBLOCK) || (c->flags & CHN_F_NOTRIGGER)) {
 			/**
 			 * @todo Evaluate whether EAGAIN is truly desirable.
 			 * 	 4Front drivers behave like this, but I'm
@@ -602,13 +607,18 @@ chn_rdintr(struct pcm_channel *c)
  */
 
 int
-chn_read(struct pcm_channel *c, struct uio *buf)
+chn_read(struct pcm_channel *c, struct uio *buf, int ioflag)
 {
 	struct snd_dbuf *bs = c->bufsoft;
 	void *off;
 	int ret, timeout, sz, t, p;
 
 	CHN_LOCKASSERT(c);
+
+	if (ioflag & O_NONBLOCK)
+		c->flags |= CHN_F_NBIO;
+	else
+		c->flags &= ~CHN_F_NBIO;
 
 	if (CHN_STOPPED(c) && !(c->flags & CHN_F_NOTRIGGER)) {
 		ret = chn_start(c, 0);
@@ -640,9 +650,9 @@ chn_read(struct pcm_channel *c, struct uio *buf)
 				sndbuf_dispose(bs, NULL, t);
 			}
 			ret = 0;
-		} else if (c->flags & (CHN_F_NBIO | CHN_F_NOTRIGGER))
+		} else if ((ioflag & O_NONBLOCK) || (c->flags & CHN_F_NOTRIGGER)) {
 			ret = EAGAIN;
-		else {
+		} else {
    			ret = chn_sleep(c, timeout);
 			if (ret == EAGAIN) {
 				ret = EINVAL;

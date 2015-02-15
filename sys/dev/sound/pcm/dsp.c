@@ -834,11 +834,11 @@ dsp_close(struct dev_close_args *ap)
 }
 
 static __inline int
-dsp_io_ops(struct cdev *i_dev, struct uio *buf)
+dsp_io_ops(struct cdev *i_dev, struct uio *buf, int ioflag)
 {
 	struct snddev_info *d;
 	struct pcm_channel **ch, *rdch, *wrch;
-	int (*chn_io)(struct pcm_channel *, struct uio *);
+	int (*chn_io)(struct pcm_channel *, struct uio *, int);
 	int prio, ret;
 	pid_t runpid;
 
@@ -895,7 +895,7 @@ dsp_io_ops(struct cdev *i_dev, struct uio *buf)
 	 * someone else doesn't come along and muss up the buffer.
 	 */
 	++(*ch)->inprog;
-	ret = chn_io(*ch, buf);
+	ret = chn_io(*ch, buf, ioflag);
 	--(*ch)->inprog;
 
 	CHN_BROADCAST(&(*ch)->cv);
@@ -913,7 +913,7 @@ dsp_read(struct dev_read_args *ap)
 	struct cdev *i_dev = ap->a_head.a_dev;
 	struct uio *buf = ap->a_uio;
 
-	return (dsp_io_ops(i_dev, buf));
+	return (dsp_io_ops(i_dev, buf, ap->a_ioflag));
 }
 
 static int
@@ -922,7 +922,7 @@ dsp_write(struct dev_write_args *ap)
 	struct cdev *i_dev = ap->a_head.a_dev;
 	struct uio *buf = ap->a_uio;
 
-	return (dsp_io_ops(i_dev, buf));
+	return (dsp_io_ops(i_dev, buf, ap->a_ioflag));
 }
 
 static int
