@@ -595,7 +595,7 @@ void		sc_vtb_copy(sc_vtb_t *vtb1, int from, sc_vtb_t *vtb2, int to,
 			    int count);
 void		sc_vtb_append(sc_vtb_t *vtb1, int from, sc_vtb_t *vtb2,
 			      int count);
-void		sc_vtb_seek(sc_vtb_t *vtb, int pos);
+void		sc_vtb_seek(sc_vtb_t *vtb, int off);
 void		sc_vtb_erase(sc_vtb_t *vtb, int at, int count, int c, int attr);
 void		sc_vtb_move(sc_vtb_t *vtb, int from, int to, int count);
 void		sc_vtb_delete(sc_vtb_t *vtb, int at, int count, int c, int attr);

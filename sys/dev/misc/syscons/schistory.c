@@ -161,9 +161,7 @@ copy_history(sc_vtb_t *from, sc_vtb_t *to)
 	for (i = 0; i < lines; ++i) {
 		sc_vtb_append(from, pos, to, cols);
 		if (cols < cols2)
-			sc_vtb_seek(to, sc_vtb_pos(to, 
-						   sc_vtb_tail(to), 
-						   cols2 - cols));
+			sc_vtb_seek(to, cols2 - cols);
 		pos = sc_vtb_pos(from, pos, cols1);
 	}
 }
@@ -210,9 +208,7 @@ sc_hist_restore(scr_stat *scp)
 	} else {
 		ret = 1;
 	}
-	sc_vtb_seek(scp->history, sc_vtb_pos(scp->history, 
-					     sc_vtb_tail(scp->history),
-					     -scp->xsize*scp->ysize));
+	sc_vtb_seek(scp->history, -scp->xsize * scp->ysize);
 	return ret;
 }
 

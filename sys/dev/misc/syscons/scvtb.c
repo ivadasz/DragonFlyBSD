@@ -236,9 +236,10 @@ sc_vtb_append(sc_vtb_t *vtb1, int from, sc_vtb_t *vtb2, int count)
 }
 
 void
-sc_vtb_seek(sc_vtb_t *vtb, int pos)
+sc_vtb_seek(sc_vtb_t *vtb, int off)
 {
-	vtb->vtb_tail = pos%vtb->vtb_size;
+	if (vtb->vtb_type == VTB_RINGBUFFER)
+		vtb->vtb_tail = vtb_wrap(vtb, vtb->vtb_tail, off);
 }
 
 void
