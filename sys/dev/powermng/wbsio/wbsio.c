@@ -191,6 +191,9 @@ wbsio_probe(struct device *dev)
 	case WBSIO_ID_NCT6776F:
 		desc = "NCT6776F";
 		break;
+	case WBSIO_ID_NCT6791D:
+		desc = "NCT6791D";
+		break;
 	}
 
 	if (desc == NULL) {
@@ -215,7 +218,7 @@ static int
 wbsio_attach(struct device *dev)
 {
 	struct wbsio_softc *sc = device_get_softc(dev);
-	uint8_t reg0, reg1;
+	uint8_t reg_lock, reg0, reg1;
 	uint16_t iobase;
 	struct device *child;
 
@@ -235,6 +238,18 @@ wbsio_attach(struct device *dev)
 
 	/* Read device ID */
 	sc->sc_devid = wbsio_conf_read(sc->sc_iot, sc->sc_ioh, WBSIO_ID);
+
+	/* Enable io mapping on NCT6791D if needed */
+	if (sc->sc_devid == WBSIO_ID_NCT6791D) {
+		reg_lock = wbsio_conf_read(sc->sc_iot, sc->sc_ioh,
+		    WBSIO_NCT6791D_IO_SPACE_LOCK);
+		if (reg_lock & 0x10) {
+			device_printf(dev, "enabling hardware monitor logical "
+			    "device mappings\n");
+			wbsio_conf_write(sc->sc_iot, sc->sc_ioh,
+			    WBSIO_NCT6791D_IO_SPACE_LOCK, reg_lock & ~0x10);
+		}
+	}
 
 	/* Select HM logical device */
 	wbsio_conf_write(sc->sc_iot, sc->sc_ioh, WBSIO_LDN, WBSIO_LDN_HM);
