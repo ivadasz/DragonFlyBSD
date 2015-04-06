@@ -66,6 +66,7 @@ extern	u_int	cpu_vendor_id;
 extern	u_int	vmm_vendor_id;
 extern	u_int	vmm_interface_id;
 extern	u_int	hyperv_hw_features;
+extern	u_int	hyperv_feature;
 extern	char	kstack[];
 extern	char	sigcode[];
 extern	int	szsigcode;

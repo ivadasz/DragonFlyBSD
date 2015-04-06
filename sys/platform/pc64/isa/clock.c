@@ -620,6 +620,9 @@ calibrate_clocks(void)
 		tsc_frequency = rdtsc() - old_tsc;
 	}
 
+	kprintf("Reading TSC frequency via Hyper-V MSR:\n");
+	tsc_frequency = rdmsr(HV_X64_MSR_TSC_FREQUENCY);
+
 	if (tsc_present) {
 		kprintf("TSC%s clock: %llu Hz, ",
 		    tsc_invariant ? " invariant" : "",

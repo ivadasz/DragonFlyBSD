@@ -492,6 +492,37 @@ printcpuinfo(void)
 	}
 	if (vmm_vendor_id == VMM_VENDOR_MICROSOFT &&
 	    hyperv_hw_features != 0) {
+		kprintf("\n  Hyper-V Features=0x%b",
+		    hyperv_feature,
+		    "\020"
+		    /* Support for VP Runtime */
+		    "\001VPRUNTIME"
+		    /* Support for Partition Reference Counter */
+		    "\002TIMEREF"
+		    /* Support for Basic SynIC MSRs */
+		    "\003SYNIC"
+		    /* Support for Synthetic Timer MSRs */
+		    "\004STIMER"
+		    /* Support for APIC access MSRs */
+		    "\005APICMSR"
+		    /* Support for Hypercall MSRs */
+		    "\006HYPERCALL"
+		    /* Support for Virtual Processor Index MSRs */
+		    "\007VPINDEX"
+		    /* Support for Virtual System Reset MSR */
+		    "\010VRESET"
+		    /* Support for Access Statistics Pages MSRs */
+		    "\011STATS"
+		    /* Support for Partition Reference TSC MSR */
+		    "\012REFTSC"
+		    /* Support for Virtual Guest Idle State MSR */
+		    "\013GUESTIDLE"
+		    /* Support for Timer frequency MSRs */
+		    "\014TIMERFREQ"
+		    );
+	}
+	if (vmm_vendor_id == VMM_VENDOR_MICROSOFT &&
+	    hyperv_hw_features != 0) {
 		kprintf("\n  Hypervisor Hardware-Features=0x%b",
 		    hyperv_hw_features,
 		    "\020"
@@ -669,6 +700,12 @@ identify_cpu(void)
 		do_cpuid(0x40000001, regs);
 		if (vmm_vendor_id == VMM_VENDOR_MICROSOFT) {
 			vmm_interface_id = regs[0];
+		}
+	}
+	if (cpu_vmmhigh >= 0x40000003) {
+		do_cpuid(0x40000003, regs);
+		if (vmm_vendor_id == VMM_VENDOR_MICROSOFT) {
+			hyperv_feature = regs[0];
 		}
 	}
 	if (cpu_vmmhigh >= 0x40000006) {

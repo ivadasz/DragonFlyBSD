@@ -66,6 +66,7 @@ u_int	cpu_vendor_id;		/* CPU vendor ID */
 u_int	vmm_vendor_id;		/* Hypervisor vendor ID */
 u_int	vmm_interface_id;	/* Hypervisor vendor-neutral interface ID */
 u_int	hyperv_hw_features;	/* Hardware-specific features used by HyperV */
+u_int	hyperv_feature;		/* Hyper-V feature flags */
 u_int	cpu_fxsr;		/* SSE enabled */
 u_int	cpu_xsave;		/* AVX enabled by OS*/
 u_int	cpu_mxcsr_mask;		/* Valid bits in mxcsr */

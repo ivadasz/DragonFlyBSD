@@ -310,6 +310,20 @@ static void
 lapic_timer_calibrate(void)
 {
 	sysclock_t value;
+	uint64_t tmp;
+
+	if (vmm_vendor_id == VMM_VENDOR_MICROSOFT &&
+	    (hyperv_feature & HV_CPUID_HAS_TIMERFREQ)) {
+		tmp = rdmsr(HV_X64_MSR_APIC_FREQUENCY);
+		kprintf("Read lapic frequency from hyper-v MSR: %juHz\n", tmp);
+		/* sanity check: */
+		if (tmp < 0x100000000ULL) {
+			lapic_cputimer_intr.freq = tmp;
+			lapic_timer_divisor_idx = 0;
+			lapic_timer_set_divisor(lapic_timer_divisor_idx);
+			goto used_msr;
+		}
+	}
 
 	/* Try to calibrate the local APIC timer. */
 	for (lapic_timer_divisor_idx = 0;
@@ -326,6 +340,7 @@ lapic_timer_calibrate(void)
 		panic("lapic: no proper timer divisor?!");
 	lapic_cputimer_intr.freq = value / 2;
 
+used_msr:
 	kprintf("lapic: divisor index %d, frequency %u Hz\n",
 		lapic_timer_divisor_idx, lapic_cputimer_intr.freq);
 }
