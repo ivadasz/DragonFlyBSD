@@ -486,7 +486,7 @@ printcpuinfo(void)
 			char str[5];
 			memcpy(str, &vmm_interface_id, 4);
 			str[4] = 0;
-			kprintf(" Hypervisor-Interface: \"%s\"", str);
+			kprintf(" VMM-Interface: \"%s\"", str);
 		}
 		kprintf(" Max-CPUID: 0x%08x", cpu_vmmhigh);
 	}
@@ -635,8 +635,8 @@ identify_cpu(void)
 		npxprobemask();
 	}
 
-	memset(vmm_vendor, 0, 13);
 	/* Standard Hypervisor CPUID Leaves */
+	memset(vmm_vendor, 0, 13);
 	if (cpu_feature2 & CPUID2_VMM) {
 		do_cpuid(0x40000000, regs);
 		cpu_vmmhigh = regs[0];

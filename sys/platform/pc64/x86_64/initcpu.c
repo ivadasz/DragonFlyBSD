@@ -169,9 +169,20 @@ initializecpu(int cpu)
 
 	if (cpu == 0) {
 		/* Check if we are running in a hypervisor. */
-		vmm_guest = detect_virtual();
-		if (vmm_guest == VMM_GUEST_NONE && (cpu_feature2 & CPUID2_VMM))
-			vmm_guest = VMM_GUEST_UNKNOWN;
+		switch (vmm_vendor_id) {
+		case VMM_VENDOR_KVM:
+			vmm_guest = VMM_GUEST_KVM;
+			break;
+		case VMM_VENDOR_MICROSOFT:
+			vmm_guest = VMM_GUEST_VPC;
+			break;
+		default:
+			vmm_guest = detect_virtual();
+			if (vmm_guest == VMM_GUEST_NONE &&
+			    (cpu_feature2 & CPUID2_VMM))
+				vmm_guest = VMM_GUEST_UNKNOWN;
+			break;
+		}
 	}
 
 #if !defined(CPU_DISABLE_AVX)
