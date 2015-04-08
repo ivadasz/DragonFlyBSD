@@ -51,6 +51,12 @@
 #define	CPU_VENDOR_INTEL	0x8086		/* Intel */
 #define	CPU_VENDOR_CENTAUR	CPU_VENDOR_IDT
 
+/*
+ * Vendors of Hypervisors. Just assigning Ad-Hoc values here.
+ */
+#define VMM_VENDOR_KVM		0x564b		/* KV */
+#define VMM_VENDOR_MICROSOFT	0x7648		/* Hv */
+
 #ifndef LOCORE
 extern int	cpu;
 extern int	cpu_class;

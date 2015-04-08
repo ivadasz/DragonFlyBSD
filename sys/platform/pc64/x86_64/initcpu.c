@@ -56,11 +56,15 @@ u_int	via_feature_rng;	/* VIA RNG features */
 u_int	via_feature_xcrypt;	/* VIA ACE features */
 u_int	cpu_high;		/* Highest arg to CPUID */
 u_int	cpu_exthigh;		/* Highest arg to extended CPUID */
+u_int	cpu_vmmhigh;		/* Maximum CPUID for hypervisor information */
 u_int	cpu_id;			/* Stepping ID */
 u_int	cpu_procinfo;		/* HyperThreading Info / Brand Index / CLFUSH */
 u_int	cpu_procinfo2;		/* Multicore info */
 char	cpu_vendor[20];		/* CPU Origin code */
+char	vmm_vendor[20];		/* Hypervisor Origin code */
 u_int	cpu_vendor_id;		/* CPU vendor ID */
+u_int	vmm_vendor_id;		/* Hypervisor vendor ID */
+u_int	vmm_interface_id;	/* Hypervisor vendor-neutral interface ID */
 u_int	cpu_fxsr;		/* SSE enabled */
 u_int	cpu_xsave;		/* AVX enabled by OS*/
 u_int	cpu_mxcsr_mask;		/* Valid bits in mxcsr */

@@ -65,6 +65,7 @@ void earlysetcpuclass(void);
 void panicifcpuunsupported(void);
 
 static u_int find_cpu_vendor_id(void);
+static u_int find_vmm_vendor_id(void);
 static void print_AMD_info(void);
 static void print_AMD_assoc(int i);
 static void print_via_padlock_info(void);
@@ -99,6 +100,14 @@ static struct {
 	{ INTEL_VENDOR_ID,	CPU_VENDOR_INTEL },	/* GenuineIntel */
 	{ AMD_VENDOR_ID,	CPU_VENDOR_AMD },	/* AuthenticAMD */
 	{ CENTAUR_VENDOR_ID,	CPU_VENDOR_CENTAUR },	/* CentaurHauls */
+};
+
+static struct {
+	char	*vendor;
+	u_int	vendor_id;
+} vmm_vendors[] = {
+	{ KVM_VENDOR_ID,	VMM_VENDOR_KVM },	/* KVM */
+	{ MICROSOFT_VENDOR_ID,	VMM_VENDOR_MICROSOFT },	/* Microsoft Hv */
 };
 
 #ifdef foo
@@ -471,6 +480,16 @@ printcpuinfo(void)
 #endif
 		}
 	}
+	if (*vmm_vendor) {
+		kprintf("\n  Hypervisor-Vendor: \"%s\"", vmm_vendor);
+		if (vmm_vendor_id == VMM_VENDOR_MICROSOFT) {
+			char str[5];
+			memcpy(str, &vmm_interface_id, 4);
+			str[4] = 0;
+			kprintf(" Hypervisor-Interface: \"%s\"", str);
+		}
+		kprintf(" Max-CPUID: 0x%08x", cpu_vmmhigh);
+	}
 	/* Avoid ugly blank lines: only print newline when we have to. */
 	if (*cpu_vendor || cpu_id)
 		kprintf("\n");
@@ -615,6 +634,24 @@ identify_cpu(void)
 	    (cpu_feature & CPUID_FXSR)) {
 		npxprobemask();
 	}
+
+	memset(vmm_vendor, 0, 13);
+	/* Standard Hypervisor CPUID Leaves */
+	if (cpu_feature2 & CPUID2_VMM) {
+		do_cpuid(0x40000000, regs);
+		cpu_vmmhigh = regs[0];
+		memcpy(&vmm_vendor[0], &regs[1], 4);
+		memcpy(&vmm_vendor[4], &regs[2], 4);
+		memcpy(&vmm_vendor[8], &regs[3], 4);
+		vmm_vendor[12] = 0;
+		vmm_vendor_id = find_vmm_vendor_id();
+	}
+	if (cpu_vmmhigh >= 0x40000001) {
+		do_cpuid(0x40000001, regs);
+		if (vmm_vendor_id == VMM_VENDOR_MICROSOFT) {
+			vmm_interface_id = regs[0];
+		}
+	}
 }
 
 static u_int
@@ -625,6 +662,17 @@ find_cpu_vendor_id(void)
 	for (i = 0; i < NELEM(cpu_vendors); i++)
 		if (strcmp(cpu_vendor, cpu_vendors[i].vendor) == 0)
 			return (cpu_vendors[i].vendor_id);
+	return (0);
+}
+
+static u_int
+find_vmm_vendor_id(void)
+{
+	int	i;
+
+	for (i = 0; i < NELEM(vmm_vendors); i++)
+		if (strcmp(vmm_vendor, vmm_vendors[i].vendor) == 0)
+			return (vmm_vendors[i].vendor_id);
 	return (0);
 }
 

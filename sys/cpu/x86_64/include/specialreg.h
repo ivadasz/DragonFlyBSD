@@ -295,6 +295,17 @@
 #define	INTEL_VENDOR_ID		"GenuineIntel"
 
 /*
+ * CPUID hypervisor identifiers
+ */
+#define MICROSOFT_VENDOR_ID	"Microsoft Hv"
+#define KVM_VENDOR_ID		"KVMKVMKVM"
+
+/*
+ * CPUID hypervisor interface IDs
+ */
+#define HYPER_V1	0x31237648	/* "Hv#1" */
+
+/*
  * Model-specific registers for the i386 family
  */
 #define	MSR_P5_MC_ADDR		0x000
