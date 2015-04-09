@@ -65,6 +65,7 @@ extern	char	vmm_vendor[];
 extern	u_int	cpu_vendor_id;
 extern	u_int	vmm_vendor_id;
 extern	u_int	vmm_interface_id;
+extern	u_int	vmm_hardware_features;
 extern	char	kstack[];
 extern	char	sigcode[];
 extern	int	szsigcode;

@@ -490,6 +490,25 @@ printcpuinfo(void)
 		}
 		kprintf(" Max-CPUID: 0x%08x", cpu_vmmhigh);
 	}
+	if (vmm_vendor_id == VMM_VENDOR_MICROSOFT &&
+	    vmm_hardware_features != 0) {
+		kprintf("\n  Hypervisor Hardware-Features=0x%b",
+		    vmm_hardware_features,
+		    "\020"
+		    /* Support for APIC overlay assist */
+		    "\001APIC_OVERLAY"
+		    /* Support for MSR bitmaps */
+		    "\002MSR_BMP"
+		    /* Support for architectural performance counters */
+		    "\003PERFCNTS"
+		    /* Support for second level address translation */
+		    "\004SLAT"
+		    /* Support for DMA remapping */
+		    "\005DMA_REMAP"
+		    /* Support for interrupt remapping */
+		    "\006INT_REMAP"
+		    );
+	}
 	/* Avoid ugly blank lines: only print newline when we have to. */
 	if (*cpu_vendor || cpu_id)
 		kprintf("\n");
@@ -650,6 +669,12 @@ identify_cpu(void)
 		do_cpuid(0x40000001, regs);
 		if (vmm_vendor_id == VMM_VENDOR_MICROSOFT) {
 			vmm_interface_id = regs[0];
+		}
+	}
+	if (cpu_vmmhigh >= 0x40000006) {
+		do_cpuid(0x40000006, regs);
+		if (vmm_vendor_id == VMM_VENDOR_MICROSOFT) {
+			vmm_hardware_features = regs[0];
 		}
 	}
 }

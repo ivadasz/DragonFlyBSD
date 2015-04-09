@@ -65,6 +65,7 @@ char	vmm_vendor[20];		/* Hypervisor Origin code */
 u_int	cpu_vendor_id;		/* CPU vendor ID */
 u_int	vmm_vendor_id;		/* Hypervisor vendor ID */
 u_int	vmm_interface_id;	/* Hypervisor vendor-neutral interface ID */
+u_int	vmm_hardware_features;	/* Hardware-specific features in use by VMM */
 u_int	cpu_fxsr;		/* SSE enabled */
 u_int	cpu_xsave;		/* AVX enabled by OS*/
 u_int	cpu_mxcsr_mask;		/* Valid bits in mxcsr */
