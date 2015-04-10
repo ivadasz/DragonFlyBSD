@@ -491,9 +491,9 @@ printcpuinfo(void)
 		kprintf(" Max-CPUID: 0x%08x", cpu_vmmhigh);
 	}
 	if (vmm_vendor_id == VMM_VENDOR_MICROSOFT &&
-	    vmm_hardware_features != 0) {
+	    hyperv_hw_features != 0) {
 		kprintf("\n  Hypervisor Hardware-Features=0x%b",
-		    vmm_hardware_features,
+		    hyperv_hw_features,
 		    "\020"
 		    /* Support for APIC overlay assist */
 		    "\001APIC_OVERLAY"
@@ -674,7 +674,7 @@ identify_cpu(void)
 	if (cpu_vmmhigh >= 0x40000006) {
 		do_cpuid(0x40000006, regs);
 		if (vmm_vendor_id == VMM_VENDOR_MICROSOFT) {
-			vmm_hardware_features = regs[0];
+			hyperv_hw_features = regs[0];
 		}
 	}
 }
