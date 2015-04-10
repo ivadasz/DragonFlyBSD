@@ -319,7 +319,7 @@ lapic_timer_calibrate(void)
 		/* sanity check: */
 		if (tmp < 0x100000000ULL) {
 			lapic_cputimer_intr.freq = tmp;
-			lapic_timer_divisor_idx = 0;
+			lapic_timer_divisor_idx = 7;
 			lapic_timer_set_divisor(lapic_timer_divisor_idx);
 			goto used_msr;
 		}

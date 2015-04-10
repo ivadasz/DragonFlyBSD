@@ -523,7 +523,7 @@ printcpuinfo(void)
 	}
 	if (vmm_vendor_id == VMM_VENDOR_MICROSOFT &&
 	    hyperv_hw_features != 0) {
-		kprintf("\n  Hypervisor Hardware-Features=0x%b",
+		kprintf("\n  Hyper-V Hardware-Features=0x%b",
 		    hyperv_hw_features,
 		    "\020"
 		    /* Support for APIC overlay assist */
