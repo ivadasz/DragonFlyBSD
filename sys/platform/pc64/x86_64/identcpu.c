@@ -484,11 +484,36 @@ printcpuinfo(void)
 		kprintf("\n  Hypervisor-Vendor: \"%s\"", vmm_vendor);
 		if (vmm_vendor_id == VMM_VENDOR_MICROSOFT) {
 			char str[5];
-			memcpy(str, &vmm_interface_id, 4);
+			memcpy(str, &hyperv_interface_id, 4);
 			str[4] = 0;
-			kprintf(" VMM-Interface: \"%s\"", str);
+			kprintf(" Interface-ID: \"%s\"", str);
 		}
 		kprintf(" Max-CPUID: 0x%08x", cpu_vmmhigh);
+	}
+	if (vmm_vendor_id == VMM_VENDOR_KVM &&
+	    kvm_feature != 0) {
+		kprintf("\n  KVM Features=0x%b",
+		    kvm_feature,
+		    "\020"
+		    /* Support for kvmclock MSRs */
+		    "\001CLOCKSOURCE"
+		    /* No delays on PIO operations needed */
+		    "\002NOPIODELAY"
+		    /* Deprecated */
+		    "\003MMUOP"
+		    /* Support for new kvmclock MSRs */
+		    "\004CLOCKSOURCE2"
+		    /* Support for enabling async pf via MSR */
+		    "\005ASYNCPF"
+		    /* Support for steal time */
+		    "\006STEALTIME"
+		    /* Support for paravirtualized EOI */
+		    "\007PVEOI"
+		    /* Support for paravirtualized spinlocks */
+		    "\010PVSPIN"
+		    /* Warning if no per-cpu warps expected in kvmclock */
+		    "\031CLKSTABLE"
+		    );
 	}
 	if (vmm_vendor_id == VMM_VENDOR_MICROSOFT &&
 	    hyperv_hw_features != 0) {
@@ -519,6 +544,43 @@ printcpuinfo(void)
 		    "\013GUESTIDLE"
 		    /* Support for Timer frequency MSRs */
 		    "\014TIMERFREQ"
+		    /* Support for Debug MSRs */
+		    "\015DEBUG"
+		    );
+	}
+	if (vmm_vendor_id == VMM_VENDOR_MICROSOFT &&
+	    hyperv_hw_features != 0) {
+		kprintf("\n  Hyper-V Recommended Spinlock Retries=");
+		if (hyperv_spin_retries == 0xffffffffU)
+			kprintf("NONE");
+		else
+			kprintf("%u", hyperv_spin_retries);
+	}
+	if (vmm_vendor_id == VMM_VENDOR_MICROSOFT &&
+	    hyperv_advise != 0) {
+		kprintf("\n  Hyper-V Recommendations=0x%b",
+		    hyperv_advise,
+		    "\020"
+		    /* Recommend hypercall instead of MOV to CR3 */
+		    "\001HCMOVCR3"
+		    /* Recommend hypercall for local TLB flushes */
+		    "\002HC_LOCAL_FLUSH"
+		    /* Recommend hypercall for remote TLB flushes */
+		    "\003HC_REM_FLUSH"
+		    /* Recommend MSRs for APIC register access */
+		    "\004MSRAPIC"
+		    /* Recommend MSR for system RESET */
+		    "\005MSRRESET"
+		    /* Recommend using relaxed timing */
+		    "\006RELAXEDTIMING"
+		    /* Recommend using DMA remapping */
+		    "\007DMA_REMAP"
+		    /* Recommend using interrupt remapping */
+		    "\010INT_REMAP"
+		    /* Recommend using x2APIC MSRs */
+		    "\011X2APICMSR"
+		    /* Recommend deprecating AutoEOI */
+		    "\012DEPR_AUTOEOI"
 		    );
 	}
 	if (vmm_vendor_id == VMM_VENDOR_MICROSOFT &&
@@ -698,14 +760,26 @@ identify_cpu(void)
 	}
 	if (cpu_vmmhigh >= 0x40000001) {
 		do_cpuid(0x40000001, regs);
-		if (vmm_vendor_id == VMM_VENDOR_MICROSOFT) {
-			vmm_interface_id = regs[0];
+		switch (vmm_vendor_id) {
+		case VMM_VENDOR_MICROSOFT:
+			hyperv_interface_id = regs[0];
+			break;
+		case VMM_VENDOR_KVM:
+			kvm_feature = regs[0];
+			break;
 		}
 	}
 	if (cpu_vmmhigh >= 0x40000003) {
 		do_cpuid(0x40000003, regs);
 		if (vmm_vendor_id == VMM_VENDOR_MICROSOFT) {
 			hyperv_feature = regs[0];
+		}
+	}
+	if (cpu_vmmhigh >= 0x40000004) {
+		do_cpuid(0x40000004, regs);
+		if (vmm_vendor_id == VMM_VENDOR_MICROSOFT) {
+			hyperv_advise = regs[0];
+			hyperv_spin_retries = regs[1];
 		}
 	}
 	if (cpu_vmmhigh >= 0x40000006) {

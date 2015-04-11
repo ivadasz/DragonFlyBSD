@@ -64,9 +64,12 @@ char	cpu_vendor[20];		/* CPU Origin code */
 char	vmm_vendor[20];		/* Hypervisor Origin code */
 u_int	cpu_vendor_id;		/* CPU vendor ID */
 u_int	vmm_vendor_id;		/* Hypervisor vendor ID */
-u_int	vmm_interface_id;	/* Hypervisor vendor-neutral interface ID */
+u_int	hyperv_interface_id;	/* Hyper-V vendor-neutral interface ID */
 u_int	hyperv_hw_features;	/* Hardware-specific features used by HyperV */
 u_int	hyperv_feature;		/* Hyper-V feature flags */
+u_int	hyperv_advise;		/* Hyper-V implementation recommendations */
+u_int	hyperv_spin_retries;	/* Hyper-V recommended spinlock retries */
+u_int	kvm_feature;		/* KVM feature flags */
 u_int	cpu_fxsr;		/* SSE enabled */
 u_int	cpu_xsave;		/* AVX enabled by OS*/
 u_int	cpu_mxcsr_mask;		/* Valid bits in mxcsr */
