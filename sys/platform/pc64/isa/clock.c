@@ -620,9 +620,6 @@ calibrate_clocks(void)
 		tsc_frequency = rdtsc() - old_tsc;
 	}
 
-	kprintf("Reading TSC frequency via Hyper-V MSR:\n");
-	tsc_frequency = rdmsr(HV_X64_MSR_TSC_FREQUENCY);
-
 	if (tsc_present) {
 		kprintf("TSC%s clock: %llu Hz, ",
 		    tsc_invariant ? " invariant" : "",
@@ -844,6 +841,14 @@ startrtclock(void)
 		tsc_frequency = 0;
 	}
 #endif
+
+	if (vmm_vendor_id == VMM_VENDOR_MICROSOFT &&
+	    (hyperv_feature & HV_CPUID_HAS_TIMERFREQ)) {
+		kprintf("Reading TSC frequency via Hyper-V MSR:\n");
+		tsc_frequency = rdmsr(HV_X64_MSR_TSC_FREQUENCY);
+		kprintf("TSC Clock: %ju Hz\n", tsc_frequency);
+	}
+
 	if (tsc_present && tsc_frequency == 0) {
 		/*
 		 * Calibration of the i586 clock relative to the mc146818A
