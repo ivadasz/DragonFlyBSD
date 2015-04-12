@@ -67,6 +67,9 @@ u_int	vmm_vendor_id;		/* Hypervisor vendor ID */
 u_int	hyperv_interface_id;	/* Hyper-V vendor-neutral interface ID */
 u_int	hyperv_hw_features;	/* Hardware-specific features used by HyperV */
 u_int	hyperv_feature;		/* Hyper-V feature flags */
+u_int	hyperv_privilege;	/* Hyper-V partition permissions */
+u_int	hyperv_powerman;	/* Hyper-V power management related info */
+u_int	hyperv_feature2;	/* Hyper-V miscellaneous feature flags */
 u_int	hyperv_advise;		/* Hyper-V implementation recommendations */
 u_int	hyperv_spin_retries;	/* Hyper-V recommended spinlock retries */
 u_int	kvm_feature;		/* KVM feature flags */

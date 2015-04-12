@@ -516,7 +516,7 @@ printcpuinfo(void)
 		    );
 	}
 	if (vmm_vendor_id == VMM_VENDOR_MICROSOFT &&
-	    hyperv_hw_features != 0) {
+	    hyperv_feature != 0) {
 		kprintf("\n  Hyper-V Features=0x%b",
 		    hyperv_feature,
 		    "\020"
@@ -549,7 +549,80 @@ printcpuinfo(void)
 		    );
 	}
 	if (vmm_vendor_id == VMM_VENDOR_MICROSOFT &&
-	    hyperv_hw_features != 0) {
+	    hyperv_privilege != 0) {
+		kprintf("\n  Hyper-V Permissions=0x%b",
+		    hyperv_privilege,
+		    "\020"
+		    /* Create Partitions */
+		    "\001CREATEPARTS"
+		    /* Access Partition-ID */
+		    "\002ACCPARTID"
+		    /* Access Memory Pool */
+		    "\003ACCMEMPOOL"
+		    /* Access Message buffers */
+		    "\004ACCMSGBUFS"
+		    /* Post Messages */
+		    "\005POSTMSGS"
+		    /* Signal Events */
+		    "\006SIGEVENTS"
+		    /* Create Port */
+		    "\007CREATPORT"
+		    /* Connect Port */
+		    "\010CONNPORT"
+		    /* Access Stats */
+		    "\011ACCSTATS"
+		    /* Debugging */
+		    "\014DEBUGGING"
+		    /* Cpu Management */
+		    "\015CPUMAN"
+		    /* Configure Profiler */
+		    "\016CONFPROFILER"
+		    );
+	}
+	if (vmm_vendor_id == VMM_VENDOR_MICROSOFT &&
+	    hyperv_powerman != 0) {
+		kprintf("\n  Hyper-V Power-Management:");
+		kprintf(" Max-Power-State: C%u", hyperv_powerman & 0xf);
+		kprintf(" Flags=0x%b",
+		    hyperv_powerman,
+		    "\020"
+		    /* HPET is required to enter C3 */
+		    "\005C3_Needs_HPET"
+		    );
+	}
+	if (vmm_vendor_id == VMM_VENDOR_MICROSOFT &&
+	    hyperv_feature2 != 0) {
+		kprintf("\n  Hyper-V Misc Features=0x%b",
+		    hyperv_feature2,
+		    "\020"
+		    /* Support for MWAIT instruction */
+		    "\001MWAIT"
+		    /* Support for Guest debugging */
+		    "\002GUESTDEBUG"
+		    /* Support for Performance Monitor */
+		    "\003PERFMON"
+		    /* Support for physical CPU dynamic partitioning events */
+		    "\004DYNPART"
+		    /* Support for hypercall parameters via XMM registers */
+		    "\005FASTHYPERCALL"
+		    /* Support for virtual guest idle */
+		    "\006VGUESTIDLE"
+		    /* Support for hypervisor sleep state */
+		    "\007HVSLEEP"
+		    /* Support for querying NUMA distances */
+		    "\010NUMAQUERY"
+		    /* Support for determining timer frequencies */
+		    "\011TIMERFREQ"
+		    /* Support for injecting synthetic machine checks */
+		    "\012SYNMCE"
+		    /* Support for guest crash MSRs */
+		    "\013CRASHMSR"
+		    /* Support for debug MSRs */
+		    "\014DEBUGMSR"
+		    );
+	}
+	if (vmm_vendor_id == VMM_VENDOR_MICROSOFT &&
+	    hyperv_spin_retries != 0) {
 		kprintf("\n  Hyper-V Recommended Spinlock Retries=");
 		if (hyperv_spin_retries == 0xffffffffU)
 			kprintf("NONE");
@@ -773,6 +846,9 @@ identify_cpu(void)
 		do_cpuid(0x40000003, regs);
 		if (vmm_vendor_id == VMM_VENDOR_MICROSOFT) {
 			hyperv_feature = regs[0];
+			hyperv_privilege = regs[1];
+			hyperv_powerman = regs[2];
+			hyperv_feature2 = regs[3];
 		}
 	}
 	if (cpu_vmmhigh >= 0x40000004) {
