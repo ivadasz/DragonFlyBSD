@@ -76,7 +76,9 @@ XXX explain possible values 1, 0, -1
 XXX
 .It Va drm.radeon.fastfb
 Direct FB access for IGP chips, which can significantly improve performance
-for some applications. (1 = enable, 0 = disable (default), -1 = auto)
+for some applications.
+This option currently only affects the RS690, RS780 and RS880 chipsets.
+(1 = enable, 0 = disable (default))
 .It Va drm.radeon.dpm
 DPM (dynamic power management) support.
 (1 = enable, 0 = disable, -1 = auto (default))
