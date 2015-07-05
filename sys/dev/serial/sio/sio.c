@@ -350,6 +350,7 @@ struct pci_ids {
 static struct pci_ids pci_ids[] = {
 	{ 0x100812b9, "3COM PCI FaxModem", 0x10 },
 	{ 0x2000131f, "CyberSerial (1-port) 16550", 0x10 },
+	{ 0x9cbd8086, "Intel Wildcat Point KT Controller", 0x10 },
 	{ 0x01101407, "Koutech IOFLEX-2S PCI Dual Port Serial", 0x10 },
 	{ 0x01111407, "Koutech IOFLEX-2S PCI Dual Port Serial", 0x10 },
 	{ 0x048011c1, "Lucent kermit based PCI Modem", 0x14 },
@@ -700,7 +701,7 @@ sioprobe(device_t dev, int xrid, u_long rclk)
 	 * junk after a (very fast) soft reboot and (apparently) after
 	 * master reset.
 	 * XXX what about the UART bug avoided by waiting in comparam()?
-	 * We don't want to to wait long enough to drain at 2 bps.
+	 * We don't want to wait long enough to drain at 2 bps.
 	 */
 	if (iobase == siocniobase) {
 		DELAY((16 + 1) * 1000000 / (comdefaultrate / 10));
