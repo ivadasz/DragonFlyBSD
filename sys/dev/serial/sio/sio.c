@@ -971,18 +971,16 @@ sioattach(device_t dev, int xrid, u_long rclk)
 	int		ret;
 	static int	did_init;
 
+	rid = xrid;
+	port = bus_alloc_resource(dev, SYS_RES_IOPORT, &rid,
+				  0, ~0, IO_COMSIZE, RF_ACTIVE);
+	if (!port)
+		return (ENXIO);
+
 	lwkt_gettoken(&tty_token);
 	if (did_init == 0) {
 		did_init = 1;
 		callout_init_mp(&sio_timeout_handle);
-	}
-
-	rid = xrid;
-	port = bus_alloc_resource(dev, SYS_RES_IOPORT, &rid,
-				  0, ~0, IO_COMSIZE, RF_ACTIVE);
-	if (!port) {
-		lwkt_reltoken(&tty_token);
-		return (ENXIO);
 	}
 
 	iobase = rman_get_start(port);
