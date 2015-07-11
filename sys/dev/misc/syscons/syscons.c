@@ -789,11 +789,11 @@ scclose(struct dev_close_args *ap)
 	    !scp->sc->fb_blanked) {
 	    cons_unavail = FALSE;
 	}
+	syscons_lock();
 	if (finish_vt_rel(scp, TRUE) == 0)	/* force release */
 	    DPRINTF(5, ("reset WAIT_REL, "));
 	if (finish_vt_acq(scp) == 0)		/* force acknowledge */
 	    DPRINTF(5, ("reset WAIT_ACQ, "));
-	syscons_lock();
 #if 0 /* notyet */
 	if (scp == &main_console) {
 	    scp->pid = 0;
