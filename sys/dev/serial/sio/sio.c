@@ -172,7 +172,8 @@ static	void	disc_optim	(struct tty	*tp, struct termios *t,
 
 #if NPCI > 0
 static	int	sio_pci_attach (device_t dev);
-static	void	sio_pci_kludge_unit (device_t dev);
+static	void	sio_pci_kludge_unit (device_t dev, int iobase);
+static	int	sio_pci_kludge_iobase (device_t dev, int rid);
 static	int	sio_pci_probe (device_t dev);
 #endif /* NPCI > 0 */
 
@@ -350,7 +351,8 @@ struct pci_ids {
 static struct pci_ids pci_ids[] = {
 	{ 0x100812b9, "3COM PCI FaxModem", 0x10 },
 	{ 0x2000131f, "CyberSerial (1-port) 16550", 0x10 },
-	{ 0x9cbd8086, "Intel Wildcat Point KT Controller", 0x10 },
+	{ 0x8cbd8086, "Intel Wildcat Point KT Controller", 0x10 },
+	{ 0x9cbd8086, "Intel Wildcat Point-LP KT Controller", 0x10 },
 	{ 0x01101407, "Koutech IOFLEX-2S PCI Dual Port Serial", 0x10 },
 	{ 0x01111407, "Koutech IOFLEX-2S PCI Dual Port Serial", 0x10 },
 	{ 0x048011c1, "Lucent kermit based PCI Modem", 0x14 },
@@ -377,8 +379,24 @@ sio_pci_attach(device_t dev)
 		id++;
 	if (id->desc == NULL)
 		return (ENXIO);
-	sio_pci_kludge_unit(dev);
+	sio_pci_kludge_unit(dev, sio_pci_kludge_iobase(dev, id->rid));
 	return (sioattach(dev, id->rid, 0UL));
+}
+
+static int
+sio_pci_kludge_iobase(device_t dev, int rid)
+{
+	struct resource *port;
+	int iobase;
+
+	port = bus_alloc_resource(dev, SYS_RES_IOPORT, &rid,
+				  0, ~0, IO_COMSIZE, RF_ACTIVE);
+	if (!port)
+		return (0);
+
+	iobase = rman_get_start(port);
+	bus_release_resource(dev, SYS_RES_IOPORT, rid, port);
+	return (iobase);
 }
 
 /*
@@ -386,18 +404,26 @@ sio_pci_attach(device_t dev)
  * which will fail to work and also be unnecessary in future versions.
  */
 static void
-sio_pci_kludge_unit(device_t dev)
+sio_pci_kludge_unit(device_t dev, int iobase)
 {
 	devclass_t	dc;
 	int		err;
 	int		start;
 	int		unit;
+	int		disabled;
 
 	unit = 0;
 	start = 0;
-	while (resource_int_value("sio", unit, "port", &start) == 0 &&
-	    start > 0)
-		unit++;
+	while (resource_int_value("sio", unit, "port", &start) == 0 && 
+	    start > 0) {
+		if (resource_int_value("sio", unit, "disabled", &disabled) == 0 &&
+		    disabled)
+			unit++;
+		else if (start == iobase)
+			break;
+		else
+			unit++;
+	}
 	if (device_get_unit(dev) < unit) {
 		dc = device_get_devclass(dev);
 		while (devclass_get_device(dc, unit))
