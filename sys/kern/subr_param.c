@@ -191,9 +191,12 @@ detect_virtual(void)
 void
 init_param1(void)
 {
+	int stathz_factor = 128;
+
 	hz = HZ_DEFAULT;
 	TUNABLE_INT_FETCH("kern.hz", &hz);
-	stathz = hz * 128 / 100;
+	TUNABLE_INT_FETCH("kern.stathz_factor", &stathz_factor);
+	stathz = hz * stathz_factor / 100;
 	profhz = stathz;
 	ustick = 1000000 / hz;
 	nstick = 1000000000 / hz;

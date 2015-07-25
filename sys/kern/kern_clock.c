@@ -773,7 +773,7 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 }
 
 /*
- * The statistics clock typically runs at a 125Hz rate, and is intended
+ * The statistics clock typically runs at a 128Hz rate, and is intended
  * to be frequency offset from the hardclock (typ 100Hz).  It is per-cpu.
  *
  * NOTE! systimer! the MP lock might not be held here.  We can only safely
@@ -781,8 +781,7 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
  *
  * The stats clock is responsible for grabbing a profiling sample.
  * Most of the statistics are only used by user-level statistics programs.
- * The main exceptions are p->p_uticks, p->p_sticks, p->p_iticks, and
- * p->p_estcpu.
+ * The main exceptions are td->td_uticks, td->td_sticks and td->td_iticks.
  *
  * Like the other clocks, the stat clock is called from what is effectively
  * a fast interrupt, so the context should be the thread/process that got
