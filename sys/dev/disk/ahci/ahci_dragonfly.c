@@ -39,6 +39,8 @@
 
 #include "ahci.h"
 
+#include <sys/systimer.h>
+
 u_int32_t AhciForceGen = 0;
 u_int32_t AhciNoFeatures = 0;
 
@@ -200,16 +202,29 @@ ahci_resume (device_t dev)
 
 #endif
 
+static void
+ahci_wakeup(systimer_t info, int in_ipi, struct intrframe *frame)
+{
+	wakeup(info);
+}
+
 /*
  * Sleep (ms) milliseconds, error on the side of caution.
  */
 void
 ahci_os_sleep(int ms)
 {
+#if 0
 	int ticks;
 
 	ticks = hz * ms / 1000 + 1;
 	tsleep(&ticks, 0, "ahslp", ticks);
+#else
+	struct systimer info;
+
+	systimer_init_oneshot(&info, ahci_wakeup, &info, ms * 1000);
+	tsleep(&info, 0, "ahslp", 0);
+#endif
 }
 
 /*
