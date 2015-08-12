@@ -222,8 +222,9 @@ ahci_os_sleep(int ms)
 #else
 	struct systimer info;
 
+	tsleep_interlock(&info, 0);
 	systimer_init_oneshot(&info, ahci_wakeup, &info, ms * 1000);
-	tsleep(&info, 0, "ahslp", 0);
+	tsleep(&info, PINTERLOCKED, "ahslp", 0);
 #endif
 }
 
