@@ -39,6 +39,7 @@
 #include <sys/cdefs.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
+#include <sys/sysctl.h>
 #include <sys/upmap.h>
 #include <sys/time.h>
 #include <machine/cpufunc.h>
@@ -59,6 +60,63 @@ static int *upticksp;
 static struct timespec *ts_uptime;
 static struct timespec *ts_realtime;
 
+static uint64_t tsc_frequency;
+static __thread struct timespec last_ts = {0,0};
+static __thread uint64_t last_tsc, lastest_tsc;
+
+static int
+__tsc_clock_gettime(clockid_t clock_id, struct timespec *ts)
+{
+	int res = 0;
+	if (clock_id == CLOCK_MONOTONIC) {
+		if (last_ts.tv_sec == 0 || tsc_frequency == 0) {
+			res = __sys_clock_gettime(clock_id, &last_ts);
+			lastest_tsc = last_tsc = rdtsc();
+		} else {
+			uint64_t tsc;
+			int w;
+			struct timespec myts;
+			do {
+				w = *upticksp;
+				cpu_lfence();
+				myts = ts_uptime[w & 1];
+				cpu_lfence();
+				w = *upticksp - w;
+			} while (w > 1);
+			if (myts.tv_sec > last_ts.tv_sec) {
+				res = __sys_clock_gettime(clock_id, &last_ts);
+				lastest_tsc = last_tsc = rdtsc();
+			} else {
+				uint64_t delta;
+				tsc = rdtsc();
+				if (tsc < lastest_tsc)
+					delta = lastest_tsc - last_tsc;
+				else
+					delta = tsc - last_tsc;
+				if (delta > tsc_frequency) {
+					res = __sys_clock_gettime(clock_id, &last_ts);
+					lastest_tsc = last_tsc = rdtsc();
+				} else {
+					delta *= (1000ULL * 1000ULL * 1000ULL);
+					delta /= tsc_frequency;
+					uint64_t ns = last_ts.tv_nsec + delta;
+					if (ns > 1000ULL*1000ULL*1000ULL)
+						ts->tv_sec = last_ts.tv_sec+1;
+					else
+						ts->tv_sec = last_ts.tv_sec;
+					ts->tv_nsec = ns % (1000ULL*1000ULL*1000ULL);
+					lastest_tsc = tsc;
+					return res;
+				}
+			}
+		}
+		*ts = last_ts;
+		return res;
+	} else {
+		return __sys_clock_gettime(clock_id, ts);
+	}
+}
+
 int
 __clock_gettime(clockid_t clock_id, struct timespec *ts)
 {
@@ -66,6 +124,9 @@ __clock_gettime(clockid_t clock_id, struct timespec *ts)
 	int w;
 
 	if (fast_clock == 0 && fast_count++ >= 10) {
+		size_t len = sizeof(tsc_frequency);
+		sysctlbyname("hw.tsc_frequency", &tsc_frequency, &len,
+		    NULL, 0);
 		__kpmap_map(&upticksp, &fast_clock, KPTYPE_UPTICKS);
 		__kpmap_map(&ts_uptime, &fast_clock, KPTYPE_TS_UPTIME);
 		__kpmap_map(&ts_realtime, &fast_clock, KPTYPE_TS_REALTIME);
@@ -99,7 +160,7 @@ __clock_gettime(clockid_t clock_id, struct timespec *ts)
 			res = 0;
 			break;
 		default:
-			res = __sys_clock_gettime(clock_id, ts);
+			res = __tsc_clock_gettime(clock_id, ts);
 			break;
 		}
 	} else {
