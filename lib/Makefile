@@ -75,6 +75,7 @@ SUBDIR=	${SUBDIR_ORDERED} \
 	libhammer \
 	libipfw3 \
 	libipsec \
+	libkbdev \
 	libkcore \
 	libkiconv \
 	libkinfo \
