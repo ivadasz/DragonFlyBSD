@@ -467,6 +467,10 @@ acpi_probe(device_t dev)
     return_VALUE (0);
 }
 
+#ifdef DDB
+int *acpi_handle_reboot_ptr;
+#endif
+
 static int
 acpi_attach(device_t dev)
 {
@@ -647,6 +651,10 @@ acpi_attach(device_t dev)
     /* Only enable reboot by default if the FADT says it is available. */
     if (AcpiGbl_FADT.Flags & ACPI_FADT_RESET_REGISTER)
 	sc->acpi_handle_reboot = 1;
+
+#ifdef DDB
+    acpi_handle_reboot_ptr = &sc->acpi_handle_reboot;
+#endif
 
     /* Only enable S4BIOS by default if the FACS says it is available. */
     if (AcpiGbl_FACS->Flags & ACPI_FACS_S4_BIOS_PRESENT)
@@ -1818,6 +1826,25 @@ void
 acpi_fake_objhandler(ACPI_HANDLE h, void *data)
 {
 }
+
+#ifdef DDB
+DB_COMMAND(acpi_reset, acpi_ddb_reset) {
+	ACPI_STATUS status;
+
+	if ((acpi_handle_reboot_ptr == NULL) ||
+	    (*acpi_handle_reboot_ptr == 0)) {
+		db_error("ACPI reset not available or disabled!\n",
+		    __func__);
+		return;
+	}
+
+	status = AcpiReset();
+	if (ACPI_FAILURE(status))
+		db_error("ACPI reset failed!\n", __func__);
+
+	return;
+}
+#endif
 
 static void
 acpi_shutdown_final(void *arg, int howto)
