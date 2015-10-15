@@ -170,7 +170,7 @@ __ww_mutex_lock(struct ww_mutex *lock, struct ww_acquire_ctx *ctx, bool slow, bo
 			 * - We are in the slow-path (first lock to obtain).
                          *
 			 * - No context was specified. We assume a single
-			 *   resouce, so there is no danger of a deadlock.
+			 *   resource, so there is no danger of a deadlock.
                          *
 			 * - An `older` process (`ctx`) tries to acquire a
 			 *   lock already held by a `younger` process.
@@ -178,7 +178,8 @@ __ww_mutex_lock(struct ww_mutex *lock, struct ww_acquire_ctx *ctx, bool slow, bo
                          *   the `younger` process gives up all it's
                          *   resources.
 			 */
-			if (slow || ctx == NULL || ctx->stamp < lock->ctx->stamp) {
+			if (slow || ctx == NULL || lock->ctx == NULL ||
+			    ctx->stamp < lock->ctx->stamp) {
 				int s = ssleep(lock, &lock->lock,
 					       intr ? PCATCH : 0,
 					       ctx ? ctx->ww_class->name : "ww_mutex_lock", 0);
