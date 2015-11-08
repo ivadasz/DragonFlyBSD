@@ -45,11 +45,21 @@
 #define	MSI_HANDLER(irq_num)						\
 	.text ;								\
 	SUPERALIGN_TEXT ;						\
+IDTVEC(msi_intr_x2apic##irq_num) ;					\
+	MSI_PUSH_FRAME ;						\
+	FAKE_MCOUNT(TF_RIP(%rsp)) ;					\
+	movl	$0, %eax ;						\
+	movl	$0, %edx ;						\
+	movl	$0x80b, %ecx ;						\
+	wrmsr ;								\
+	jmp dideoi ## irq_num ;						\
+	SUPERALIGN_TEXT ;						\
 IDTVEC(msi_intr##irq_num) ;						\
 	MSI_PUSH_FRAME ;						\
 	FAKE_MCOUNT(TF_RIP(%rsp)) ;					\
 	movq	lapic, %rax ;						\
 	movl	$0, LA_EOI(%rax) ;					\
+dideoi ## irq_num: ;							\
 	movq	PCPU(curthread),%rbx ;					\
 	testl	$-1,TD_NEST_COUNT(%rbx) ;				\
 	jne	1f ;							\

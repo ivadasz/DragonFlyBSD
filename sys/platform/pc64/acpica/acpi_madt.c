@@ -79,6 +79,8 @@ static vm_paddr_t		madt_phyaddr;
 
 u_int				cpu_id_to_acpi_id[NAPICID];
 
+extern int x2apic_enable;
+
 static void
 madt_probe(void)
 {
@@ -178,6 +180,14 @@ madt_iterate_entries(ACPI_TABLE_MADT *madt, madt_iter_t func, void *arg)
 			}
 			break;
 
+		case ACPI_MADT_TYPE_LOCAL_X2APIC:
+			if (ent->Length < sizeof(ACPI_MADT_LOCAL_X2APIC)) {
+				kprintf("madt_iterate_entries: invalid MADT "
+					"x2apic entry len %d\n", ent->Length);
+				error = EINVAL;
+			}
+			break;
+
 		case ACPI_MADT_TYPE_IO_APIC:
 			if (ent->Length < sizeof(ACPI_MADT_IO_APIC)) {
 				kprintf("madt_iterate_entries: invalid MADT "
@@ -270,26 +280,57 @@ static int
 madt_lapic_pass2_callback(void *xarg, const ACPI_SUBTABLE_HEADER *ent)
 {
 	const ACPI_MADT_LOCAL_APIC *lapic_ent;
+	const ACPI_MADT_LOCAL_X2APIC *x2apic_ent;
 	struct madt_lapic_pass2_cbarg *arg = xarg;
 
-	if (ent->Type != ACPI_MADT_TYPE_LOCAL_APIC)
-		return 0;
+	/*
+	 * For now we are only using the values from the Local APIC structue
+	 * for both xAPIC and x2APIC mode. So this still supports only up to
+	 * 255 cpus in x2APIC mode.
+	 */
+	if (ent->Type == ACPI_MADT_TYPE_LOCAL_X2APIC) {
+		x2apic_ent = (const ACPI_MADT_LOCAL_X2APIC *)ent;
+		if (x2apic_ent->LapicFlags & ACPI_MADT_ENABLED) {
+			int cpu;
 
-	lapic_ent = (const ACPI_MADT_LOCAL_APIC *)ent;
-	if (lapic_ent->LapicFlags & ACPI_MADT_ENABLED) {
-		int cpu;
-
-		if (lapic_ent->Id == arg->bsp_apic_id) {
-			cpu = 0;
-			arg->bsp_found = 1;
-		} else {
-			cpu = arg->cpu;
-			arg->cpu++;
+			if (x2apic_ent->LocalApicId == arg->bsp_apic_id) {
+				cpu = 0;
+#ifdef notyet
+				arg->bsp_found = 1;
+#endif
+			} else {
+				cpu = arg->cpu;
+#ifdef notyet
+				arg->cpu++;
+#endif
+			}
+			MADT_VPRINTF(
+			    "cpu id 0x%x, acpi id 0x%x, x2apic id 0x%x\n",
+			    cpu, x2apic_ent->Uid, x2apic_ent->LocalApicId);
+#ifdef notyet
+			lapic_set_cpuid(cpu, x2apic_ent->LocalApicId);
+			CPUID_TO_ACPIID(cpu) = x2apic_ent->Uid;
+#endif
 		}
-		MADT_VPRINTF("cpu id %d, acpi id %d, apic id %d\n",
-		    cpu, lapic_ent->ProcessorId, lapic_ent->Id);
-		lapic_set_cpuid(cpu, lapic_ent->Id);
-		CPUID_TO_ACPIID(cpu) = lapic_ent->ProcessorId;
+		return 0;
+	} else if (ent->Type == ACPI_MADT_TYPE_LOCAL_APIC) {
+		lapic_ent = (const ACPI_MADT_LOCAL_APIC *)ent;
+		if (lapic_ent->LapicFlags & ACPI_MADT_ENABLED) {
+			int cpu;
+
+			if (lapic_ent->Id == arg->bsp_apic_id) {
+				cpu = 0;
+				arg->bsp_found = 1;
+			} else {
+				cpu = arg->cpu;
+				arg->cpu++;
+			}
+			MADT_VPRINTF(
+			    "cpu id 0x%x, acpi id 0x%x, lapic id 0x%x\n",
+			    cpu, lapic_ent->ProcessorId, lapic_ent->Id);
+			lapic_set_cpuid(cpu, lapic_ent->Id);
+			CPUID_TO_ACPIID(cpu) = lapic_ent->ProcessorId;
+		}
 	}
 	return 0;
 }
@@ -301,7 +342,7 @@ madt_lapic_pass2(int bsp_apic_id)
 	struct madt_lapic_pass2_cbarg arg;
 	int error;
 
-	MADT_VPRINTF("BSP apic id %d\n", bsp_apic_id);
+	MADT_VPRINTF("BSP apic id 0x%x\n", bsp_apic_id);
 
 	KKASSERT(madt_phyaddr != 0);
 
@@ -342,8 +383,28 @@ madt_lapic_probe_callback(void *xarg, const ACPI_SUBTABLE_HEADER *ent)
 			arg->cpu_count++;
 			if (lapic_ent->Id == APICID_MAX) {
 				kprintf("madt_lapic_probe: "
-				    "invalid LAPIC apic id %d\n",
+				    "invalid LAPIC apic id 0x%x\n",
 				    lapic_ent->Id);
+				return EINVAL;
+			}
+		}
+	} else if (ent->Type == ACPI_MADT_TYPE_LOCAL_X2APIC) {
+		const ACPI_MADT_LOCAL_X2APIC *x2apic_ent;
+
+		/*
+		 * For now, we are still always using the data from the Local
+		 * APIC structure, we are only checking values for validity
+		 * here.
+		 */
+		x2apic_ent = (const ACPI_MADT_LOCAL_X2APIC *)ent;
+		if (x2apic_ent->LapicFlags & ACPI_MADT_ENABLED) {
+#ifdef notyet
+			arg->cpu_count++;
+#endif
+			if (x2apic_ent->LocalApicId == X2APICID_MAX) {
+				kprintf("madt_lapic_probe: "
+				    "invalid x2APIC apic id 0x%x\n",
+				    x2apic_ent->LocalApicId);
 				return EINVAL;
 			}
 		}
@@ -409,14 +470,17 @@ madt_lapic_enumerate(struct lapic_enumerator *e)
 
 	lapic_map(lapic_addr);
 
-	bsp_apic_id = APIC_ID(lapic->id);
+	if (x2apic_enable)
+		bsp_apic_id = x2apic_read32(X2APIC_OFF_APICID);
+	else
+		bsp_apic_id = APIC_ID(lapic->id);
 	if (bsp_apic_id == APICID_MAX) {
 		/*
 		 * XXX
 		 * Some old brain dead BIOS will set BSP's LAPIC apic id
 		 * to 255, though all LAPIC entries in MADT are valid.
 		 */
-		kprintf("%s invalid BSP LAPIC apic id %d\n", __func__,
+		kprintf("%s invalid BSP LAPIC apic id 0x%x\n", __func__,
 		    bsp_apic_id);
 		return EINVAL;
 	}

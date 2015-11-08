@@ -30,6 +30,7 @@
 #define _ARCH_APIC_LAPIC_H_
 
 #include <machine_base/apic/apicreg.h>
+#include <machine_base/apic/x2apicreg.h>
 
 /*
  * APIC ID <-> CPU ID mapping macros
@@ -92,5 +93,10 @@ all_but_self_ipi(int vector)
 		return 0;
 	return apic_ipi(APIC_DEST_ALLESELF, vector, APIC_DELMODE_FIXED);
 }
+
+uint32_t x2apic_read32(uint32_t);
+void x2apic_write32(uint32_t, uint32_t);
+uint64_t x2apic_read64(uint32_t);
+void x2apic_write64(uint32_t, uint64_t);
 
 #endif /* _ARCH_APIC_LAPIC_H_ */

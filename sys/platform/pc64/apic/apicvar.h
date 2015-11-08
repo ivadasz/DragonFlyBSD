@@ -46,4 +46,10 @@
  */
 #define APICID_MAX	255
 
+/*
+ * x2APIC ID must be less than this value
+ * 0xffffffff is for "broadcast to all APICs"
+ */
+#define X2APICID_MAX	0xffffffff
+
 #endif /* _MACHINE_APICVAR_H_ */

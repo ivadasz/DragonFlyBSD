@@ -66,6 +66,7 @@ static int	lapic_timer_tscdeadline = 1;
 TUNABLE_INT("hw.lapic_timer_tscdeadline", &lapic_timer_tscdeadline);
 
 static void	lapic_timer_tscdlt_reload(struct cputimer_intr *, sysclock_t);
+static void	lapic_timer_x2apic_reload(struct cputimer_intr *, sysclock_t);
 static void	lapic_timer_intr_reload(struct cputimer_intr *, sysclock_t);
 static void	lapic_timer_intr_enable(struct cputimer_intr *);
 static void	lapic_timer_intr_restart(struct cputimer_intr *);
@@ -105,6 +106,31 @@ static int	lapic_timer_tscfreq_shift;
 int	cpu_id_to_apic_id[NAPICID];
 int	apic_id_to_cpu_id[NAPICID];
 int	lapic_enable = 1;
+int	x2apic_enable = -1;
+
+__inline uint32_t
+x2apic_read32(uint32_t offset)
+{
+	return rdmsr(MSR_X2APIC_BASE + offset);
+}
+
+__inline uint64_t
+x2apic_read64(uint32_t offset)
+{
+	return rdmsr(MSR_X2APIC_BASE + offset);
+}
+
+__inline void
+x2apic_write32(uint32_t offset, uint32_t val)
+{
+	return wrmsr(MSR_X2APIC_BASE + offset, val);
+}
+
+__inline void
+x2apic_write64(uint32_t offset, uint64_t val)
+{
+	return wrmsr(MSR_X2APIC_BASE + offset, val);
+}
 
 /* Separate cachelines for each cpu's info. */
 struct deadlines {
@@ -120,7 +146,7 @@ struct deadlines *tsc_deadlines = NULL;
 void
 lapic_init(boolean_t bsp)
 {
-	uint32_t timer;
+	uint32_t timer, version;
 	u_int   temp;
 
 	if (bsp) {
@@ -181,25 +207,47 @@ lapic_init(boolean_t bsp)
 		setidt_global(XSPURIOUSINT_OFFSET, Xspuriousint,
 		    SDT_SYSIGT, SEL_KPL, 0);
 
-		/* Install a timer vector */
-		setidt_global(XTIMER_OFFSET, Xtimer,
-		    SDT_SYSIGT, SEL_KPL, 0);
+		if (x2apic_enable) {
+			/* Install a timer vector */
+			setidt_global(XTIMER_OFFSET, Xtimer_x2apic,
+			    SDT_SYSIGT, SEL_KPL, 0);
 
-		/* Install an inter-CPU IPI for TLB invalidation */
-		setidt_global(XINVLTLB_OFFSET, Xinvltlb,
-		    SDT_SYSIGT, SEL_KPL, 0);
+			/* Install an inter-CPU IPI for TLB invalidation */
+			setidt_global(XINVLTLB_OFFSET, Xinvltlb_x2apic,
+			    SDT_SYSIGT, SEL_KPL, 0);
 
-		/* Install an inter-CPU IPI for IPIQ messaging */
-		setidt_global(XIPIQ_OFFSET, Xipiq,
-		    SDT_SYSIGT, SEL_KPL, 0);
+			/* Install an inter-CPU IPI for IPIQ messaging */
+			setidt_global(XIPIQ_OFFSET, Xipiq_x2apic,
+			    SDT_SYSIGT, SEL_KPL, 0);
 
-		/* Install an inter-CPU IPI for CPU stop/restart */
-		setidt_global(XCPUSTOP_OFFSET, Xcpustop,
-		    SDT_SYSIGT, SEL_KPL, 0);
+			/* Install an inter-CPU IPI for CPU stop/restart */
+			setidt_global(XCPUSTOP_OFFSET, Xcpustop_x2apic,
+			    SDT_SYSIGT, SEL_KPL, 0);
 
-		/* Install an inter-CPU IPI for TLB invalidation */
-		setidt_global(XSNIFF_OFFSET, Xsniff,
-		    SDT_SYSIGT, SEL_KPL, 0);
+			/* Install an inter-CPU IPI for TLB invalidation */
+			setidt_global(XSNIFF_OFFSET, Xsniff_x2apic,
+			    SDT_SYSIGT, SEL_KPL, 0);
+		} else {
+			/* Install a timer vector */
+			setidt_global(XTIMER_OFFSET, Xtimer,
+			    SDT_SYSIGT, SEL_KPL, 0);
+
+			/* Install an inter-CPU IPI for TLB invalidation */
+			setidt_global(XINVLTLB_OFFSET, Xinvltlb,
+			    SDT_SYSIGT, SEL_KPL, 0);
+
+			/* Install an inter-CPU IPI for IPIQ messaging */
+			setidt_global(XIPIQ_OFFSET, Xipiq,
+			    SDT_SYSIGT, SEL_KPL, 0);
+
+			/* Install an inter-CPU IPI for CPU stop/restart */
+			setidt_global(XCPUSTOP_OFFSET, Xcpustop,
+			    SDT_SYSIGT, SEL_KPL, 0);
+
+			/* Install an inter-CPU IPI for TLB invalidation */
+			setidt_global(XSNIFF_OFFSET, Xsniff,
+			    SDT_SYSIGT, SEL_KPL, 0);
+		}
 	}
 
 	/*
@@ -215,7 +263,10 @@ lapic_init(boolean_t bsp)
 	 * Disable LINT0 on the APs.  It doesn't matter what delivery
 	 * mode we use because we leave it masked.
 	 */
-	temp = lapic->lvt_lint0;
+	if (x2apic_enable)
+		temp = x2apic_read32(X2APIC_OFF_LINT0);
+	else
+		temp = lapic->lvt_lint0;
 	temp &= ~(APIC_LVT_MASKED | APIC_LVT_TRIG_MASK | 
 		  APIC_LVT_POLARITY_MASK | APIC_LVT_DM_MASK);
 	if (bsp) {
@@ -225,7 +276,10 @@ lapic_init(boolean_t bsp)
 	} else {
 		temp |= APIC_LVT_DM_FIXED | APIC_LVT_MASKED;
 	}
-	lapic->lvt_lint0 = temp;
+	if (x2apic_enable)
+		x2apic_write32(X2APIC_OFF_LINT0, temp);
+	else
+		lapic->lvt_lint0 = temp;
 
 	/*
 	 * Setup LINT1 as NMI.
@@ -236,43 +290,68 @@ lapic_init(boolean_t bsp)
 	 *
 	 * Disable LINT1 on the APs.
 	 */
-	temp = lapic->lvt_lint1;
+	if (x2apic_enable)
+		temp = x2apic_read32(X2APIC_OFF_LINT1);
+	else
+		temp = lapic->lvt_lint1;
 	temp &= ~(APIC_LVT_MASKED | APIC_LVT_TRIG_MASK | 
 		  APIC_LVT_POLARITY_MASK | APIC_LVT_DM_MASK);
 	temp |= APIC_LVT_MASKED | APIC_LVT_DM_NMI;
 	if (bsp && ioapic_enable)
 		temp &= ~APIC_LVT_MASKED;
-	lapic->lvt_lint1 = temp;
+	if (x2apic_enable)
+		x2apic_write32(X2APIC_OFF_LINT1, temp);
+	else
+		lapic->lvt_lint1 = temp;
 
 	/*
 	 * Mask the LAPIC error interrupt, LAPIC performance counter
 	 * interrupt.
 	 */
-	lapic->lvt_error = lapic->lvt_error | APIC_LVT_MASKED;
-	lapic->lvt_pcint = lapic->lvt_pcint | APIC_LVT_MASKED;
+	if (x2apic_enable) {
+		x2apic_write32(X2APIC_OFF_LVT_ERROR,
+		    x2apic_read32(X2APIC_OFF_LVT_ERROR) | APIC_LVT_MASKED);
+		x2apic_write32(X2APIC_OFF_PCINT,
+		    x2apic_read32(X2APIC_OFF_PCINT) | APIC_LVT_MASKED);
+	} else {
+		lapic->lvt_error = lapic->lvt_error | APIC_LVT_MASKED;
+		lapic->lvt_pcint = lapic->lvt_pcint | APIC_LVT_MASKED;
+	}
 
 	/*
 	 * Set LAPIC timer vector and mask the LAPIC timer interrupt.
 	 */
-	timer = lapic->lvt_timer;
+	if (x2apic_enable)
+		timer = x2apic_read32(X2APIC_OFF_TIMER);
+	else
+		timer = lapic->lvt_timer;
 	timer &= ~APIC_LVTT_VECTOR;
 	timer |= XTIMER_OFFSET;
 	timer |= APIC_LVTT_MASKED;
-	lapic->lvt_timer = timer;
+	if (x2apic_enable)
+		x2apic_write32(X2APIC_OFF_TIMER, timer);
+	else
+		lapic->lvt_timer = timer;
 
 	/*
 	 * Set the Task Priority Register as needed.   At the moment allow
 	 * interrupts on all cpus (the APs will remain CLId until they are
 	 * ready to deal).
 	 */
-	temp = lapic->tpr;
+	if (x2apic_enable)
+		temp = x2apic_read32(X2APIC_OFF_TPR);
+	else
+		temp = lapic->tpr;
 	temp &= ~APIC_TPR_PRIO;		/* clear priority field */
-	lapic->tpr = temp;
+	if (x2apic_enable)
+		x2apic_write32(X2APIC_OFF_TPR, temp);
+	else
+		lapic->tpr = temp;
 
 	/*
 	 * AMD specific setup
 	 */
-	if (cpu_vendor_id == CPU_VENDOR_AMD &&
+	if (!x2apic_enable && cpu_vendor_id == CPU_VENDOR_AMD &&
 	    (lapic->version & APIC_VER_AMD_EXT_SPACE)) {
 		uint32_t ext_feat;
 		uint32_t count;
@@ -318,11 +397,18 @@ lapic_init(boolean_t bsp)
 	/* 
 	 * Enable the LAPIC 
 	 */
-	temp = lapic->svr;
+	if (x2apic_enable)
+		temp = x2apic_read32(X2APIC_OFF_SVR);
+	else
+		temp = lapic->svr;
 	temp |= APIC_SVR_ENABLE;	/* enable the LAPIC */
 	temp &= ~APIC_SVR_FOCUS_DISABLE; /* enable lopri focus processor */
 
-	if (lapic->version & APIC_VER_EOI_SUPP) {
+	if (x2apic_enable)
+		version = x2apic_read32(X2APIC_OFF_VERSION);
+	else
+		version = lapic->version;
+	if (version & APIC_VER_EOI_SUPP) {
 		if (temp & APIC_SVR_EOI_SUPP) {
 			temp &= ~APIC_SVR_EOI_SUPP;
 			if (bsp)
@@ -339,15 +425,24 @@ lapic_init(boolean_t bsp)
 	temp &= ~APIC_SVR_VECTOR;
 	temp |= XSPURIOUSINT_OFFSET;
 
-	lapic->svr = temp;
+	if (x2apic_enable)
+		x2apic_write32(X2APIC_OFF_SVR, temp);
+	else
+		lapic->svr = temp;
 
 	/*
 	 * Pump out a few EOIs to clean out interrupts that got through
 	 * before we were able to set the TPR.
 	 */
-	lapic->eoi = 0;
-	lapic->eoi = 0;
-	lapic->eoi = 0;
+	if (x2apic_enable) {
+		x2apic_write32(X2APIC_OFF_EOI, 0);
+		x2apic_write32(X2APIC_OFF_EOI, 0);
+		x2apic_write32(X2APIC_OFF_EOI, 0);
+	} else {
+		lapic->eoi = 0;
+		lapic->eoi = 0;
+		lapic->eoi = 0;
+	}
 
 	if (bsp) {
 		lapic_timer_calibrate();
@@ -363,6 +458,9 @@ lapic_init(boolean_t bsp)
 			if (lapic_use_tscdeadline) {
 				lapic_cputimer_intr.reload =
 				    lapic_timer_tscdlt_reload;
+			} else if (x2apic_enable) {
+				lapic_cputimer_intr.reload =
+				    lapic_timer_x2apic_reload;
 			}
 			cputimer_intr_register(&lapic_cputimer_intr);
 			cputimer_intr_select(&lapic_cputimer_intr, 0);
@@ -379,7 +477,10 @@ static void
 lapic_timer_set_divisor(int divisor_idx)
 {
 	KKASSERT(divisor_idx >= 0 && divisor_idx < APIC_TIMER_NDIVISORS);
-	lapic->dcr_timer = lapic_timer_divisors[divisor_idx];
+	if (x2apic_enable)
+		x2apic_write32(X2APIC_OFF_DCR, lapic_timer_divisors[divisor_idx]);
+	else
+		lapic->dcr_timer = lapic_timer_divisors[divisor_idx];
 }
 
 static void
@@ -387,16 +488,27 @@ lapic_timer_oneshot(u_int count)
 {
 	uint32_t value;
 
-	value = lapic->lvt_timer;
+	if (x2apic_enable)
+		value = x2apic_read32(X2APIC_OFF_TIMER);
+	else
+		value = lapic->lvt_timer;
 	value &= ~(APIC_LVTT_PERIODIC | APIC_LVTT_TSCDLT);
-	lapic->lvt_timer = value;
-	lapic->icr_timer = count;
+	if (x2apic_enable) {
+		x2apic_write32(X2APIC_OFF_TIMER, value);
+		x2apic_write32(X2APIC_OFF_TIMER_ICR, count);
+	} else {
+		lapic->lvt_timer = value;
+		lapic->icr_timer = count;
+	}
 }
 
 static void
 lapic_timer_oneshot_quick(u_int count)
 {
-	lapic->icr_timer = count;
+	if (x2apic_enable)
+		x2apic_write32(X2APIC_OFF_TIMER_ICR, count);
+	else
+		lapic->icr_timer = count;
 }
 
 static void
@@ -445,7 +557,12 @@ lapic_timer_calibrate(void)
 		lapic_timer_set_divisor(lapic_timer_divisor_idx);
 		lapic_timer_oneshot(APIC_TIMER_MAX_COUNT);
 		DELAY(2000000);
-		value = APIC_TIMER_MAX_COUNT - lapic->ccr_timer;
+		if (x2apic_enable) {
+			value = APIC_TIMER_MAX_COUNT -
+			    x2apic_read32(X2APIC_OFF_CCR);
+		} else {
+			value = APIC_TIMER_MAX_COUNT - lapic->ccr_timer;
+		}
 		if (value != APIC_TIMER_MAX_COUNT)
 			break;
 	}
@@ -488,6 +605,24 @@ lapic_timer_tscdlt_reload(struct cputimer_intr *cti, sysclock_t reload)
 }
 
 static void
+lapic_timer_x2apic_reload(struct cputimer_intr *cti, sysclock_t reload)
+{
+	struct globaldata *gd = mycpu;
+
+	reload = (int64_t)reload * cti->freq / sys_cputimer->freq;
+	if (reload < 2)
+		reload = 2;
+
+	if (gd->gd_timer_running) {
+		if (reload < x2apic_read32(X2APIC_OFF_CCR))
+			lapic_timer_oneshot_quick(reload);
+	} else {
+		gd->gd_timer_running = 1;
+		lapic_timer_oneshot_quick(reload);
+	}
+}
+
+static void
 lapic_timer_intr_reload(struct cputimer_intr *cti, sysclock_t reload)
 {
 	struct globaldata *gd = mycpu;
@@ -510,13 +645,20 @@ lapic_timer_intr_enable(struct cputimer_intr *cti __unused)
 {
 	uint32_t timer;
 
-	timer = lapic->lvt_timer;
+	if (x2apic_enable)
+		timer = x2apic_read32(X2APIC_OFF_TIMER);
+	else
+		timer = lapic->lvt_timer;
 	timer &= ~(APIC_LVTT_MASKED | APIC_LVTT_PERIODIC | APIC_LVTT_TSCDLT);
 	if (lapic_use_tscdeadline)
 		timer |= APIC_LVTT_TSCDLT;
-	lapic->lvt_timer = timer;
-	if (lapic_use_tscdeadline)
-		cpu_mfence();
+	if (x2apic_enable) {
+		x2apic_write32(X2APIC_OFF_TIMER, timer);
+	} else {
+		lapic->lvt_timer = timer;
+		if (lapic_use_tscdeadline)
+			cpu_mfence();
+	}
 
 	lapic_timer_fixup_handler(NULL);
 }
@@ -619,8 +761,16 @@ void
 apic_dump(char* str)
 {
 	kprintf("SMP: CPU%d %s:\n", mycpu->gd_cpuid, str);
-	kprintf("     lint0: 0x%08x lint1: 0x%08x TPR: 0x%08x SVR: 0x%08x\n",
-		lapic->lvt_lint0, lapic->lvt_lint1, lapic->tpr, lapic->svr);
+	if (x2apic_enable) {
+		kprintf("     lint0: 0x%08x lint1: 0x%08x TPR: 0x%08x SVR: 0x%08x\n",
+			x2apic_read32(X2APIC_OFF_LINT0),
+			x2apic_read32(X2APIC_OFF_LINT1),
+			x2apic_read32(X2APIC_OFF_TPR),
+			x2apic_read32(X2APIC_OFF_SVR));
+	} else {
+		kprintf("     lint0: 0x%08x lint1: 0x%08x TPR: 0x%08x SVR: 0x%08x\n",
+			lapic->lvt_lint0, lapic->lvt_lint1, lapic->tpr, lapic->svr);
+	}
 }
 
 /*
@@ -661,6 +811,14 @@ apic_ipi(int dest_type, int vector, int delivery_mode)
 	int64_t tsc;
 	int loops = 1;
 
+	if (x2apic_enable) {
+		uint64_t val = dest_type | APIC_LEVEL_ASSERT | delivery_mode |
+			       vector;
+		cpu_mfence();
+		x2apic_write64(X2APIC_OFF_ICR, val);
+		return 0;
+	}
+
 	if ((lapic->icr_lo & APIC_DELSTAT_MASK) != 0) {
 		tsc = rdtsc();
 		while ((lapic->icr_lo & APIC_DELSTAT_MASK) != 0) {
@@ -674,6 +832,7 @@ apic_ipi(int dest_type, int vector, int delivery_mode)
 			}
 		}
 	}
+
 	icr_hi = lapic->icr_hi & ~APIC_ID_MASK;
 	icr_lo = (lapic->icr_lo & APIC_ICRLO_RESV_MASK) | dest_type | 
 		 APIC_LEVEL_ASSERT | delivery_mode | vector;
@@ -693,6 +852,16 @@ single_apic_ipi(int cpu, int vector, int delivery_mode)
 	uint32_t  icr_hi;
 	int64_t tsc;
 	int loops = 1;
+
+	if (x2apic_enable) {
+		uint64_t val = 0;
+		val |= APIC_LEVEL_ASSERT | APIC_DEST_DESTFLD | delivery_mode;
+		val |= vector;
+		val |= (uint64_t)(CPUID_TO_APICID(cpu) & 0xff) << 32;
+		cpu_mfence();
+		x2apic_write64(X2APIC_OFF_ICR, val);
+		return;
+	}
 
 	if ((lapic->icr_lo & APIC_DELSTAT_MASK) != 0) {
 		tsc = rdtsc();
@@ -834,7 +1003,11 @@ read_apic_timer(void)
 		}
 	}
 
-	val = lapic->ccr_timer;
+	if (x2apic_enable)
+		val = x2apic_read32(X2APIC_OFF_CCR);
+	else
+		val = lapic->ccr_timer;
+
 	if (val == 0)
 		return 0;
 
@@ -939,6 +1112,8 @@ lapic_enumerator_register(struct lapic_enumerator *ne)
 void
 lapic_set_cpuid(int cpu_id, int apic_id)
 {
+	if (apic_id >= 255)
+		panic("apic_id 0x%x too large\n", apic_id);
 	CPUID_TO_APICID(cpu_id) = apic_id;
 	APICID_TO_CPUID(apic_id) = cpu_id;
 }
@@ -952,18 +1127,59 @@ lapic_fixup_noioapic(void)
 	KKASSERT(mycpuid == 0);
 	KKASSERT(!ioapic_enable);
 
-	temp = lapic->lvt_lint0;
+	if (x2apic_enable)
+		temp = x2apic_read32(X2APIC_OFF_LINT0);
+	else
+		temp = lapic->lvt_lint0;
 	temp &= ~APIC_LVT_MASKED;
-	lapic->lvt_lint0 = temp;
+	if (x2apic_enable)
+		x2apic_write32(X2APIC_OFF_LINT0, temp);
+	else
+		lapic->lvt_lint0 = temp;
 
-	temp = lapic->lvt_lint1;
+	if (x2apic_enable)
+		temp = x2apic_read32(X2APIC_OFF_LINT1);
+	else
+		temp = lapic->lvt_lint1;
 	temp |= APIC_LVT_MASKED;
-	lapic->lvt_lint1 = temp;
+	if (x2apic_enable)
+		x2apic_write32(X2APIC_OFF_LINT1, temp);
+	else
+		lapic->lvt_lint1 = temp;
 }
 
 static void
 lapic_sysinit(void *dummy __unused)
 {
+
+	TUNABLE_INT_FETCH("hw.x2apic_enable", &x2apic_enable);
+
+	if (x2apic_enable != 0) {
+		/*
+		 * Only try to use X2APIC mode when its CPUID bit is set,
+		 * and we are either running in a virtual machine.
+		 * When not running in a virtual machine, only use x2apic
+		 * when the hw.x2apic_enable=1 tunable was explicitly specified.
+		 */
+		if ((cpu_feature2 & CPUID2_X2APIC) == 0)
+			x2apic_enable = 0;
+		else if ((cpu_feature2 & CPUID2_VMM) == 0 && x2apic_enable != 1)
+			x2apic_enable = 0;
+		else
+			x2apic_enable = 1;
+	}
+
+	if (x2apic_enable) {
+		uint64_t apic_base;
+
+		kprintf("LAPIC: Using x2APIC mode\n");
+		apic_base = rdmsr(MSR_APICBASE);
+		apic_base |= APICBASE_X2APIC | APICBASE_ENABLED;
+		wrmsr(MSR_APICBASE, apic_base);
+	} else if (cpu_feature2 & CPUID2_X2APIC) {
+		kprintf("LAPIC: x2APIC mode supported but disabled\n");
+	}
+
 	if (lapic_enable) {
 		int error;
 

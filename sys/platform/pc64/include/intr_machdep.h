@@ -141,13 +141,18 @@ typedef void inthand_t(u_int cs, u_int ef, u_int esp, u_int ss);
 
 inthand_t
 	Xspuriousint,	/* handle APIC "spurious INTs" */
-	Xtimer;		/* handle per-cpu timer INT */
+	Xtimer,		/* handle per-cpu timer INT */
+	Xtimer_x2apic;
 
 inthand_t
 	Xinvltlb,	/* TLB shootdowns */
+	Xinvltlb_x2apic,
 	Xcpustop,	/* CPU stops & waits for another CPU to restart it */
+	Xcpustop_x2apic,
 	Xipiq,		/* handle lwkt_send_ipiq() requests */
-	Xsniff;		/* sniff CPU */
+	Xipiq_x2apic,
+	Xsniff,		/* sniff CPU */
+	Xsniff_x2apic;
 
 #endif /* LOCORE */
 

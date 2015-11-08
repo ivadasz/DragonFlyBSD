@@ -117,12 +117,23 @@
 #define	INTR_HANDLER(irq_num)						\
 	.text ;								\
 	SUPERALIGN_TEXT ;						\
+IDTVEC(ioapic_intr_x2apic##irq_num) ;					\
+	APIC_PUSH_FRAME ;						\
+	FAKE_MCOUNT(TF_RIP(%rsp)) ;					\
+	MASK_LEVEL_IRQ(irq_num) ;					\
+	movl	$0, %eax ;						\
+	movl	$0, %edx ;						\
+	movl	$0x80b, %ecx ;						\
+	wrmsr ;								\
+	jmp	dideoi ## irq_num ;					\
+	SUPERALIGN_TEXT ;						\
 IDTVEC(ioapic_intr##irq_num) ;						\
 	APIC_PUSH_FRAME ;						\
 	FAKE_MCOUNT(TF_RIP(%rsp)) ;					\
 	MASK_LEVEL_IRQ(irq_num) ;					\
 	movq	lapic, %rax ;						\
 	movl	$0, LA_EOI(%rax) ;					\
+dideoi ## irq_num: ;							\
 	movq	PCPU(curthread),%rbx ;					\
 	testl	$-1,TD_NEST_COUNT(%rbx) ;				\
 	jne	1f ;							\
@@ -186,11 +197,21 @@ Xspuriousint:
  */
 	.text
 	SUPERALIGN_TEXT
+	.globl	Xinvltlb_x2apic
+Xinvltlb_x2apic:
+	APIC_PUSH_FRAME
+	movl	$0, %eax
+	movl	$0, %edx
+	movl	$0x80b, %ecx
+	wrmsr
+	jmp dideoi
+	SUPERALIGN_TEXT
 	.globl	Xinvltlb
 Xinvltlb:
 	APIC_PUSH_FRAME
 	movq	lapic, %rax
 	movl	$0, LA_EOI(%rax)	/* End Of Interrupt to APIC */
+dideoi:
 	FAKE_MCOUNT(TF_RIP(%rsp))
 	incl    PCPU(cnt) + V_IPI
 	movq	PCPU(curthread),%rbx
@@ -211,11 +232,21 @@ Xinvltlb:
  */
 	.text
 	SUPERALIGN_TEXT
+	.globl	Xsniff_x2apic
+Xsniff_x2apic:
+	APIC_PUSH_FRAME
+	movl	$0, %eax
+	movl	$0, %edx
+	movl	$0x80b, %ecx
+	wrmsr
+	jmp dideoi_sniff
+	SUPERALIGN_TEXT
 	.globl	Xsniff
 Xsniff:
 	APIC_PUSH_FRAME
 	movq	lapic, %rax
 	movl	$0, LA_EOI(%rax)	/* End Of Interrupt to APIC */
+dideoi_sniff:
 	FAKE_MCOUNT(TF_RIP(%rsp))
 	incl    PCPU(cnt) + V_IPI
 	movq	TF_RIP(%rsp),%rax
@@ -238,11 +269,21 @@ Xsniff:
 
 	.text
 	SUPERALIGN_TEXT
+	.globl Xcpustop_x2apic
+Xcpustop_x2apic:
+	APIC_PUSH_FRAME
+	movl	$0, %eax
+	movl	$0, %edx
+	movl	$0x80b, %ecx
+	wrmsr
+	jmp dideoi_cpustop
+	SUPERALIGN_TEXT
 	.globl Xcpustop
 Xcpustop:
 	APIC_PUSH_FRAME
 	movq	lapic, %rax
 	movl	$0, LA_EOI(%rax)	/* End Of Interrupt to APIC */
+dideoi_cpustop:
 
 	movl	PCPU(cpuid), %eax
 	imull	$PCB_SIZE, %eax
@@ -336,11 +377,21 @@ Xcpustop:
 	 */
 	.text
 	SUPERALIGN_TEXT
+	.globl Xipiq_x2apic
+Xipiq_x2apic:
+	APIC_PUSH_FRAME
+	movl	$0, %eax
+	movl	$0, %edx
+	movl	$0x80b, %ecx
+	wrmsr
+	jmp dideoi_ipiq
+	SUPERALIGN_TEXT
 	.globl Xipiq
 Xipiq:
 	APIC_PUSH_FRAME
 	movq	lapic, %rax
 	movl	$0, LA_EOI(%rax)	/* End Of Interrupt to APIC */
+dideoi_ipiq:
 	FAKE_MCOUNT(TF_RIP(%rsp))
 
 	incl    PCPU(cnt) + V_IPI
@@ -369,11 +420,21 @@ Xipiq:
 
 	.text
 	SUPERALIGN_TEXT
+	.globl Xtimer_x2apic
+Xtimer_x2apic:
+	APIC_PUSH_FRAME
+	movl	$0, %eax
+	movl	$0, %edx
+	movl	$0x80b, %ecx
+	wrmsr
+	jmp dideoi_timer
+	SUPERALIGN_TEXT
 	.globl Xtimer
 Xtimer:
 	APIC_PUSH_FRAME
 	movq	lapic, %rax
 	movl	$0, LA_EOI(%rax)	/* End Of Interrupt to APIC */
+dideoi_timer:
 	FAKE_MCOUNT(TF_RIP(%rsp))
 
 	subq	$8,%rsp			/* make same as interrupt frame */

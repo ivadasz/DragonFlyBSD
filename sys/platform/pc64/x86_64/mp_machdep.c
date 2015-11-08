@@ -198,6 +198,7 @@ SYSCTL_INT(_machdep, OID_AUTO, all_but_self_ipi_enable, CTLFLAG_RW,
 static int core_bits = 0;
 static int logical_CPU_bits = 0;
 
+extern int x2apic_enable;
 
 /*
  * Calculate usable address in base memory for AP trampoline code.
@@ -331,8 +332,21 @@ init_secondary(void)
 	/* set up FPU state on the AP */
 	npxinit();
 
+	if (x2apic_enable) {
+		uint64_t apic_base;
+
+		apic_base = rdmsr(MSR_APICBASE);
+		apic_base |= APICBASE_X2APIC | APICBASE_ENABLED;
+		wrmsr(MSR_APICBASE, apic_base);
+	}
+
 	/* disable the APIC, just to be SURE */
-	lapic->svr &= ~APIC_SVR_ENABLE;
+	if (x2apic_enable) {
+		x2apic_write32(X2APIC_OFF_SVR,
+		    x2apic_read32(X2APIC_OFF_SVR) & ~APIC_SVR_ENABLE);
+	} else {
+		lapic->svr &= ~APIC_SVR_ENABLE;
+	}
 }
 
 /*******************************************************************
@@ -645,7 +659,7 @@ start_ap(struct mdglobaldata *gd, u_int boot_addr, int smibest)
 {
 	int     physical_cpu;
 	int     vector;
-	u_long  icr_lo, icr_hi;
+	u_long  icr_lo = 0, icr_hi;
 
 	POSTCODE(START_AP_POST);
 
@@ -699,19 +713,26 @@ start_ap(struct mdglobaldata *gd, u_int boot_addr, int smibest)
 	 * icr_hi once and then just trigger operations with
 	 * icr_lo.
 	 */
-	icr_hi = lapic->icr_hi & ~APIC_ID_MASK;
-	icr_hi |= (physical_cpu << 24);
-	icr_lo = lapic->icr_lo & 0xfff00000;
-	lapic->icr_hi = icr_hi;
+	if (!x2apic_enable) {
+		icr_hi = lapic->icr_hi & ~APIC_ID_MASK;
+		icr_hi |= (physical_cpu << 24);
+		icr_lo = lapic->icr_lo & 0xfff00000;
+		lapic->icr_hi = icr_hi;
+	}
 
 	/*
 	 * Do an INIT IPI: assert RESET
 	 *
 	 * Use edge triggered mode to assert INIT
 	 */
-	lapic->icr_lo = icr_lo | 0x00004500;
-	while (lapic->icr_lo & APIC_DELSTAT_MASK)
-		 /* spin */ ;
+	if (x2apic_enable) {
+		uint64_t val = ((uint64_t)physical_cpu << 32) | 0x00004500;
+		x2apic_write64(X2APIC_OFF_ICR, val);
+	} else {
+		lapic->icr_lo = icr_lo | 0x00004500;
+		while (lapic->icr_lo & APIC_DELSTAT_MASK)
+			 /* spin */ ;
+	}
 
 	/*
 	 * The spec calls for a 10ms delay but we may have to use a
@@ -738,9 +759,14 @@ start_ap(struct mdglobaldata *gd, u_int boot_addr, int smibest)
 	 * Use level triggered mode to deassert.  It is unclear
 	 * why we need to do this.
 	 */
-	lapic->icr_lo = icr_lo | 0x00008500;
-	while (lapic->icr_lo & APIC_DELSTAT_MASK)
-		 /* spin */ ;
+	if (x2apic_enable) {
+		uint64_t val = ((uint64_t)physical_cpu << 32) | 0x00008500;
+		x2apic_write64(X2APIC_OFF_ICR, val);
+	} else {
+		lapic->icr_lo = icr_lo | 0x00008500;
+		while (lapic->icr_lo & APIC_DELSTAT_MASK)
+			 /* spin */ ;
+	}
 	u_sleep(150);				/* wait 150us */
 
 	/*
@@ -751,9 +777,15 @@ start_ap(struct mdglobaldata *gd, u_int boot_addr, int smibest)
 	 * run. OR the previous INIT IPI was ignored. and this STARTUP IPI
 	 * will run.
 	 */
-	lapic->icr_lo = icr_lo | 0x00000600 | vector;
-	while (lapic->icr_lo & APIC_DELSTAT_MASK)
-		 /* spin */ ;
+	if (x2apic_enable) {
+		uint64_t val = ((uint64_t)physical_cpu << 32) |
+		    0x00000600 | vector;
+		x2apic_write64(X2APIC_OFF_ICR, val);
+	} else {
+		lapic->icr_lo = icr_lo | 0x00000600 | vector;
+		while (lapic->icr_lo & APIC_DELSTAT_MASK)
+			 /* spin */ ;
+	}
 	u_sleep(200);		/* wait ~200uS */
 
 	/*
@@ -762,9 +794,15 @@ start_ap(struct mdglobaldata *gd, u_int boot_addr, int smibest)
 	 * this STARTUP IPI will be ignored, as only ONE STARTUP IPI is
 	 * recognized after hardware RESET or INIT IPI.
 	 */
-	lapic->icr_lo = icr_lo | 0x00000600 | vector;
-	while (lapic->icr_lo & APIC_DELSTAT_MASK)
-		 /* spin */ ;
+	if (x2apic_enable) {
+		uint64_t val = (uint64_t)physical_cpu << 32 |
+		    0x00000600 | vector;
+		x2apic_write64(X2APIC_OFF_ICR, val);
+	} else {
+		lapic->icr_lo = icr_lo | 0x00000600 | vector;
+		while (lapic->icr_lo & APIC_DELSTAT_MASK)
+			 /* spin */ ;
+	}
 
 	/* Resume normal operation */
 	cpu_enable_intr();
@@ -1419,11 +1457,34 @@ ap_init(void)
 	ATOMIC_CPUMASK_NANDBIT(mycpu->gd_other_cpus, mycpu->gd_cpuid);
 
 	/* A quick check from sanity claus */
-	cpu_id = APICID_TO_CPUID((lapic->id & 0xff000000) >> 24);
+	if (x2apic_enable) {
+		uint32_t id = x2apic_read32(X2APIC_OFF_APICID);
+		/* Not supporting APIC IDs >= 255, yet. */
+		if (id >= 255)
+			panic("%s: too large apic id: 0x%08x\n", __func__, id);
+		cpu_id = APICID_TO_CPUID(id);
+		kprintf("%s: apic_id=0x%08x cpu_id=0x%08x\n",
+		    __func__, id, cpu_id);
+	} else {
+		cpu_id = APICID_TO_CPUID((lapic->id & 0xff000000) >> 24);
+		kprintf("%s: apic_id=0x%08x cpu_id=0x%08x\n",
+		    __func__, lapic->id, cpu_id);
+	}
 	if (mycpu->gd_cpuid != cpu_id) {
 		kprintf("SMP: assigned cpuid = %d\n", mycpu->gd_cpuid);
-		kprintf("SMP: actual cpuid = %d lapicid %d\n",
-			cpu_id, (lapic->id & 0xff000000) >> 24);
+		if (x2apic_enable) {
+			uint32_t id = x2apic_read32(X2APIC_OFF_APICID);
+			/* Not supporting APIC IDs >= 255, yet. */
+			if (id >= 255) {
+				panic("%s: too large apic id: 0x%08x\n",
+				    __func__, id);
+			}
+			kprintf("SMP: actual cpuid = %d lapicid 0x%x\n",
+				cpu_id, id);
+		} else {
+			kprintf("SMP: actual cpuid = %d lapicid %d\n",
+				cpu_id, (lapic->id & 0xff000000) >> 24);
+		}
 #if 0 /* JGXXX */
 		kprintf("PTD[MPPTDI] = %p\n", (void *)PTD[MPPTDI]);
 #endif

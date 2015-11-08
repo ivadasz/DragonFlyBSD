@@ -160,6 +160,8 @@ SYSCTL_INT(_machdep, OID_AUTO, slow_release, CTLFLAG_RW,
 uint64_t SysCallsWorstCase[SYS_MAXSYSCALL];
 #endif
 
+extern int x2apic_enable;
+
 /*
  * Passively intercepts the thread switch function to increase
  * the thread priority from a user priority to a kernel priority, reducing
@@ -963,7 +965,10 @@ trap_fatal(struct trapframe *frame, vm_offset_t eva)
 	    ISPL(frame->tf_cs) == SEL_UPL ? "user" : "kernel");
 	/* three separate prints in case of a trap on an unmapped page */
 	kprintf("cpuid = %d; ", mycpu->gd_cpuid);
-	kprintf("lapic->id = %08x\n", lapic->id);
+	if (x2apic_enable)
+		kprintf("lapic->id = %08x\n", x2apic_read32(X2APIC_OFF_APICID));
+	else
+		kprintf("lapic->id = %08x\n", lapic->id);
 	if (type == T_PAGEFLT) {
 		kprintf("fault virtual address	= 0x%lx\n", eva);
 		kprintf("fault code		= %s %s %s, %s\n",
@@ -1064,7 +1069,10 @@ dblfault_handler(struct trapframe *frame)
 	kprintf("rbp = 0x%lx\n", frame->tf_rbp);
 	/* three separate prints in case of a trap on an unmapped page */
 	kprintf("cpuid = %d; ", mycpu->gd_cpuid);
-	kprintf("lapic->id = %08x\n", lapic->id);
+	if (x2apic_enable)
+		kprintf("lapic->id = %08x\n", x2apic_read32(X2APIC_OFF_APICID));
+	else
+		kprintf("lapic->id = %08x\n", lapic->id);
 	panic("double fault");
 }
 
