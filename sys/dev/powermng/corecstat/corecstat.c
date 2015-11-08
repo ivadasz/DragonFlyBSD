@@ -314,12 +314,6 @@ corecstat_attach(device_t dev)
 	if (sc->sc_cpu_sensordev == NULL)
 		return (1);
 
-	sc->sc_sensordev = kmalloc(sizeof(struct ksensordev),
-	    M_DEVBUF, M_WAITOK | M_ZERO);
-
-	ksnprintf(sc->sc_sensordev->xname, sizeof(sc->sc_sensordev->xname),
-	    "cpu_node%d", get_chip_ID(cpu));
-
 	node = get_cpu_node_by_cpuid(cpu);
 	while (node != NULL) {
 		if (node->type == CHIP_LEVEL) {
@@ -330,6 +324,12 @@ corecstat_attach(device_t dev)
 		node = node->parent_node;
 	}
 	if (node != NULL && cpu == BSRCPUMASK(node->members)) {
+		sc->sc_sensordev = kmalloc(sizeof(struct ksensordev),
+		    M_DEVBUF, M_WAITOK | M_ZERO);
+
+		ksnprintf(sc->sc_sensordev->xname, sizeof(
+		    sc->sc_sensordev->xname), "cpu_node%d", get_chip_ID(cpu));
+
 		sc->sc_pkg_sens = kmalloc(7 * sizeof(struct corecstat_sensor),
 		    M_DEVBUF, M_WAITOK | M_ZERO);
 		if (sc->sc_version == 1 || sc->sc_version == 2) {
@@ -367,6 +367,8 @@ corecstat_attach(device_t dev)
 			sensor_attach(sc->sc_sensordev,
 			    &sc->sc_pkg_sens[PC10_IDX].sensor);
 		}
+
+		sensordev_install(sc->sc_sensordev);
 	}
 
 	corecstat_core_sens_init(&sc->sc_core_c3_sens, cpu,
@@ -386,8 +388,6 @@ corecstat_attach(device_t dev)
 
 	sc->sc_senstask = sensor_task_register2(sc, corecstat_refresh, 1,
 	    device_get_unit(dev));
-
-	sensordev_install(sc->sc_sensordev);
 
 	return (0);
 }
