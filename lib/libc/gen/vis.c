@@ -70,9 +70,10 @@ vis(char *dst, int c, int flag, int nextc)
 	   ((flag & VIS_TAB) == 0 && c == '\t') ||
 	   ((flag & VIS_NL) == 0 && c == '\n') ||
 	   ((flag & VIS_SAFE) && (c == '\b' || c == '\007' || c == '\r'))) {
-		*dst++ = c;
-		if (c == '\\' && (flag & VIS_NOSLASH) == 0)
+		if ((c == '\"' && (flag & VIS_DQ) != 0) ||
+		    (c == '\\' && (flag & VIS_NOSLASH) == 0))
 			*dst++ = '\\';
+		*dst++ = c;
 		*dst = '\0';
 		return (dst);
 	}

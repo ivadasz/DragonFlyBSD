@@ -28,7 +28,7 @@
 .\"     From: @(#)vis.3	8.1 (Berkeley) 6/9/93
 .\" $FreeBSD: src/lib/libc/gen/vis.3,v 1.27 2005/01/15 11:40:33 ru Exp $
 .\"
-.Dd March 21, 2004
+.Dd December 18, 2015
 .Dt VIS 3
 .Os
 .Sh NAME
@@ -148,6 +148,9 @@ except space, tab, and newline are encoded.
 The following flags
 alter this:
 .Bl -tag -width ".Dv VIS_HTTPSTYLE"
+.It Dv VIS_DQ
+Also encode double quote characters
+.Pf ( Ql \&" ) .
 .It Dv VIS_GLOB
 Also encode magic characters
 .Ql ( * ,
