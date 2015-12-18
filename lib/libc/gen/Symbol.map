@@ -464,6 +464,9 @@ DF410.0 {
 	/* pthread stubs */
     pthread_getcpuclockid;
     pthread_getthreadid_np;
+
+	/* normal functions */
+    stravis;
 };
 
 DFprivate_1.0 {

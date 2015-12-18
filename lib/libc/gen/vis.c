@@ -31,10 +31,12 @@
  */
 
 #include <sys/types.h>
+#include <errno.h>
 #include <ctype.h>
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <vis.h>
 
 #define	isoctal(c)	(((u_char)(c)) >= '0' && ((u_char)(c)) <= '7')
@@ -216,4 +218,23 @@ strvisx(char *dst, const char *src, size_t len, int flag)
 	*dst = '\0';
 
 	return (dst - start);
+}
+
+int
+stravis(char **outp, const char *src, int flag)
+{
+	char *buf;
+	int len, serrno;
+
+	buf = calloc(4, strlen(src) + 1);
+	if (buf == NULL)
+		return -1;
+	len = strvis(buf, src, flag);
+	serrno = errno;
+	*outp = realloc(buf, len + 1);
+	if (*outp == NULL) {
+		*outp = buf;
+		errno = serrno;
+	}
+	return len;
 }

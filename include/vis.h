@@ -83,8 +83,9 @@ typedef __size_t	size_t;
 
 __BEGIN_DECLS
 char	*vis(char *, int, int, int);
-int	strnvis(char *, const char *, size_t, int);
 int	strvis(char *, const char *, int);
+int	stravis(char **, const char *, int);
+int	strnvis(char *, const char *, size_t, int);
 int	strvisx(char *, const char *, size_t, int);
 int	strunvis(char *, const char *);
 int	strunvisx(char *, const char *, int);
