@@ -771,14 +771,13 @@ sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 
 	    cur_scp->status &= ~MOUSE_HIDDEN;
 
-	    lwkt_gettoken(&scmouse_tok);
 	    if (cur_scp->mouse_signal) {
+		lwkt_gettoken(&scmouse_tok);
 		KKASSERT(cur_scp->mouse_proc != NULL);
 		ksignal(cur_scp->mouse_proc, cur_scp->mouse_signal);
 		lwkt_reltoken(&scmouse_tok);
 	        break;
 	    }
-	    lwkt_reltoken(&scmouse_tok);
 
 	    if (ISGRAPHSC(cur_scp) || (cut_buffer == NULL))
 		break;
@@ -821,14 +820,13 @@ sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 
 	    cur_scp->status &= ~MOUSE_HIDDEN;
 
-	    lwkt_gettoken(&scmouse_tok);
 	    if (cur_scp->mouse_signal) {
+		lwkt_gettoken(&scmouse_tok);
 		KKASSERT(cur_scp->mouse_proc != NULL);
 		ksignal(cur_scp->mouse_proc, cur_scp->mouse_signal);
 		lwkt_reltoken(&scmouse_tok);
 	        break;
 	    }
-	    lwkt_reltoken(&scmouse_tok);
 
 	    if (ISGRAPHSC(cur_scp) || (cut_buffer == NULL))
 		break;
