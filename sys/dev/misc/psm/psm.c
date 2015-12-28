@@ -415,7 +415,6 @@ struct psm_softc {		/* Driver status information */
 	packetbuf_t     idlepacket;     /* packet to send after idle timeout */
 	int		watchdog;	/* watchdog timer flag */
 	struct callout	 callout;	/* watchdog timer call out */
-	struct callout	 softcallout; /* buffer timer call out */
 	struct cdev	*dev;
 	struct cdev	*bdev;
 	int		lasterr;
@@ -1616,7 +1615,6 @@ psmattach(device_t dev)
 	/* Setup initial state */
 	sc->state = PSM_VALID;
 	callout_init(&sc->callout);
-	callout_init(&sc->softcallout);
 
 	/* Setup our interrupt handler */
 	rid = KBDC_RID_AUX;
@@ -2046,7 +2044,6 @@ dropqueue(struct psm_softc *sc)
 	sc->queue.tail = 0;
 	if ((sc->state & PSM_SOFTARMED) != 0) {
 		sc->state &= ~PSM_SOFTARMED;
-		callout_stop(&sc->softcallout);
 	}
 	sc->pqueue_start = sc->pqueue_end;
 }
@@ -2433,9 +2430,6 @@ SYSCTL_NODE(_hw, OID_AUTO, psm, CTLFLAG_RD, 0, "ps/2 mouse");
 SYSCTL_INT(_debug_psm, OID_AUTO, loglevel, CTLFLAG_RW, &verbose, 0,
     "Verbosity level");
 
-static int psmhz = 20;
-SYSCTL_INT(_debug_psm, OID_AUTO, hz, CTLFLAG_RW, &psmhz, 0,
-    "Frequency of the softcallout (in hz)");
 static int psmerrsecs = 2;
 SYSCTL_INT(_debug_psm, OID_AUTO, errsecs, CTLFLAG_RW, &psmerrsecs, 0,
     "Number of seconds during which packets will dropped after a sync error");
@@ -2607,15 +2601,14 @@ psmintr(void *arg)
 		    (sc->pqueue_end == sc->pqueue_start)) {
 			if ((sc->state & PSM_SOFTARMED) != 0) {
 				sc->state &= ~PSM_SOFTARMED;
-				callout_stop(&sc->softcallout);
 			}
 			psmsoftintr(arg);
 		} else if ((sc->state & PSM_SOFTARMED) == 0) {
 			sc->state |= PSM_SOFTARMED;
-			callout_reset(&sc->softcallout,  psmhz < 1 ? 1 : (hz/psmhz),
-			      psmsoftintr, arg);
 		}
 	}
+	if ((sc->state & PSM_SOFTARMED) != 0)
+		psmsoftintr(arg);
 }
 
 static void
