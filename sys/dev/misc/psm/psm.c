@@ -4157,6 +4157,7 @@ psmsoftintr(void *arg)
 	mousestatus_t ms;
 	packetbuf_t *pb;
 	int x, y, z, c, l;
+	int needwakeup = 0;
 
 	getmicrouptime(&sc->lastsoftintr);
 
@@ -4396,7 +4397,7 @@ next:
 
 	if (sc->state & PSM_ASLP) {
 		sc->state &= ~PSM_ASLP;
-		wakeup(sc);
+		needwakeup = 1;
 	}
 
 	KNOTE(&sc->rkq.ki_note, 0);
@@ -4412,6 +4413,10 @@ next:
 		    tvtohz_high(&sc->idletimeout)));
 	}
 	crit_exit();
+
+	if (needwakeup)
+		wakeup(sc);
+	KNOTE(&sc->rkq.ki_note, 0);
 }
 
 static struct filterops psmfiltops =
