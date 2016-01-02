@@ -390,6 +390,7 @@ coretemp_attach(device_t dev)
 		sensor_attach(csens->c_sensdev, &csens->c_sens);
 
 		++sens_idx;
+		break;
 	}
 
 	if (sens_idx == 0) {
