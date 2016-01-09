@@ -669,6 +669,58 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 	setdelayed();
 }
 
+static void
+adj_stathz_thiscpu(int new_stathz)
+{
+	struct globaldata *gd;
+
+	gd = mycpu;
+	crit_enter();
+	systimer_adjust_periodic(&gd->gd_statclock, new_stathz);
+	crit_exit();
+}
+
+static void
+adj_stathz(int new_stathz)
+{
+	int cpuid, origcpu = mycpuid;
+
+	if (ncpus > 1) {
+		for (cpuid = 0; cpuid < ncpus; ++cpuid) {
+			lwkt_migratecpu(cpuid);
+			adj_stathz_thiscpu(new_stathz);
+		}
+		lwkt_migratecpu(origcpu);
+	} else {
+		adj_stathz_thiscpu(new_stathz);
+	}
+
+	get_mplock();
+	stathz = new_stathz;
+	rel_mplock();
+}
+
+static int
+sysctl_handle_statclock(SYSCTL_HANDLER_ARGS)
+{
+        int error, val;
+
+	val = stathz;
+        error = sysctl_handle_int(oidp, &val, 0, req);
+        if (error != 0 || req->newptr == NULL) {
+                return (error);
+        }
+	if (val <= 0 || val > 1000)
+		return EINVAL;
+
+	adj_stathz(val);
+
+        return (error);
+}
+
+SYSCTL_PROC(_kern, OID_AUTO, statclock, (CTLTYPE_INT | CTLFLAG_RW), 0, 0,
+	sysctl_handle_statclock, "I", "stathz frequency");
+
 /*
  * The statistics clock typically runs at a 125Hz rate, and is intended
  * to be frequency offset from the hardclock (typ 100Hz).  It is per-cpu.
