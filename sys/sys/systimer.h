@@ -85,6 +85,7 @@ void systimer_del(systimer_t);
 void systimer_init_periodic(systimer_t, systimer_func_t, void *, int);
 void systimer_init_periodic_nq(systimer_t, systimer_func_t, void *, int);
 void systimer_adjust_periodic(systimer_t, int);
+void systimer_resume_periodic(systimer_t);
 void systimer_init_oneshot(systimer_t, systimer_func_t, void *, int);
 
 /*

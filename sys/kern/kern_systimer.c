@@ -298,3 +298,14 @@ systimer_init_oneshot(systimer_t info, systimer_func_t func, void *data, int us)
     info->gd = mycpu;
     systimer_add(info);
 }
+
+void
+systimer_resume_periodic(systimer_t info)
+{
+	sysclock_t time;
+	time = sys_cputimer->count();
+	if ((ssysclock_t)(info->time - time) <= 0) {
+		info->time += roundup(time - info->time + 1, info->periodic);
+	}
+	systimer_add(info);
+}

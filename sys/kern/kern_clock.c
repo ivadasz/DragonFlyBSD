@@ -626,6 +626,42 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 	setdelayed();
 }
 
+static void
+adj_stathz(int new_stathz)
+{
+	crit_enter();
+	if (new_stathz == 0) {
+		systimer_del(&mycpu->gd_statclock);
+	} else {
+		systimer_adjust_periodic(&mycpu->gd_statclock, new_stathz);
+		if (!(mycpu->gd_statclock.flags & SYSTF_ONQUEUE))
+			systimer_resume_periodic(&mycpu->gd_statclock);
+	}
+	stathz = new_stathz;
+	crit_exit();
+}
+
+static int
+sysctl_handle_statclock(SYSCTL_HANDLER_ARGS)
+{
+        int error, val;
+
+	val = stathz;
+        error = sysctl_handle_int(oidp, &val, 0, req);
+        if (error != 0 || req->newptr == NULL) {
+                return (error);
+        }
+	if (val < 0 || val > 1000)
+		return EINVAL;
+
+	adj_stathz(val);
+
+        return (error);
+}
+
+SYSCTL_PROC(_kern, OID_AUTO, statclock, (CTLTYPE_INT | CTLFLAG_RW), 0, 0,
+	sysctl_handle_statclock, "I", "stathz frequency");
+
 /*
  * The statistics clock typically runs at a 125Hz rate, and is intended
  * to be frequency offset from the hardclock (typ 100Hz).  It is per-cpu.
