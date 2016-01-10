@@ -69,16 +69,24 @@ init_waitqueue_head(wait_queue_head_t *eq)
 	bool timeout_expired = false;					\
 	bool interrupted = false;					\
 	long retval;							\
+	thread_t td = curthread;					\
 									\
 	start_jiffies = ticks;						\
 									\
 	lockmgr(&wq.lock, LK_EXCLUSIVE);				\
 	while (1) {							\
-		if (condition)						\
+		tsleep_interlock(&wq, flags);				\
+		if (condition) {					\
+			crit_enter_quick(td);				\
+			tsleep_remove(td);				\
+			crit_exit_quick(td);				\
 			break;						\
+		}							\
 									\
-		ret = lksleep(&wq, &wq.lock, flags,			\
+		lockmgr(&wq.lock, LK_RELEASE);				\
+		ret = tsleep(&wq,  PINTERLOCKED,			\
 					"lwe", timeout_jiffies);	\
+		lockmgr(&wq.lock, LK_EXCLUSIVE);			\
 		if (ret == EINTR || ret == ERESTART) {			\
 			interrupted = true;				\
 			break;						\

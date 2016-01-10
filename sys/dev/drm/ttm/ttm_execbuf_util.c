@@ -51,6 +51,7 @@ static void ttm_eu_backoff_reservation_locked(struct list_head *list,
 
 		} else {
 			atomic_set(&bo->reserved, 0);
+			barrier();
 			wake_up_all(&bo->event_queue);
 		}
 	}

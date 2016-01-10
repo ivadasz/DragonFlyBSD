@@ -246,8 +246,10 @@ int ttm_bo_reserve_nolru(struct ttm_buffer_object *bo,
 		 */
 		bo->val_seq = ticket->stamp;
 		bo->seq_valid = true;
-		if (wake_up)
+		if (wake_up) {
+			barrier();
 			wake_up_all(&bo->event_queue);
+		}
 	} else {
 		bo->seq_valid = false;
 	}
@@ -314,8 +316,10 @@ int ttm_bo_reserve_slowpath_nolru(struct ttm_buffer_object *bo,
 	 */
 	bo->val_seq = ticket->stamp;
 	bo->seq_valid = true;
-	if (wake_up)
+	if (wake_up) {
+		barrier();
 		wake_up_all(&bo->event_queue);
+	}
 
 	return 0;
 }
@@ -345,9 +349,8 @@ EXPORT_SYMBOL(ttm_bo_reserve_slowpath);
 static void
 ttm_bo_unreserve_core(struct ttm_buffer_object *bo)
 {
-	lockmgr(&bo->event_queue.lock, LK_EXCLUSIVE);
 	atomic_set(&bo->reserved, 0);
-	lockmgr(&bo->event_queue.lock, LK_RELEASE);
+	barrier();
 	wake_up_all(&bo->event_queue);
 }
 
