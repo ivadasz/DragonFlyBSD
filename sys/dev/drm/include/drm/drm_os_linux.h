@@ -60,7 +60,7 @@ static inline void writeq(u64 val, void __iomem *reg)
 #define DRM_WRITE64(map, offset, val)	writeq(val, ((void __iomem *)(map)->handle) + (offset))
 
 #define DRM_WAIT_ON( ret, queue, timeout, condition )		\
-for ( ret = 0 ; !ret && !(condition) ; ) {			\
+for ( ret = 0 ; !ret ; ) {					\
 	lwkt_serialize_enter(&dev->irq_lock);			\
 	if (!(condition)) {					\
 		tsleep_interlock(&(queue), PCATCH);		\
@@ -69,6 +69,7 @@ for ( ret = 0 ; !ret && !(condition) ; ) {			\
 			  "drmwtq", (timeout));			\
 	} else {						\
 		lwkt_serialize_exit(&dev->irq_lock);		\
+		break;						\
 	}							\
 }
 
