@@ -41,12 +41,21 @@
 #include <sys/sensors.h>
 #include <sys/bitops.h>
 
+#include <machine/clock.h>
 #include <machine/specialreg.h>
 #include <machine/cpufunc.h>
 #include <machine/cputypes.h>
 #include <machine/md_var.h>
 
 #include "cpu_if.h"
+
+#define ATOM_MSR_PKG_CSTATE_COUNTER_HZ	(1000 * 1000)
+#define ATOM_MSR_PKG_C2_RESIDENCY	MSR_PKG_C3_RESIDENCY
+#define ATOM_MSR_PKG_C4_RESIDENCY	MSR_PKG_C6_RESIDENCY
+#define ATOM_MSR_PKG_C6_RESIDENCY	MSR_PKG_C7_RESIDENCY
+
+#define ATOM_MSR_CORE_C1_RESIDENCY	0x660
+#define ATOM_MSR_CORE_C6_RESIDENCY	MSR_CORE_C6_RESIDENCY
 
 struct corecstat_sensor {
 	uint64_t	tsc_count;
@@ -60,10 +69,16 @@ struct corecstat_sensor {
 struct corecstat_softc {
 	device_t		sc_dev;
 
+	int			sc_is_atom;
 	/*
-	 * 0 ==> Nehalem/Westmere
-	 * 1 ==> Sandy Bridge / Ivy Bridge / Haswell / Broadwell / Skylake
-	 * 2 ==> Haswell/Broadwell - low-power
+	 * sc_is_atom == 0
+	 *   0 ==> Nehalem/Westmere
+	 *   1 ==> Sandy Bridge / Ivy Bridge / Haswell / Broadwell / Skylake
+	 *   2 ==> Haswell/Broadwell - low-power
+	 *
+	 * sc_is_atom == 1
+	 *   0 ==> Original Atom
+	 *   1 ==> Airmont Atom
 	 */
 	int			sc_version;
 
@@ -93,6 +108,12 @@ static void	corecstat_identify(driver_t *driver, device_t parent);
 static int	corecstat_probe(device_t dev);
 static int	corecstat_attach(device_t dev);
 static int	corecstat_detach(device_t dev);
+static void	corecstat_init_atom_pkg(struct corecstat_softc *sc, int cpu);
+static void	corecstat_init_atom_cpu(struct corecstat_softc *sc, int cpu);
+static void	corecstat_init_core_pkg(struct corecstat_softc *sc, int cpu);
+static void	corecstat_init_core_cpu(struct corecstat_softc *sc, int cpu);
+static void	corecstat_atom_refresh(struct corecstat_softc *sc);
+static void	corecstat_core_refresh(struct corecstat_softc *sc);
 static void	corecstat_refresh(void *arg);
 static void	corecstat_pkg_sens_init(struct corecstat_sensor *sens,
 					int cpu, char *desc, u_int msr,
@@ -166,8 +187,6 @@ corecstat_probe(device_t dev)
 		case 0x27:
 		case 0x35:
 		case 0x36:
-			/* XXX Not implemented yet */
-			return (ENXIO);
 			break;
 		/* Silvermont Atom */
 		case 0x37:
@@ -176,8 +195,6 @@ corecstat_probe(device_t dev)
 		case 0x4d:
 		case 0x5a:
 		case 0x5d:
-			/* XXX Not implemented yet */
-			return (ENXIO);
 			break;
 		/* Nehalem */
 		case 0x1a:
@@ -229,6 +246,7 @@ corecstat_attach(device_t dev)
 	int cpu_family, cpu_model;
 
 	sc->sc_dev = dev;
+	sc->sc_is_atom = 0;
 
 	cpu_model = CPUID_TO_MODEL(cpu_id);
 	cpu_family = CPUID_TO_FAMILY(cpu_id);
@@ -241,15 +259,9 @@ corecstat_attach(device_t dev)
 		case 0x27:
 		case 0x35:
 		case 0x36:
-			/*
-			 * PKG_C2, PKG_C4, PKG_C6,
-			 * but actually these map to MSR_PKG_C3_RESIDENCY,
-			 * MSR_PKG_C6_RESIDENCY and MSR_PKG_C7_RESIDENCY.
-			 * On these ATOM CPUs the package c-state residency
-			 * counters run at 1 MHz frequency.
-			 */
 			/* Only Package C-States available, no Core C-states */
-			/* XXX Not yet implemented */
+			sc->sc_is_atom = 1;
+			sc->sc_version = 0;
 			break;
 		/* Silvermont Atom */
 		case 0x37:
@@ -258,13 +270,8 @@ corecstat_attach(device_t dev)
 		case 0x4d:
 		case 0x5a:
 		case 0x5d:
-			/* Explicitly mentioned: CORE_C1, CORE_C6 and PKG_C6 */
-			/*
-			 * XXX Not clearly documented in the
-			 *     system-programming-manual, which c-state
-			 *     residence counters are available here.
-			 */
-			/* XXX Not yet implemented */
+			sc->sc_is_atom = 1;
+			sc->sc_version = 1;
 			break;
 		/* Nehalem */
 		case 0x1a:
@@ -333,61 +340,20 @@ corecstat_attach(device_t dev)
 		ksnprintf(sc->sc_sensordev->xname, sizeof(
 		    sc->sc_sensordev->xname), "cpu_node%d", get_chip_ID(cpu));
 
-		sc->sc_pkg_sens = kmalloc(7 * sizeof(struct corecstat_sensor),
-		    M_DEVBUF, M_WAITOK | M_ZERO);
-		if (sc->sc_version == 1 || sc->sc_version == 2) {
-			corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC2_IDX], cpu,
-			    "node%d PC2 residency", MSR_PKG_C2_RESIDENCY, 64);
-			sensor_attach(sc->sc_sensordev,
-			    &sc->sc_pkg_sens[PC2_IDX].sensor);
-		}
-
-		corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC3_IDX], cpu,
-		    "node%d PC3 residency", MSR_PKG_C3_RESIDENCY, 64);
-		corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC6_IDX], cpu,
-		    "node%d PC6 residency", MSR_PKG_C6_RESIDENCY, 64);
-		corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC7_IDX], cpu,
-		    "node%d PC7 residency", MSR_PKG_C7_RESIDENCY, 64);
-
-		sensor_attach(sc->sc_sensordev,
-		    &sc->sc_pkg_sens[PC3_IDX].sensor);
-		sensor_attach(sc->sc_sensordev,
-		    &sc->sc_pkg_sens[PC6_IDX].sensor);
-		sensor_attach(sc->sc_sensordev,
-		    &sc->sc_pkg_sens[PC7_IDX].sensor);
-
-		if (sc->sc_version == 2) {
-			corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC8_IDX], cpu,
-			    "node%d PC8 residency", MSR_PKG_C8_RESIDENCY, 60);
-			corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC9_IDX], cpu,
-			    "node%d PC9 residency", MSR_PKG_C9_RESIDENCY, 60);
-			corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC10_IDX], cpu,
-			    "node%d PC10 residency", MSR_PKG_C10_RESIDENCY, 60);
-			sensor_attach(sc->sc_sensordev,
-			    &sc->sc_pkg_sens[PC8_IDX].sensor);
-			sensor_attach(sc->sc_sensordev,
-			    &sc->sc_pkg_sens[PC9_IDX].sensor);
-			sensor_attach(sc->sc_sensordev,
-			    &sc->sc_pkg_sens[PC10_IDX].sensor);
-		}
+		if (sc->sc_is_atom)
+			corecstat_init_atom_pkg(sc, cpu);
+		else
+			corecstat_init_core_pkg(sc, cpu);
 
 		sensordev_install(sc->sc_sensordev);
+	} else if (sc->sc_is_atom && sc->sc_version == 0) {
+		return (ENXIO);
 	}
 
-	corecstat_core_sens_init(&sc->sc_core_c3_sens, cpu,
-	    "node%d core%d C3 res.", MSR_CORE_C3_RESIDENCY, 64);
-	corecstat_core_sens_init(&sc->sc_core_c6_sens, cpu,
-	    "node%d core%d C6 res.", MSR_CORE_C6_RESIDENCY, 64);
-
-	sensor_attach(sc->sc_cpu_sensordev, &sc->sc_core_c3_sens.sensor);
-	sensor_attach(sc->sc_cpu_sensordev, &sc->sc_core_c6_sens.sensor);
-
-	if (sc->sc_version == 1 || sc->sc_version == 2) {
-		corecstat_core_sens_init(&sc->sc_core_c7_sens, cpu,
-		    "node%d core%d C7 res.", MSR_CORE_C7_RESIDENCY, 64);
-		sensor_attach(sc->sc_cpu_sensordev,
-		    &sc->sc_core_c7_sens.sensor);
-	}
+	if (sc->sc_is_atom)
+		corecstat_init_atom_cpu(sc, cpu);
+	else
+		corecstat_init_core_cpu(sc, cpu);
 
 	sc->sc_senstask = sensor_task_register2(sc, corecstat_refresh, 1,
 	    device_get_unit(dev));
@@ -428,10 +394,133 @@ corecstat_detach(device_t dev)
 }
 
 static void
-corecstat_refresh(void *arg)
+corecstat_init_atom_pkg(struct corecstat_softc *sc, int cpu)
 {
-	struct corecstat_softc *sc = (struct corecstat_softc *)arg;
+	if (sc->sc_version == 0) {
+		sc->sc_pkg_sens = kmalloc(3 * sizeof(struct corecstat_sensor),
+		    M_DEVBUF, M_WAITOK | M_ZERO);
+		corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC2_IDX], cpu,
+		    "node%d PC2 residency", ATOM_MSR_PKG_C2_RESIDENCY, 64);
+		corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC3_IDX], cpu,
+		    "node%d PC4 residency", ATOM_MSR_PKG_C4_RESIDENCY, 64);
+		corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC6_IDX], cpu,
+		    "node%d PC6 residency", ATOM_MSR_PKG_C6_RESIDENCY, 64);
 
+		sensor_attach(sc->sc_sensordev,
+		    &sc->sc_pkg_sens[PC2_IDX].sensor);
+		sensor_attach(sc->sc_sensordev,
+		    &sc->sc_pkg_sens[PC3_IDX].sensor);
+		sensor_attach(sc->sc_sensordev,
+		    &sc->sc_pkg_sens[PC6_IDX].sensor);
+	} else {
+		sc->sc_pkg_sens = kmalloc(1 * sizeof(struct corecstat_sensor),
+		    M_DEVBUF, M_WAITOK | M_ZERO);
+		corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC2_IDX], cpu,
+		    "node%d PC6 residency", ATOM_MSR_PKG_C6_RESIDENCY, 64);
+
+		sensor_attach(sc->sc_sensordev,
+		    &sc->sc_pkg_sens[PC2_IDX].sensor);
+	}
+}
+
+static void
+corecstat_init_atom_cpu(struct corecstat_softc *sc, int cpu)
+{
+	/* No Core C-state residency counters on old Atoms */
+	KKASSERT(sc->sc_version != 0);
+
+	corecstat_core_sens_init(&sc->sc_core_c3_sens, cpu,
+	    "node%d core%d C1 res.", ATOM_MSR_CORE_C1_RESIDENCY, 64);
+	corecstat_core_sens_init(&sc->sc_core_c6_sens, cpu,
+	    "node%d core%d C6 res.", ATOM_MSR_CORE_C6_RESIDENCY, 64);
+
+	sensor_attach(sc->sc_cpu_sensordev, &sc->sc_core_c3_sens.sensor);
+	sensor_attach(sc->sc_cpu_sensordev, &sc->sc_core_c6_sens.sensor);
+}
+
+static void
+corecstat_init_core_pkg(struct corecstat_softc *sc, int cpu)
+{
+	sc->sc_pkg_sens = kmalloc(7 * sizeof(struct corecstat_sensor),
+	    M_DEVBUF, M_WAITOK | M_ZERO);
+	if (sc->sc_version == 1 || sc->sc_version == 2) {
+		corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC2_IDX], cpu,
+		    "node%d PC2 residency", MSR_PKG_C2_RESIDENCY, 64);
+		sensor_attach(sc->sc_sensordev,
+		    &sc->sc_pkg_sens[PC2_IDX].sensor);
+	}
+
+	corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC3_IDX], cpu,
+	    "node%d PC3 residency", MSR_PKG_C3_RESIDENCY, 64);
+	corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC6_IDX], cpu,
+	    "node%d PC6 residency", MSR_PKG_C6_RESIDENCY, 64);
+	corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC7_IDX], cpu,
+	    "node%d PC7 residency", MSR_PKG_C7_RESIDENCY, 64);
+
+	sensor_attach(sc->sc_sensordev,
+	    &sc->sc_pkg_sens[PC3_IDX].sensor);
+	sensor_attach(sc->sc_sensordev,
+	    &sc->sc_pkg_sens[PC6_IDX].sensor);
+	sensor_attach(sc->sc_sensordev,
+	    &sc->sc_pkg_sens[PC7_IDX].sensor);
+
+	if (sc->sc_version == 2) {
+		corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC8_IDX], cpu,
+		    "node%d PC8 residency", MSR_PKG_C8_RESIDENCY, 60);
+		corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC9_IDX], cpu,
+		    "node%d PC9 residency", MSR_PKG_C9_RESIDENCY, 60);
+		corecstat_pkg_sens_init(&sc->sc_pkg_sens[PC10_IDX], cpu,
+		    "node%d PC10 residency", MSR_PKG_C10_RESIDENCY, 60);
+		sensor_attach(sc->sc_sensordev,
+		    &sc->sc_pkg_sens[PC8_IDX].sensor);
+		sensor_attach(sc->sc_sensordev,
+		    &sc->sc_pkg_sens[PC9_IDX].sensor);
+		sensor_attach(sc->sc_sensordev,
+		    &sc->sc_pkg_sens[PC10_IDX].sensor);
+	}
+}
+
+static void
+corecstat_init_core_cpu(struct corecstat_softc *sc, int cpu)
+{
+	corecstat_core_sens_init(&sc->sc_core_c3_sens, cpu,
+	    "node%d core%d C3 res.", MSR_CORE_C3_RESIDENCY, 64);
+	corecstat_core_sens_init(&sc->sc_core_c6_sens, cpu,
+	    "node%d core%d C6 res.", MSR_CORE_C6_RESIDENCY, 64);
+
+	sensor_attach(sc->sc_cpu_sensordev, &sc->sc_core_c3_sens.sensor);
+	sensor_attach(sc->sc_cpu_sensordev, &sc->sc_core_c6_sens.sensor);
+
+	if (sc->sc_version == 1 || sc->sc_version == 2) {
+		corecstat_core_sens_init(&sc->sc_core_c7_sens, cpu,
+		    "node%d core%d C7 res.", MSR_CORE_C7_RESIDENCY, 64);
+		sensor_attach(sc->sc_cpu_sensordev,
+		    &sc->sc_core_c7_sens.sensor);
+	}
+}
+
+static void
+corecstat_atom_refresh(struct corecstat_softc *sc)
+{
+	if (sc->sc_version == 1) {
+		corecstat_sens_update(sc, &sc->sc_core_c3_sens);
+		corecstat_sens_update(sc, &sc->sc_core_c6_sens);
+	}
+
+	if (sc->sc_pkg_sens != NULL) {
+		if (sc->sc_version == 0) {
+			corecstat_sens_update(sc, &sc->sc_pkg_sens[PC2_IDX]);
+			corecstat_sens_update(sc, &sc->sc_pkg_sens[PC3_IDX]);
+			corecstat_sens_update(sc, &sc->sc_pkg_sens[PC6_IDX]);
+		} else {
+			corecstat_sens_update(sc, &sc->sc_pkg_sens[PC2_IDX]);
+		}
+	}
+}
+
+static void
+corecstat_core_refresh(struct corecstat_softc *sc)
+{
 	corecstat_sens_update(sc, &sc->sc_core_c3_sens);
 	corecstat_sens_update(sc, &sc->sc_core_c6_sens);
 	if (sc->sc_version == 1 || sc->sc_version == 2)
@@ -449,6 +538,17 @@ corecstat_refresh(void *arg)
 			corecstat_sens_update(sc, &sc->sc_pkg_sens[PC10_IDX]);
 		}
 	}
+}
+
+static void
+corecstat_refresh(void *arg)
+{
+	struct corecstat_softc *sc = (struct corecstat_softc *)arg;
+
+	if (sc->sc_is_atom)
+		corecstat_atom_refresh(sc);
+	else
+		corecstat_core_refresh(sc);
 }
 
 static void
@@ -522,6 +622,20 @@ corecstat_sens_update(struct corecstat_softc *sc,
 
 	sens->tsc_count = a;
 	sens->cst_count = b;
+
+	/*
+	 * On old Atom CPUs (before Silvermont) the Package-cstate counters
+	 * run at 1 MHz.
+	 */
+	if (sc->sc_is_atom && sc->sc_version == 0) {
+		if (cstdiff < (1ULL << 44)) {
+			cstdiff *= ATOM_MSR_PKG_CSTATE_COUNTER_HZ;
+			cstdiff /= tsc_frequency;
+		} else {
+			cstdiff /= tsc_frequency;
+			cstdiff *= ATOM_MSR_PKG_CSTATE_COUNTER_HZ;
+		}
+	}
 
 	if (tscdiff > 0) {
 		/* Make sure we don't calculate total garbage here */
