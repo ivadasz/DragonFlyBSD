@@ -95,10 +95,10 @@ static int	corecstat_attach(device_t dev);
 static int	corecstat_detach(device_t dev);
 static void	corecstat_refresh(void *arg);
 static void	corecstat_pkg_sens_init(struct corecstat_sensor *sens,
-					int cpuid, char *desc, u_int msr,
+					int cpu, char *desc, u_int msr,
 					int bits);
 static void	corecstat_core_sens_init(struct corecstat_sensor *sens,
-					int cpuid, char *desc, u_int msr,
+					int cpu, char *desc, u_int msr,
 					int bits);
 static void	corecstat_sens_init(struct corecstat_sensor *sens,
 				    char *desc, u_int msr, int bits);
@@ -225,7 +225,7 @@ corecstat_attach(device_t dev)
 {
 	struct corecstat_softc *sc = device_get_softc(dev);
 	const struct cpu_node *node;
-	int cpu = device_get_unit(dev);
+	int cpu = device_get_unit(device_get_parent(dev));
 	int cpu_family, cpu_model;
 
 	sc->sc_dev = dev;
@@ -316,6 +316,9 @@ corecstat_attach(device_t dev)
 
 	node = get_cpu_node_by_cpuid(cpu);
 	while (node != NULL) {
+		if (node->type == CORE_LEVEL &&
+		    !(cpu == BSRCPUMASK(node->members)))
+			return (ENXIO);
 		if (node->type == CHIP_LEVEL) {
 			if (node->child_no == 0)
 				node = NULL;
@@ -449,23 +452,23 @@ corecstat_refresh(void *arg)
 }
 
 static void
-corecstat_core_sens_init(struct corecstat_sensor *sens, int cpuid, char *desc,
+corecstat_core_sens_init(struct corecstat_sensor *sens, int cpu, char *desc,
     u_int msr, int bits)
 {
 	char buf[sizeof(sens->sensor.desc)];
 
-	ksnprintf(buf, sizeof(buf), desc, get_chip_ID(cpuid),
-	    get_core_number_within_chip(cpuid));
+	ksnprintf(buf, sizeof(buf), desc, get_chip_ID(cpu),
+	    get_core_number_within_chip(cpu));
 	corecstat_sens_init(sens, buf, msr, bits);
 }
 
 static void
-corecstat_pkg_sens_init(struct corecstat_sensor *sens, int cpuid, char *desc,
+corecstat_pkg_sens_init(struct corecstat_sensor *sens, int cpu, char *desc,
     u_int msr, int bits)
 {
 	char buf[sizeof(sens->sensor.desc)];
 
-	ksnprintf(buf, sizeof(buf), desc, get_chip_ID(cpuid));
+	ksnprintf(buf, sizeof(buf), desc, get_chip_ID(cpu));
 	corecstat_sens_init(sens, buf, msr, bits);
 }
 
