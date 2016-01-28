@@ -36,6 +36,8 @@
 #include <linux/module.h>
 #include <drm/drm_crtc_helper.h>
 
+#include <sys/runtime_pm.h>
+
 static struct drm_driver driver;
 
 #define GEN_DEFAULT_PIPEOFFSETS \
@@ -1512,11 +1514,14 @@ static int vlv_resume_prepare(struct drm_i915_private *dev_priv,
 	return ret;
 }
 
-#if 0
-static int intel_runtime_suspend(struct device *device)
+int intel_runtime_suspend(struct device *device)
 {
+#if defined(__DragonFly__)
+	struct drm_device *dev = device_get_softc(device);
+#else
 	struct pci_dev *pdev = to_pci_dev(device);
 	struct drm_device *dev = pci_get_drvdata(pdev);
+#endif
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	int ret;
 
@@ -1598,10 +1603,14 @@ static int intel_runtime_suspend(struct device *device)
 	return 0;
 }
 
-static int intel_runtime_resume(struct device *device)
+int intel_runtime_resume(struct device *device)
 {
+#if defined(__DragonFly__)
+	struct drm_device *dev = device_get_softc(device);
+#else
 	struct pci_dev *pdev = to_pci_dev(device);
 	struct drm_device *dev = pci_get_drvdata(pdev);
+#endif
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	int ret = 0;
 
@@ -1653,7 +1662,6 @@ static int intel_runtime_resume(struct device *device)
 
 	return ret;
 }
-#endif
 
 /*
  * This function implements common functionality of runtime and system
