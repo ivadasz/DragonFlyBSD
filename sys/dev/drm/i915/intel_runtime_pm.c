@@ -29,6 +29,8 @@
 #include "i915_drv.h"
 #include "intel_drv.h"
 
+#include <sys/runtime_pm.h>
+
 /**
  * DOC: runtime pm
  *
@@ -1877,9 +1879,8 @@ int intel_power_domains_init(struct drm_i915_private *dev_priv)
 
 static void intel_runtime_pm_disable(struct drm_i915_private *dev_priv)
 {
-#if 0
 	struct drm_device *dev = dev_priv->dev;
-	struct device *device = &dev->pdev->dev;
+	struct device *device = dev->pdev->dev;
 
 	if (!HAS_RUNTIME_PM(dev))
 		return;
@@ -1889,6 +1890,10 @@ static void intel_runtime_pm_disable(struct drm_i915_private *dev_priv)
 
 	/* Make sure we're not suspended first. */
 	pm_runtime_get_sync(device);
+#if 0
+	pm_runtime_disable(device);
+#else
+	pm_runtime_unregister(device);
 #endif
 }
 
@@ -2083,16 +2088,12 @@ void intel_power_domains_init_hw(struct drm_i915_private *dev_priv)
 void intel_runtime_pm_get(struct drm_i915_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
-#if 0
-	struct device *device = &dev->pdev->dev;
-#endif
+	struct device *device = dev->pdev->dev;
 
 	if (!HAS_RUNTIME_PM(dev))
 		return;
 
-#if 0
 	pm_runtime_get_sync(device);
-#endif
 	WARN(dev_priv->pm.suspended, "Device still suspended.\n");
 }
 
@@ -2116,17 +2117,13 @@ void intel_runtime_pm_get(struct drm_i915_private *dev_priv)
 void intel_runtime_pm_get_noresume(struct drm_i915_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
-#if 0
-	struct device *device = &dev->pdev->dev;
-#endif
+	struct device *device = dev->pdev->dev;
 
 	if (!HAS_RUNTIME_PM(dev))
 		return;
 
 	WARN(dev_priv->pm.suspended, "Getting nosync-ref while suspended.\n");
-#if 0
 	pm_runtime_get_noresume(device);
-#endif
 }
 
 /**
@@ -2139,17 +2136,20 @@ void intel_runtime_pm_get_noresume(struct drm_i915_private *dev_priv)
  */
 void intel_runtime_pm_put(struct drm_i915_private *dev_priv)
 {
-#if 0
 	struct drm_device *dev = dev_priv->dev;
-	struct device *device = &dev->pdev->dev;
+	struct device *device = dev->pdev->dev;
 
 	if (!HAS_RUNTIME_PM(dev))
 		return;
 
 	pm_runtime_mark_last_busy(device);
 	pm_runtime_put_autosuspend(device);
-#endif
 }
+
+static struct rpm_ops ops = {
+	.runtime_suspend = intel_runtime_suspend,
+	.runtime_resume = intel_runtime_resume,
+};
 
 /**
  * intel_runtime_pm_enable - enable runtime pm
@@ -2164,12 +2164,16 @@ void intel_runtime_pm_put(struct drm_i915_private *dev_priv)
 void intel_runtime_pm_enable(struct drm_i915_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
-#if 0
-	struct device *device = &dev->pdev->dev;
-#endif
+	struct device *device = dev->pdev->dev;
 
 	if (!HAS_RUNTIME_PM(dev))
 		return;
+
+#if 0
+	pm_runtime_set_active(device);
+#else
+	pm_runtime_register(device, &ops);
+#endif
 
 	/*
 	 * RPM depends on RC6 to save restore the GT HW context, so make RC6 a
@@ -2180,12 +2184,12 @@ void intel_runtime_pm_enable(struct drm_i915_private *dev_priv)
 		return;
 	}
 
-#if 0
 	pm_runtime_set_autosuspend_delay(device, 10000); /* 10s */
 	pm_runtime_mark_last_busy(device);
+#if 0
 	pm_runtime_use_autosuspend(device);
+#endif
 
 	pm_runtime_put_autosuspend(device);
-#endif
 }
 
