@@ -16,7 +16,7 @@ struct rpm_client {
 	struct callout to;
 	struct task suspend_tsk;
 	struct task resume_tsk;
-	int state;	/* 0 == normal, 2 == rutime suspended */
+	int state;	/* 0 == normal, 2 == runtime suspended */
 	int refcnt;
 	int autosuspend_delay;
 };
@@ -30,10 +30,11 @@ runtime_pm_timeout(void *arg)
 {
 	struct rpm_client *client = arg;
 
-	kprintf("%s: autosuspend timer triggered\n", __func__);
+	kprintf("%s: autosuspend timer triggered, refcnt=%d\n", __func__, client->refcnt);
 	lockmgr(&rpm_lock, LK_EXCLUSIVE);
-	client->state = 1;
-	if (client->refcnt)
+	if (client->state == 0)
+		client->state = 1;
+	if (client->refcnt <= 0 && client->state == 1)
 		taskqueue_enqueue(taskqueue_swi_mp, &client->suspend_tsk);
 	lockmgr(&rpm_lock, LK_RELEASE);
 }
@@ -60,9 +61,16 @@ runtime_pm_suspend_task(void *arg, int pending)
 	struct rpm_client *client = arg;
 
 	lockmgr(&rpm_lock, LK_EXCLUSIVE);
-	if (client->refcnt > 0) {
-		kprintf("%s: refcnt > 0, aborting\n", __func__);
+	if (client->state == 2) {
+		kprintf("%s: already suspended\n", __func__);
 		lockmgr(&rpm_lock, LK_RELEASE);
+		return;
+	}
+
+	if (client->refcnt > 0) {
+		kprintf("%s: refcnt > 0, (is %d) aborting\n", __func__, client->refcnt);
+		lockmgr(&rpm_lock, LK_RELEASE);
+		return;
 	}
 	lockmgr(&rpm_lock, LK_RELEASE);
 	kprintf("%s: Calling runtime suspend\n", __func__);
@@ -122,7 +130,8 @@ pm_runtime_register(device_t dev, struct rpm_ops *ops)
 	client->dev = dev;
 	client->state = 0;
 	client->refcnt = 0;
-	client->autosuspend_delay=5000;
+	client->ops = ops;
+	client->autosuspend_delay=100000;
 
 	lockmgr(&rpm_lock, LK_EXCLUSIVE);
 	SLIST_INSERT_HEAD(&store, client, entries);
@@ -156,12 +165,13 @@ pm_runtime_mark_last_busy(device_t dev)
 
 	lockmgr(&rpm_lock, LK_EXCLUSIVE);
 	KKASSERT(client->refcnt > 0);
+	client->state = 0;
 	struct timeval tv = {
 		client->autosuspend_delay / 1000,
 		(client->autosuspend_delay % 1000) * 1000
 	};
 	lockmgr(&rpm_lock, LK_RELEASE);
-	kprintf("%s: resetting autosuspend callout\n", __func__);
+//	kprintf("%s: resetting autosuspend callout\n", __func__);
 	callout_reset(&client->to, tvtohz_high(&tv), runtime_pm_timeout, client);
 }
 
@@ -175,10 +185,10 @@ pm_runtime_put_autosuspend(device_t dev)
 		return;
 
 	lockmgr(&rpm_lock, LK_EXCLUSIVE);
-	kprintf("%s: refcnt before: %d\n", __func__, client->refcnt);
-	KKASSERT(client->refcnt <= 0);
+//	kprintf("%s: refcnt before: %d\n", __func__, client->refcnt);
+	KKASSERT(client->refcnt > 0);
 	client->refcnt--;
-	if (client->refcnt == 0 && client->state > 0)
+	if (client->refcnt == 0 && client->state == 1)
 		taskqueue_enqueue(taskqueue_swi_mp, &client->suspend_tsk);
 	lockmgr(&rpm_lock, LK_RELEASE);
 }
@@ -193,6 +203,7 @@ pm_runtime_get_sync(device_t dev)
 		return;
 
 	lockmgr(&rpm_lock, LK_EXCLUSIVE);
+//	kprintf("%s: refcnt before: %d\n", __func__, client->refcnt);
 	KKASSERT(client->refcnt >= 0);
 	client->refcnt++;
 	if (client->state == 2)
@@ -211,6 +222,7 @@ pm_runtime_get_noresume(device_t dev)
 		return;
 
 	lockmgr(&rpm_lock, LK_EXCLUSIVE);
+//	kprintf("%s: refcnt before: %d\n", __func__, client->refcnt);
 	KKASSERT(client->refcnt >= 0);
 	client->refcnt++;
 	lockmgr(&rpm_lock, LK_RELEASE);
