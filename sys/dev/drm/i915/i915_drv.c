@@ -1514,7 +1514,7 @@ static int vlv_resume_prepare(struct drm_i915_private *dev_priv,
 	return ret;
 }
 
-int intel_runtime_suspend(struct device *device)
+static int intel_runtime_suspend(struct device *device)
 {
 #if defined(__DragonFly__)
 	struct drm_device *dev = device_get_softc(device);
@@ -1603,7 +1603,7 @@ int intel_runtime_suspend(struct device *device)
 	return 0;
 }
 
-int intel_runtime_resume(struct device *device)
+static int intel_runtime_resume(struct device *device)
 {
 #if defined(__DragonFly__)
 	struct drm_device *dev = device_get_softc(device);
@@ -1787,12 +1787,19 @@ static struct drm_driver driver = {
 
 static int __init i915_init(void);
 
+static struct rpm_ops ops = {
+	.runtime_suspend = intel_runtime_suspend,
+	.runtime_resume = intel_runtime_resume,
+};
+
 static int
 i915_attach(device_t kdev)
 {
 	struct drm_device *dev = device_get_softc(kdev);
 	int error;
 	int dummy;
+
+	pm_runtime_register(kdev, &ops);
 
 	i915_init();
 

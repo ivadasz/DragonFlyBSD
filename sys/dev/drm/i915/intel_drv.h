@@ -1382,8 +1382,6 @@ void intel_display_power_put(struct drm_i915_private *dev_priv,
 void intel_runtime_pm_get(struct drm_i915_private *dev_priv);
 void intel_runtime_pm_get_noresume(struct drm_i915_private *dev_priv);
 void intel_runtime_pm_put(struct drm_i915_private *dev_priv);
-int intel_runtime_suspend(struct device *device);
-int intel_runtime_resume(struct device *device);
 
 void intel_display_set_init_power(struct drm_i915_private *dev, bool enable);
 

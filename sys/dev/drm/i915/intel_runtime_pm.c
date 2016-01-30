@@ -2146,11 +2146,6 @@ void intel_runtime_pm_put(struct drm_i915_private *dev_priv)
 	pm_runtime_put_autosuspend(device);
 }
 
-static struct rpm_ops ops = {
-	.runtime_suspend = intel_runtime_suspend,
-	.runtime_resume = intel_runtime_resume,
-};
-
 /**
  * intel_runtime_pm_enable - enable runtime pm
  * @dev_priv: i915 device instance
@@ -2171,8 +2166,6 @@ void intel_runtime_pm_enable(struct drm_i915_private *dev_priv)
 
 #if 0
 	pm_runtime_set_active(device);
-#else
-	pm_runtime_register(device, &ops);
 #endif
 
 	/*
