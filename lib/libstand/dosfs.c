@@ -726,7 +726,7 @@ fatget(DOS_FS *fs, u_int *c)
 static int
 fatend(u_int sz, u_int c)
 {
-    return c > (sz == 12 ? 0xff7U : sz == 16 ? 0xfff7U : 0xffffff7);
+    return c <= 1 || c > (sz == 12 ? 0xff7U : sz == 16 ? 0xfff7U : 0xffffff7);
 }
 
 /*
