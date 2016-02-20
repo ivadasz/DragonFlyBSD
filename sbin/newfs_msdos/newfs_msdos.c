@@ -707,11 +707,15 @@ static void
 getdiskinfo(int fd, const char *fname, const char *dtype, int oflag,
 	    struct bpb *bpb)
 {
+#if 0
     struct diskslices ds;
     const char *s1, *s2;
     char *s;
-    int slice, part, i;
+    int slice;
+#endif
+    int part, i;
 
+#if 0
     slice = part = -1;
     s1 = fname;
     if ((s2 = strrchr(s1, '/')))
@@ -755,6 +759,7 @@ getdiskinfo(int fd, const char *fname, const char *dtype, int oflag,
 	 ((!oflag && part != -1) || !bpb->bsec)) ||
 	!bpb->bps || !bpb->spt || !bpb->hds
     ) {
+#endif
 	struct partinfo pinfo;
 	struct disktab *dtab = NULL;
 
@@ -783,7 +788,7 @@ getdiskinfo(int fd, const char *fname, const char *dtype, int oflag,
 	    bpb->spt = ckgeom(fname, pinfo.d_secpertrack, "sectors/track");
 	if (!bpb->hds)
 	    bpb->hds = ckgeom(fname, pinfo.d_nheads, "drive heads");
-    }
+//    }
 }
 
 /*
