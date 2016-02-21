@@ -40,7 +40,7 @@ __FBSDID("$FreeBSD: head/sys/boot/efi/loader/copy.c 293724 2016-01-12 02:17:39Z 
 #include "loader_efi.h"
 
 #ifndef EFI_STAGING_SIZE
-#define	EFI_STAGING_SIZE	48
+#define	EFI_STAGING_SIZE	96
 #endif
 
 #define	STAGE_PAGES	EFI_SIZE_TO_PAGES((EFI_STAGING_SIZE) * 1024 * 1024)
@@ -59,9 +59,19 @@ efi_copy_init(void)
 	if (EFI_ERROR(status)) {
 		printf("failed to allocate staging area: %lu\n",
 		    EFI_ERROR_CODE(status));
-		return (status);
+		printf("retrying with smaller %uMB allocation\n",
+		    EFI_STAGING_SIZE/2);
+		status = BS->AllocatePages(AllocateAnyPages, EfiLoaderData,
+		    STAGE_PAGES/2, &staging);
+		if (EFI_ERROR(status)) {
+			printf("failed to allocate staging area: %lu\n",
+			    EFI_ERROR_CODE(status));
+			return (status);
+		}
+		staging_end = staging + (STAGE_PAGES/2) * EFI_PAGE_SIZE;
+	} else {
+		staging_end = staging + STAGE_PAGES * EFI_PAGE_SIZE;
 	}
-	staging_end = staging + STAGE_PAGES * EFI_PAGE_SIZE;
 
 #if defined(__aarch64__)
 	/*
