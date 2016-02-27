@@ -38,7 +38,7 @@
 #include "dinode.h"
 #include "fs.h"
 
-#ifdef __i386__
+#if defined(__i386__) || defined(__x86_64__)
 /* XXX: Revert to old (broken for over 1.5Tb filesystems) version of cgbase
    (see sys/ufs/ffs/fs.h rev 1.39) so that i386 boot loader (boot2) can
    support both UFS1 and UFS2 again. */
@@ -66,7 +66,11 @@
 
 /* Buffers that must not span a 64k boundary. */
 struct ufs_dmadat {
+#ifdef BOOT2
 	struct boot2_dmadat boot2;
+#else
+	char secbuf[DEV_BSIZE*4];	/* for MBR/disklabel */
+#endif
 	char blkbuf[VBLKSIZE];	/* filesystem blocks */
 	char indbuf[VBLKSIZE];	/* indir blocks */
 	char sbbuf[SBLOCKSIZE];	/* superblock */
@@ -74,15 +78,30 @@ struct ufs_dmadat {
 
 #define fsdmadat	((struct ufs_dmadat *)boot2_dmadat)
 
+#ifndef BOOT2
+struct dmadat {
+	struct ufs_dmadat ufs_dmadat;
+};
+static struct dmadat *dmadat;
+#define boot2_dmadat ((struct ufs_dmadat *)dmadat)
+#define boot2_ino_t ufs_ino_t
+#endif
+
 static boot2_ino_t boot2_ufs_lookup(const char *);
 static ssize_t boot2_ufs_read(boot2_ino_t, void *, size_t);
 static int boot2_ufs_init(void);
 
+#ifdef BOOT2
 const struct boot2_fsapi boot2_ufs_api = {
 	.fsinit = boot2_ufs_init,
 	.fslookup = boot2_ufs_lookup,
 	.fsread = boot2_ufs_read
 };
+#else
+#define fsread boot2_ufs_read
+#define fsread_size boot2_ufs_read_size
+#define lookup boot2_ufs_lookup
+#endif
 
 static __inline__ int
 fsfind(const char *name, ufs_ino_t *ino)
@@ -187,7 +206,7 @@ boot2_ufs_init(void)
 #endif
 		    ) &&
 		    fs->fs_bsize <= MAXBSIZE &&
-		    fs->fs_bsize >= sizeof(struct fs))
+		    fs->fs_bsize >= (int)sizeof(struct fs))
 			break;
 	}
 	if (sblock_try[n] == -1)
@@ -195,8 +214,11 @@ boot2_ufs_init(void)
 	return 0;
 }
 
+int dsk_meta = 0;
+
 static ssize_t
-boot2_ufs_read(boot2_ino_t boot2_inode, void *buf, size_t nbyte)
+boot2_ufs_read_size(boot2_ino_t boot2_inode, void *buf, size_t nbyte,
+    size_t *fsizep)
 {
 #ifndef UFS2_ONLY
 	static struct ufs1_dinode dp1;
@@ -218,8 +240,22 @@ boot2_ufs_read(boot2_ino_t boot2_inode, void *buf, size_t nbyte)
 	indbuf = fsdmadat->indbuf;
 	fs = (struct fs *)fsdmadat->sbbuf;
 
+	/*
+	 * Force probe if inode is zero to ensure we have a valid fs, otherwise
+	 * when probing multiple paritions, reads from subsequent parititions
+	 * will incorrectly succeed.
+	 */
+	if (!dsk_meta || boot2_inode == 0) {
+		inomap = 0;
+		dsk_meta = 0;
+		if (boot2_ufs_init() == 0)
+			dsk_meta++;
+	}
+
 	if (!ufs_inode)
 		return 0;
+	else if (!dsk_meta)
+		return -1;
 	if (inomap != ufs_inode) {
 		n = IPERVBLK(fs);
 		if (dskread(blkbuf, INO_TO_VBA(fs, n, ufs_inode), DBPERVBLK))
@@ -276,7 +312,7 @@ boot2_ufs_read(boot2_ino_t boot2_inode, void *buf, size_t nbyte)
 		}
 		vbaddr = fsbtodb(fs, addr) + (off >> VBLKSHIFT) * DBPERVBLK;
 		vboff = off & VBLKMASK;
-		n = sblksize(fs, size, lbn) - (off & ~VBLKMASK);
+		n = sblksize(fs, (ssize_t)size, lbn) - (off & ~VBLKMASK);
 		if (n > VBLKSIZE)
 			n = VBLKSIZE;
 		if (blkmap != vbaddr) {
@@ -292,5 +328,15 @@ boot2_ufs_read(boot2_ino_t boot2_inode, void *buf, size_t nbyte)
 		fs_off += n;
 		nb -= n;
 	}
+
+	if (fsizep != NULL)
+		*fsizep = size;
+
 	return nbyte;
+}
+
+static ssize_t
+boot2_ufs_read(boot2_ino_t boot2_inode, void *buf, size_t nbyte)
+{
+	return boot2_ufs_read_size(boot2_inode, buf, nbyte, NULL);
 }
