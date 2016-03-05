@@ -169,6 +169,9 @@ makeoptions	SC_DFLT_FONT=cp437
 
 device		agp		# support several AGP chipsets
 
+# Intel BAYTRAIL PCU PMC
+device		bytpmc
+
 # Intel performance-energy bias
 device		perfbias
 # Intel software controlled clock modulation

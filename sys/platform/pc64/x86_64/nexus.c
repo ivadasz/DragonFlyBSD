@@ -246,6 +246,30 @@ nexus_attach(device_t dev)
 #endif
 	bus_generic_attach(dev);
 
+	device_t baytrail_pmc;
+
+	uint32_t reg = 0xfed03000u;
+	baytrail_pmc = BUS_ADD_CHILD(dev, dev, 0, "bytpmc", 0);
+	if (baytrail_pmc == NULL) {
+		device_printf(dev, "cannot add Baytrail PMC child\n");
+		device_delete_child(dev, baytrail_pmc);
+		goto rest;
+	}
+
+	if (bus_set_resource(baytrail_pmc, SYS_RES_MEMORY,
+	    0, reg & 0xfffffe00, 0x1000, -1) != 0) {
+		device_printf(dev, "cannot set PMC mmio resource\n");
+		device_delete_child(dev, baytrail_pmc);
+		baytrail_pmc = NULL;
+		goto rest;
+	}
+
+	if (device_probe_and_attach(baytrail_pmc) != 0) {
+		device_printf(dev, "attaching baytrail_pmc failed\n");
+		device_delete_child(dev, baytrail_pmc);
+	}
+rest:
+
 	/*
 	 * And if we didn't see ISA on a pci bridge, create a
 	 * connection point now so it shows up "on motherboard".
