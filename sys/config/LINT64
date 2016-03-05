@@ -1693,6 +1693,9 @@ device		iicsmb		# smb over i2c bridge
 
 device		pcf0	at isa? port 0x320 irq 5
 
+# Intel BAYTRAIL PCU PMC
+device		bytpmc
+
 # Intel performance-energy bias
 device		perfbias
 
