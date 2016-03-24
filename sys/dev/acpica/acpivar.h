@@ -442,6 +442,10 @@ void		acpi_install_wakeup_handler(struct acpi_softc *sc);
 int		acpi_sleep_machdep(struct acpi_softc *sc, int state);
 int		acpi_table_quirks(int *quirks);
 int		acpi_machdep_quirks(int *quirks);
+void		acpi_dep_foreach_device(device_t bus, ACPI_HANDLE StartObject,
+		    UINT32 MaxDepth, void *Context,
+		    void(*DeviceCallback)(ACPI_HANDLE handle, UINT32 level,
+					  void *context));
 
 /* Battery Abstraction. */
 struct acpi_battinfo;

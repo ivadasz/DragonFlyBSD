@@ -365,8 +365,11 @@ const char 	*device_get_desc(device_t dev);
 devclass_t	device_get_devclass(device_t dev);
 driver_t	*device_get_driver(device_t dev);
 u_int32_t	device_get_flags(device_t dev);
+int	device_get_order(device_t dev);
 device_t	device_get_parent(device_t dev);
 int	device_get_children(device_t dev, device_t **listp, int *countp);
+void	device_foreach_child(device_t dev, void *arg,
+	    void(*cb)(device_t child, void *arg));
 void	*device_get_ivars(device_t dev);
 void	device_set_ivars(device_t dev, void *ivars);
 const	char *device_get_name(device_t dev);

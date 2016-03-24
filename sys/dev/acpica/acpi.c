@@ -139,8 +139,10 @@ static int	acpi_isa_pnp_probe(device_t bus, device_t child,
 		    struct isa_pnp_id *ids);
 static void	acpi_probe_children(device_t bus);
 static void	acpi_probe_order(ACPI_HANDLE handle, int *order);
-static ACPI_STATUS acpi_probe_child(ACPI_HANDLE handle, UINT32 level,
-		    void *context, void **status);
+static void	acpi_probe_child(ACPI_HANDLE handle, UINT32 level,
+		    void *context);
+static void	acpi_prepare_child(device_t child, void *arg);
+static BOOLEAN	acpi_check_present(device_t child);
 static ACPI_STATUS acpi_EnterSleepState(struct acpi_softc *sc, int state);
 static void	acpi_shutdown_final(void *arg, int howto);
 static void	acpi_enable_fixed_events(struct acpi_softc *sc);
@@ -1625,6 +1627,20 @@ acpi_enable_pcie(void)
 	}
 }
 
+static void
+acpi_prepare_child(device_t child, void *arg)
+{
+    ACPI_HANDLE handle;
+
+    if (device_get_order(child) >= 100) {
+	if (acpi_check_present(child) && device_is_enabled(child)) {
+	    handle = acpi_get_handle(child);
+	    acpi_parse_resources(child, handle, &acpi_res_parse_set, NULL);
+	}
+    }
+    device_probe_and_attach(child);
+}
+
 /*
  * Scan all of the ACPI namespace and attach child devices.
  *
@@ -1650,8 +1666,7 @@ acpi_probe_children(device_t bus)
      * devices as they appear, which might be smarter.)
      */
     ACPI_DEBUG_PRINT((ACPI_DB_OBJECTS, "namespace scan\n"));
-    AcpiWalkNamespace(ACPI_TYPE_ANY, ACPI_ROOT_OBJECT, 100,
-	acpi_probe_child, NULL, bus, NULL);
+    acpi_dep_foreach_device(bus, ACPI_ROOT_OBJECT, 100, bus, acpi_probe_child);
 
     /* Pre-allocate resources for our rman from any sysresource devices. */
     acpi_sysres_alloc(bus);
@@ -1659,9 +1674,9 @@ acpi_probe_children(device_t bus)
     ACPI_DEBUG_PRINT((ACPI_DB_OBJECTS, "device identify routines\n"));
     bus_generic_probe(bus);
 
-    /* Probe/attach all children, created staticly and from the namespace. */
+    /* Probe/attach all children, created statically and from the namespace. */
     ACPI_DEBUG_PRINT((ACPI_DB_OBJECTS, "first bus_generic_attach\n"));
-    bus_generic_attach(bus);
+    device_foreach_child(bus, NULL, acpi_prepare_child);
 
     /*
      * Some of these children may have attached others as part of their attach
@@ -1703,15 +1718,50 @@ acpi_probe_order(ACPI_HANDLE handle, int *order)
 }
 
 /*
+ * Check that the device is present.  If it's not present,
+ * leave it disabled (so that we have a device_t attached to
+ * the handle, but we don't probe it).
+ *
+ * XXX PCI link devices sometimes report "present" but not
+ * "functional" (i.e. if disabled).  Go ahead and probe them
+ * anyway since we may enable them later.
+ */
+static BOOLEAN
+acpi_check_present(device_t child)
+{
+    ACPI_OBJECT_TYPE type;
+    ACPI_HANDLE h, handle;
+
+    handle = acpi_get_handle(child);
+    if (ACPI_SUCCESS(AcpiGetType(handle, &type))) {
+	if (type == ACPI_TYPE_DEVICE && !acpi_DeviceIsPresent(child)) {
+	    /* Never disable PCI link devices. */
+	    if (acpi_MatchHid(handle, "PNP0C0F"))
+		return (FALSE);
+	    /*
+	     * Docking stations should remain enabled since the system
+	     * may be undocked at boot.
+	     */
+	    if (ACPI_SUCCESS(AcpiGetHandle(handle, "_DCK", &h)))
+		return (FALSE);
+
+	    device_disable(child);
+	    return (FALSE);
+	}
+    }
+
+    return (TRUE);
+}
+
+/*
  * Evaluate a child device and determine whether we might attach a device to
  * it.
  */
-static ACPI_STATUS
-acpi_probe_child(ACPI_HANDLE handle, UINT32 level, void *context, void **status)
+static void
+acpi_probe_child(ACPI_HANDLE handle, UINT32 level, void *context)
 {
     struct acpi_prw_data prw;
     ACPI_OBJECT_TYPE type;
-    ACPI_HANDLE h;
     device_t bus, child;
     int order;
     char *handle_str;
@@ -1719,90 +1769,44 @@ acpi_probe_child(ACPI_HANDLE handle, UINT32 level, void *context, void **status)
     ACPI_FUNCTION_TRACE((char *)(uintptr_t)__func__);
 
     if (acpi_disabled("children"))
-	return_ACPI_STATUS (AE_OK);
+	return;
 
     /* Skip this device if we think we'll have trouble with it. */
     if (acpi_avoid(handle))
-	return_ACPI_STATUS (AE_OK);
+	return;
 
     bus = (device_t)context;
     if (ACPI_SUCCESS(AcpiGetType(handle, &type))) {
 	handle_str = acpi_name(handle);
-	switch (type) {
-	case ACPI_TYPE_DEVICE:
-	    /*
-	     * Since we scan from \, be sure to skip system scope objects.
-	     * \_SB_ and \_TZ_ are defined in ACPICA as devices to work around
-	     * BIOS bugs.  For example, \_SB_ is to allow \_SB_._INI to be run
-	     * during the intialization and \_TZ_ is to support Notify() on it.
-	     */
-	    if (strcmp(handle_str, "\\_SB_") == 0 ||
-		strcmp(handle_str, "\\_TZ_") == 0)
-		break;
-
+	if (type == ACPI_TYPE_DEVICE) {
 	    if (acpi_parse_prw(handle, &prw) == 0)
 		AcpiSetupGpeForWake(handle, prw.gpe_handle, prw.gpe_bit);
+	}
 
-	    /* FALLTHROUGH */
-	case ACPI_TYPE_PROCESSOR:
-	case ACPI_TYPE_THERMAL:
-	case ACPI_TYPE_POWER:
-	    /* 
-	     * Create a placeholder device for this node.  Sort the
-	     * placeholder so that the probe/attach passes will run
-	     * breadth-first.  Orders less than ACPI_DEV_BASE_ORDER
-	     * are reserved for special objects (i.e., system
-	     * resources).  CPU devices have a very high order to
-	     * ensure they are probed after other devices.
-	     */
-	    ACPI_DEBUG_PRINT((ACPI_DB_OBJECTS, "scanning '%s'\n", handle_str));
-	    order = level * 10 + 100;
-	    acpi_probe_order(handle, &order);
-	    child = BUS_ADD_CHILD(bus, bus, order, NULL, -1);
-	    if (child == NULL)
-		break;
+	ACPI_DEBUG_PRINT((ACPI_DB_OBJECTS, "scanning '%s'\n", handle_str));
+	order = level * 10 + 100;
+	acpi_probe_order(handle, &order);
+	child = BUS_ADD_CHILD(bus, bus, order, NULL, -1);
+	if (child == NULL)
+	    return;
 
-	    /* Associate the handle with the device_t and vice versa. */
-	    acpi_set_handle(child, handle);
-	    AcpiAttachData(handle, acpi_fake_objhandler, child);
+	/* Associate the handle with the device_t and vice versa. */
+	acpi_set_handle(child, handle);
+	AcpiAttachData(handle, acpi_fake_objhandler, child);
 
-	    /*
-	     * Check that the device is present.  If it's not present,
-	     * leave it disabled (so that we have a device_t attached to
-	     * the handle, but we don't probe it).
-	     *
-	     * XXX PCI link devices sometimes report "present" but not
-	     * "functional" (i.e. if disabled).  Go ahead and probe them
-	     * anyway since we may enable them later.
-	     */
-	    if (type == ACPI_TYPE_DEVICE && !acpi_DeviceIsPresent(child)) {
-		/* Never disable PCI link devices. */
-		if (acpi_MatchHid(handle, "PNP0C0F"))
-		    break;
+	if (device_get_order(child) < 100) {
+	    if (acpi_check_present(child) && device_is_enabled(child)) {
 		/*
-		 * Docking stations should remain enabled since the system
-		 * may be undocked at boot.
+		 * Get the device's resource settings and attach them.
+		 * Note that if the device has _PRS but no _CRS, we need
+		 * to decide when it's appropriate to try to configure the
+		 * device.  Ignore the return value here; it's OK for the
+		 * device not to have any resources.
 		 */
-		if (ACPI_SUCCESS(AcpiGetHandle(handle, "_DCK", &h)))
-		    break;
-
-		device_disable(child);
-		break;
+		acpi_parse_resources(child, handle, &acpi_res_parse_set, NULL);
 	    }
-
-	    /*
-	     * Get the device's resource settings and attach them.
-	     * Note that if the device has _PRS but no _CRS, we need
-	     * to decide when it's appropriate to try to configure the
-	     * device.  Ignore the return value here; it's OK for the
-	     * device not to have any resources.
-	     */
-	    acpi_parse_resources(child, handle, &acpi_res_parse_set, NULL);
-	    break;
 	}
     }
-
-    return_ACPI_STATUS (AE_OK);
 }
 
 /*
