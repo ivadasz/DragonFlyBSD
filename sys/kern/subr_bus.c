@@ -1476,6 +1476,17 @@ device_get_children(device_t dev, device_t **devlistp, int *devcountp)
 	return(0);
 }
 
+void
+device_foreach_child(device_t dev, void *arg, void(*cb)(device_t child,
+    void *arg))
+{
+	device_t child;
+
+	TAILQ_FOREACH(child, &dev->children, link) {
+		cb(child, arg);
+	}
+}
+
 driver_t *
 device_get_driver(device_t dev)
 {
@@ -1518,6 +1529,12 @@ uint32_t
 device_get_flags(device_t dev)
 {
 	return(dev->devflags);
+}
+
+int
+device_get_order(device_t dev)
+{
+	return(dev->order);
 }
 
 struct sysctl_ctx_list *
