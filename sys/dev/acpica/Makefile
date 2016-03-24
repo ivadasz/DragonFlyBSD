@@ -70,7 +70,7 @@ SRCS+=	utxferror.c utxfinit.c
 #
 SRCS+=  acpi.c acpi_acad.c acpi_battery.c acpi_button.c acpi_cmbat.c
 SRCS+=	acpi_cpu.c acpi_cpu_cstate.c acpi_cpu_pstate.c acpi_smbat.c
-SRCS+=  acpi_ec.c acpi_isab.c acpi_lid.c
+SRCS+=  acpi_dep_order.c acpi_ec.c acpi_isab.c acpi_lid.c
 SRCS+=  acpi_package.c
 # The PCI part of ACPI5 doesn't work with the current infrastructure
 SRCS+=	acpi_pci.c acpi_pcib.c acpi_pcib_acpi.c acpi_pcib_pci.c
