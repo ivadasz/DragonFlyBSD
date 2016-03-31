@@ -70,6 +70,7 @@ static int slot_printf(struct sdhci_slot *, const char *, ...)
 static void sdhci_set_clock(struct sdhci_slot *slot, uint32_t clock);
 static void sdhci_start(struct sdhci_slot *slot);
 static void sdhci_start_data(struct sdhci_slot *slot, struct mmc_data *data);
+static int  sdhci_card_present(struct sdhci_slot *slot, int state);
 
 static void sdhci_card_task(void *, int);
 
@@ -98,6 +99,20 @@ static void sdhci_card_task(void *, int);
 #define BCM577XX_CTRL_CLKSEL_DEFAULT	0x0
 #define BCM577XX_CTRL_CLKSEL_64MHZ	0x3
 
+static int
+sdhci_card_present(struct sdhci_slot *slot, int state)
+{
+	if ((state & SDHCI_CARD_PRESENT) == 0)
+		return 0;
+	else if (slot->presence == 0)
+		return 1;
+	else if (slot->presence == 1)
+		return 1;
+	else if (slot->presence == 2)
+		return 0;
+	else
+		return 1;
+}
 
 static void
 sdhci_getaddr(void *arg, bus_dma_segment_t *segs, int nsegs, int error)
@@ -161,8 +176,7 @@ sdhci_reset(struct sdhci_slot *slot, uint8_t mask)
 	int timeout;
 
 	if (slot->quirks & SDHCI_QUIRK_NO_CARD_NO_RESET) {
-		if (!(RD4(slot, SDHCI_PRESENT_STATE) &
-			SDHCI_CARD_PRESENT))
+		if (!sdhci_card_present(slot, RD4(slot, SDHCI_PRESENT_STATE)))
 			return;
 	}
 
@@ -486,7 +500,7 @@ sdhci_card_task(void *arg, int pending)
 	struct sdhci_slot *slot = arg;
 
 	SDHCI_LOCK(slot);
-	if (RD4(slot, SDHCI_PRESENT_STATE) & SDHCI_CARD_PRESENT) {
+	if (sdhci_card_present(slot, RD4(slot, SDHCI_PRESENT_STATE))) {
 		if (slot->dev == NULL) {
 			/* If card is present - attach mmc bus. */
 			slot->dev = device_add_child(slot->bus, "mmc", -1);
@@ -833,7 +847,7 @@ sdhci_start_command(struct sdhci_slot *slot, struct mmc_command *cmd)
 	state = RD4(slot, SDHCI_PRESENT_STATE);
 	/* Do not issue command if there is no card, clock or power.
 	 * Controller will not detect timeout without clock active. */
-	if ((state & SDHCI_CARD_PRESENT) == 0 ||
+	if (sdhci_card_present(slot, state) == 0 ||
 	    slot->power == 0 ||
 	    slot->clock == 0) {
 		cmd->error = MMC_ERR_FAILED;
@@ -1317,6 +1331,35 @@ sdhci_acmd_irq(struct sdhci_slot *slot)
 	sdhci_reset(slot, SDHCI_RESET_CMD);
 }
 
+/* inserted & 1 === card inserted, inserted & 2 === remember state */
+void
+sdhci_card_removed(struct sdhci_slot *slot, int inserted)
+{
+	SDHCI_LOCK(slot);
+	if (inserted & 2) {
+		/* Remember inserted/removed state */
+		if (inserted & 1)
+			slot->presence = 1;
+		else
+			slot->presence = 2;
+	} else {
+		slot->presence = 0;
+	}
+	if (inserted & 1) {
+		if (bootverbose || sdhci_debug)
+			slot_printf(slot, "Card inserted\n");
+		callout_reset(&slot->card_callout, hz / 2,
+		    sdhci_card_delay, slot);
+	} else {
+		if (bootverbose || sdhci_debug)
+			slot_printf(slot, "Card removed\n");
+		callout_stop(&slot->card_callout);
+		taskqueue_enqueue(taskqueue_swi,
+		    &slot->card_task);
+	}
+	SDHCI_UNLOCK(slot);
+}
+
 void
 sdhci_generic_intr(struct sdhci_slot *slot)
 {
@@ -1338,17 +1381,10 @@ sdhci_generic_intr(struct sdhci_slot *slot)
 		    (SDHCI_INT_CARD_INSERT | SDHCI_INT_CARD_REMOVE));
 
 		if (intmask & SDHCI_INT_CARD_REMOVE) {
-			if (bootverbose || sdhci_debug)
-				slot_printf(slot, "Card removed\n");
-			callout_stop(&slot->card_callout);
-			taskqueue_enqueue(taskqueue_swi,
-			    &slot->card_task);
+			sdhci_card_removed(slot, 0);
 		}
 		if (intmask & SDHCI_INT_CARD_INSERT) {
-			if (bootverbose || sdhci_debug)
-				slot_printf(slot, "Card inserted\n");
-			callout_reset(&slot->card_callout, hz / 2,
-			    sdhci_card_delay, slot);
+			sdhci_card_removed(slot, 1);
 		}
 		intmask &= ~(SDHCI_INT_CARD_INSERT | SDHCI_INT_CARD_REMOVE);
 	}

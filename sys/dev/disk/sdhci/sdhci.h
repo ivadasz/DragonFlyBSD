@@ -265,6 +265,7 @@
 struct sdhci_slot {
 	u_int		quirks;		/* Chip specific quirks */
 	u_int		caps;		/* Override SDHCI_CAPABILITIES */
+	u_int		presence;	/* 0 don't know, 1 = present, 2 = removed */
 	device_t	bus;		/* Bus device */
 	device_t	dev;		/* Slot device */
 	u_char		num;		/* Slot number */
@@ -317,6 +318,7 @@ int sdhci_generic_request(device_t brdev, device_t reqdev, struct mmc_request *r
 int sdhci_generic_get_ro(device_t brdev, device_t reqdev);
 int sdhci_generic_acquire_host(device_t brdev, device_t reqdev);
 int sdhci_generic_release_host(device_t brdev, device_t reqdev);
+void sdhci_card_removed(struct sdhci_slot *slot, int inserted);
 void sdhci_generic_intr(struct sdhci_slot *slot);
 uint32_t sdhci_generic_min_freq(device_t brdev, struct sdhci_slot *slot);
 
