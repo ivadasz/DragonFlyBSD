@@ -33,8 +33,8 @@
 #include <sys/rman.h>
 #include <sys/taskqueue.h>
 
-#include "acpi.h"
 #include "opt_acpi.h"
+#include "acpi.h"
 #include <dev/acpica/acpivar.h>
 
 #include <bus/pci/pcivar.h>
@@ -44,6 +44,8 @@
 #include <bus/mmc/bridge.h>
 #include <bus/mmc/mmcreg.h>
 #include <bus/mmc/mmcbrvar.h>
+
+#include <bus/gpio/gpio_acpi/gpio_acpivar.h>
 
 #include "sdhci.h"
 #include "mmcbr_if.h"
@@ -59,6 +61,9 @@ struct sdhci_acpi_softc {
 
 	struct sdhci_slot slot;
 	struct resource	*mem_res;	/* Memory resource */
+
+	struct gpioint_resource *gpioint_res;
+	struct gpioio_resource *gpioio_res;
 };
 
 static uint8_t
@@ -140,6 +145,7 @@ sdhci_acpi_write_multi_4(device_t dev, struct sdhci_slot *slot,
 }
 
 static void sdhci_acpi_intr(void *arg);
+static void sdhci_acpi_gpioint(void *arg);
 
 static int
 sdhci_acpi_probe(device_t dev)
@@ -183,6 +189,14 @@ sdhci_acpi_attach(device_t dev)
 		goto error;
 	}
 
+	sc->gpioint_res = gpioint_alloc_resource(dev, 0);
+	if (sc->gpioint_res == NULL)
+		device_printf(dev, "Gpio Interrupt allocation failed\n");
+
+	sc->gpioio_res = gpioio_alloc_resource(dev, 0);
+	if (sc->gpioio_res == NULL)
+		device_printf(dev, "Gpio Pin allocation failed\n");
+
 	pci_set_powerstate(dev, PCI_POWERSTATE_D0);
 	sc->slot.quirks = 0;
 	if (sdhci_init_slot(dev, &sc->slot, 0) != 0) {
@@ -198,6 +212,12 @@ sdhci_acpi_attach(device_t dev)
 	    sdhci_acpi_intr, sc, &sc->intrhand, NULL);
 	if (err)
 		device_printf(dev, "Can't setup IRQ\n");
+
+	/* Enable card detection interrupt */
+	if (sc->gpioint_res != NULL) {
+		gpioint_establish_interrupt(sc->gpioint_res,
+		    sdhci_acpi_gpioint, sc);
+	}
 
 	/* Process cards detection. */
 	sdhci_start_slot(&sc->slot);
@@ -220,6 +240,16 @@ static int
 sdhci_acpi_detach(device_t dev)
 {
 	struct sdhci_acpi_softc *sc = device_get_softc(dev);
+
+	if (sc->gpioint_res != NULL) {
+		/* Disable card detection interrupt */
+		gpioint_release_interrupt(sc->gpioint_res);
+		gpioint_free_resource(dev, sc->gpioint_res);
+	}
+
+	if (sc->gpioio_res != NULL) {
+		gpioio_free_resource(dev, sc->gpioio_res);
+	}
 
 	bus_teardown_intr(dev, sc->irq_res, sc->intrhand);
 	bus_release_resource(dev, SYS_RES_IRQ,
@@ -260,6 +290,25 @@ sdhci_acpi_intr(void *arg)
 	struct sdhci_acpi_softc *sc = (struct sdhci_acpi_softc *)arg;
 
 	sdhci_generic_intr(&sc->slot);
+}
+
+static void
+sdhci_acpi_gpioint(void *arg)
+{
+	struct sdhci_acpi_softc *sc = (struct sdhci_acpi_softc *)arg;
+	int value;
+
+	if (sc->gpioio_res == NULL) {
+		sdhci_card_removed(&sc->slot, 1);
+		return;
+	}
+
+	/* On intel SoC: 0 == card inserted, 1 == card removed */
+	value = gpioio_read_pin(sc->gpioio_res, 0);
+	if (value == 0)
+		sdhci_card_removed(&sc->slot, 3);
+	else
+		sdhci_card_removed(&sc->slot, 2);
 }
 
 static device_method_t sdhci_methods[] = {
@@ -303,4 +352,6 @@ static devclass_t sdhci_acpi_devclass;
 
 DRIVER_MODULE(sdhci_acpi, acpi, sdhci_acpi_driver, sdhci_acpi_devclass, NULL,
     NULL);
+MODULE_DEPEND(sdhci_acpi, acpi, 1, 1, 1);
+MODULE_DEPEND(sdhci_acpi, gpio_acpi, 1, 1, 1);
 MODULE_DEPEND(sdhci_acpi, sdhci, 1, 1, 1);
