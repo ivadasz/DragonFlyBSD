@@ -47,6 +47,8 @@
 #include <dev/acpica/acpivar.h>
 #include <contrib/dev/acpica/source/include/amlcode.h>
 
+#include "smbus_acpivar.h"
+
 #include <bus/smbus/smbconf.h>
 
 #include "smbus_if.h"
@@ -60,6 +62,11 @@ struct gsb_buffer {
 struct acpi_i2c_handler_data {
 	struct acpi_connection_info info;
 	device_t dev;
+};
+
+struct iicserial_resource {
+	device_t provider;
+	uint16_t address;
 };
 
 struct smbus_acpi_softc {
@@ -241,6 +248,71 @@ err:
 	return (s);
 }
 
+static struct iicserial_resource *
+iic_do_alloc_resource(ACPI_HANDLE handle, ACPI_RESOURCE_I2C_SERIALBUS *serial)
+{
+	struct iicserial_resource *r;
+	device_t provider;
+
+	provider = acpi_get_resource_provider(handle,
+	    serial->ResourceSource.StringPtr, "i2cserial");
+	if (provider == NULL)
+		return (NULL);
+	/* XXX Try to reserve the I2c address here.  */
+	r = kmalloc(sizeof(*r), M_DEVBUF, M_WAITOK | M_ZERO);
+	r->provider = provider;
+	r->address = serial->SlaveAddress;
+	return (r);
+}
+
+/* I2cSerialBus ACPI resource handling */
+struct iicserial_resource *
+iic_alloc_resource(device_t dev, int rid)
+{
+	ACPI_HANDLE handle;
+	ACPI_RESOURCE_I2C_SERIALBUS *serial;
+	ACPI_RESOURCE *res, *end;
+	ACPI_BUFFER b;
+	ACPI_STATUS s;
+	struct iicserial_resource *r = NULL;
+	int n = 0;
+
+	handle = acpi_get_handle(dev);
+	b.Pointer = NULL;
+	b.Length = ACPI_ALLOCATE_BUFFER;
+	s = AcpiGetCurrentResources(handle, &b);
+	if (ACPI_FAILURE(s))
+		return (NULL);
+
+	end = (ACPI_RESOURCE *)((char *)b.Pointer + b.Length);
+	for (res = (ACPI_RESOURCE *)b.Pointer; res < end && r == NULL;
+	    res = ACPI_NEXT_RESOURCE(res)) {
+		if (res->Type == ACPI_RESOURCE_TYPE_END_TAG)
+			break;
+		if (res->Type == ACPI_RESOURCE_TYPE_SERIAL_BUS) {
+			serial = (ACPI_RESOURCE_I2C_SERIALBUS *)&res->Data;
+			if (serial->Type != ACPI_RESOURCE_SERIAL_TYPE_I2C)
+				continue;
+			if (n < rid) {
+				n++;
+				continue;
+			}
+			r = iic_do_alloc_resource(handle, serial);
+			break;
+		}
+	}
+
+	AcpiOsFree(b.Pointer);
+	return (r);
+}
+
+void
+iic_free_resource(device_t dev, struct iicserial_resource *resource)
+{
+	acpi_put_resource_provider(resource->provider);
+	kfree(resource, M_DEVBUF);
+}
+
 static int
 smbus_acpi_probe(device_t dev)
 {
@@ -262,6 +334,8 @@ smbus_acpi_attach(device_t dev)
 
 	smbus_acpi_install_address_space_handler(sc);
 
+	acpi_add_resource_provider(sc->parent, "i2cserial");
+
 	return (0);
 }
 
@@ -269,6 +343,8 @@ static int
 smbus_acpi_detach(device_t dev)
 {
 	struct smbus_acpi_softc *sc = device_get_softc(dev);
+
+	acpi_remove_resource_provider(sc->parent);
 
 	smbus_acpi_remove_address_space_handler(sc);
 
@@ -294,6 +370,7 @@ static devclass_t smbacpi_devclass;
 
 DRIVER_MODULE(smbacpi, ig4iic, smbacpi_driver, smbacpi_devclass,
     NULL, NULL);
+
 MODULE_DEPEND(smbacpi, acpi, 1, 1, 1);
 MODULE_DEPEND(smbacpi, smbus, 1, 1, 1);
 MODULE_VERSION(smbacpi, 1);
