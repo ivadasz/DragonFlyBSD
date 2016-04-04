@@ -43,6 +43,7 @@
 #include <sys/ctype.h>
 #include <sys/linker.h>
 #include <sys/power.h>
+#include <sys/queue.h>
 #include <sys/sbuf.h>
 #include <sys/device.h>
 #include <sys/spinlock.h>
@@ -3754,3 +3755,91 @@ acpi_pm_register(void *arg)
 }
 
 SYSINIT(power, SI_BOOT2_KLD, SI_ORDER_ANY, acpi_pm_register, 0);
+
+struct resource_provider {
+	device_t dev;
+	u_int refcnt;
+	char type[64];
+	TAILQ_ENTRY(resource_provider) link;
+};
+
+static struct lock resource_provider_lk;
+
+LOCK_SYSINIT(resource_provider, &resource_provider_lk, "acpires", 0);
+
+static TAILQ_HEAD(resource_provider_list, resource_provider) providers =
+    TAILQ_HEAD_INITIALIZER(providers);
+
+void
+acpi_add_resource_provider(device_t dev, const char *type)
+{
+	struct resource_provider *p;
+
+	p = kmalloc(sizeof(*p), M_ACPIDEV, M_WAITOK | M_ZERO);
+	p->dev = dev;
+	strlcpy(p->type, type, sizeof(p->type));
+	p->refcnt = 0;
+	lockmgr(&resource_provider_lk, LK_EXCLUSIVE);
+	TAILQ_INSERT_TAIL(&providers, p, link);
+	lockmgr(&resource_provider_lk, LK_RELEASE);
+}
+
+void
+acpi_remove_resource_provider(device_t dev)
+{
+	struct resource_provider *p;
+
+	lockmgr(&resource_provider_lk, LK_EXCLUSIVE);
+	TAILQ_FOREACH(p, &providers, link) {
+		if (p->dev == dev) {
+			TAILQ_REMOVE(&providers, p, link);
+			lockmgr(&resource_provider_lk, LK_RELEASE);
+			KKASSERT(p->refcnt == 0);
+			kfree(p, M_ACPIDEV);
+			return;
+		}
+	}
+	lockmgr(&resource_provider_lk, LK_RELEASE);
+	device_printf(dev, "Was not in acpi resource provider list\n");
+}
+
+device_t
+acpi_get_resource_provider(ACPI_HANDLE handle, char *name,
+    const char *type)
+{
+	struct resource_provider *p;
+	ACPI_HANDLE source;
+	ACPI_STATUS status;
+
+	status = acpi_GetHandleInScope(handle, name, &source);
+	if (ACPI_FAILURE(status))
+		return NULL;
+	lockmgr(&resource_provider_lk, LK_EXCLUSIVE);
+	TAILQ_FOREACH(p, &providers, link) {
+		if (acpi_get_handle(p->dev) == source &&
+		    strcmp(p->type, type) == 0) {
+			p->refcnt++;
+			lockmgr(&resource_provider_lk, LK_RELEASE);
+			return p->dev;
+		}
+	}
+	lockmgr(&resource_provider_lk, LK_RELEASE);
+
+	return (NULL);
+}
+
+void
+acpi_put_resource_provider(device_t dev)
+{
+	struct resource_provider *p;
+
+	lockmgr(&resource_provider_lk, LK_EXCLUSIVE);
+	TAILQ_FOREACH(p, &providers, link) {
+		if (p->dev == dev) {
+			p->refcnt--;
+			lockmgr(&resource_provider_lk, LK_RELEASE);
+			return;
+		}
+	}
+	lockmgr(&resource_provider_lk, LK_RELEASE);
+}
