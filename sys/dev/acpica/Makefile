@@ -110,8 +110,9 @@ SRCS+=	pmtimer.c
 
 #acpi_wakecode.o: acpi_wakecode.S
 
-SUBDIR=	acpi_asus acpi_dock acpi_fujitsu acpi_hp acpi_panasonic acpi_pvpanic
-SUBDIR+=acpi_sony acpi_thinkpad acpi_toshiba acpi_video acpi_wmi aibs
+SUBDIR=	acpi_array acpi_asus acpi_dock acpi_fujitsu acpi_hp acpi_panasonic
+SUBDIR+=acpi_pvpanic acpi_sony acpi_thinkpad acpi_toshiba acpi_video acpi_wmi
+SUBDIR+=aibs
 
 # Empty for concurrent build
 #
