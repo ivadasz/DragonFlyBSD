@@ -313,6 +313,23 @@ iic_free_resource(device_t dev, struct iicserial_resource *resource)
 	kfree(resource, M_DEVBUF);
 }
 
+int
+iicserial_bread(struct iicserial_resource *resource, char cmd, u_char *count,
+    char *buf)
+{
+	return SMBUS_BREAD(resource->provider, resource->address, cmd, count,
+	    buf);
+}
+
+int
+iicserial_rawtrans(struct iicserial_resource *resource,
+    char *wbuf, int wcount, char *rbuf, int rcount, int *actualp)
+{
+	return SMBUS_TRANS(resource->provider, resource->address, 0,
+			   SMB_TRANS_NOCMD | SMB_TRANS_NOCNT | SMB_TRANS_7BIT,
+			   wbuf, wcount, rbuf, rcount, actualp);
+}
+
 static int
 smbus_acpi_probe(device_t dev)
 {
