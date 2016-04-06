@@ -2186,6 +2186,7 @@ device		cmx		# Omnikey CardMan 4040 smartcard reader
 device		amdsbwd		# AMD South Bridge watchdog
 device		gpio		# Enable support for the gpio framework
 device		ichwd		# Intel ICH watchdog interrupt timer
+device		iichid		# I2C HID device
 device		tbridge		# regression testing
 
 #
