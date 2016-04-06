@@ -38,8 +38,13 @@
 /* I2cSerialBus resources */
 struct iicserial_resource;
 
-struct iicserial_resource *iic_alloc_resource(device_t dev, int rid);
-void iic_free_resource(device_t dev, struct iicserial_resource *resource);
-/* XXX smbus accesses via "struct iicserial_resource" */
+struct	iicserial_resource *iic_alloc_resource(device_t dev, int rid);
+void	iic_free_resource(device_t dev, struct iicserial_resource *resource);
+
+int	iicserial_bread(struct iicserial_resource *resource, char cmd,
+	    u_char *count, char *buf);
+int	iicserial_rawtrans(struct iicserial_resource *resource,
+	    char *wbuf, int wcount, char *rbuf, int rcount, int *actualp);
+/* XXX more smbus accesses via "struct iicserial_resource" */
 
 #endif
