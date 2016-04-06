@@ -1845,6 +1845,7 @@ dev/misc/orm/orm.c		optional isa
 dev/misc/gpio/gpio.c		optional gpio
 dev/misc/gpio/gpio_led.c	optional gpio
 dev/misc/ichwd/ichwd.c		optional ichwd
+dev/misc/iichid/iichid.c	optional iichid smbacpi
 dev/misc/tbridge/safe_mem.c	optional tbridge
 dev/misc/tbridge/tbridge.c	optional tbridge
 bus/isa/pnp.c			optional isa

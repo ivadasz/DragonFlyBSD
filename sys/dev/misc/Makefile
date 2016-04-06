@@ -1,4 +1,4 @@
-SUBDIR= amdsbwd cmx cpuctl dcons ecc ichwd ipmi joy kbdmux lpbb \
+SUBDIR= amdsbwd cmx cpuctl dcons ecc ichwd iichid ipmi joy kbdmux lpbb \
 	nmdm pcfclock putter snp syscons tbridge coremctl dimm aperf
 
 # Empty for concurrent build
