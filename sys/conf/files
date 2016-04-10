@@ -2778,6 +2778,7 @@ bus/u4b/usb_dynamic.c			optional usb
 bus/u4b/usb_error.c			optional usb
 bus/u4b/usb_generic.c			optional usb
 bus/u4b/usb_handle_request.c		optional usb
+bus/u4b/hid_common.c			optional usb
 bus/u4b/usb_hid.c			optional usb
 bus/u4b/usb_hub.c			optional usb
 bus/u4b/usb_lookup.c			optional usb
