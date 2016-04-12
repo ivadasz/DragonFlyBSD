@@ -139,6 +139,8 @@ static void	iichid_notify(struct iichid_softc *sc);
 static void	iichid_input(struct iichid_softc *sc, uint16_t x, uint16_t y,
 		    int pressed);
 
+static int	uhidev_maxrepid(void *buf, int len);
+
 SYSCTL_NODE(_hw, OID_AUTO, iichid, CTLFLAG_RD, 0, "iichid driver");
 
 int iichid_debug = 0;
@@ -401,6 +403,9 @@ iichid_init_digitizer(struct iichid_softc *sc)
 	u_char *buf = (u_char *)sc->report_descriptor;
 	uint32_t len = sc->hid_descriptor.wReportDescLength;
 	int flags, isize;
+
+	int nrepid = uhidev_maxrepid(buf, len);
+	device_printf(sc->dev, "nrepid=%d\n", nrepid);
 
 	isize = hid_report_size(buf, len, hid_input, &sc->sc_iid);
 	device_printf(sc->dev, "%s: isize=%d sc->sc_iid=0x%02x\n",
@@ -808,6 +813,22 @@ iichid_find_active_state(struct iichid_softc *sc)
 }
 
 /* device_if functions */
+static int
+uhidev_maxrepid(void *buf, int len)
+{
+	struct hid_data *d;
+	struct hid_item h;
+	int maxid;
+
+	maxid = -1;
+	h.report_ID = 0;
+	for (d = hid_start_parse(buf, len, hid_input); hid_get_item(d, &h); )
+		if (h.report_ID > maxid)
+			maxid = h.report_ID;
+	hid_end_parse(d);
+	return (maxid);
+}
+
 static int
 iichid_probe(device_t dev)
 {
