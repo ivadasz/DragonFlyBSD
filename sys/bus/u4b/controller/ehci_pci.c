@@ -57,6 +57,7 @@
 #include <sys/sysctl.h>
 #include <sys/unistd.h>
 #include <sys/callout.h>
+#include <sys/taskqueue.h>
 #include <sys/malloc.h>
 #include <sys/priv.h>
 
