@@ -39,8 +39,11 @@
 #include <sys/sysctl.h>
 #include <sys/unistd.h>
 #include <sys/callout.h>
+#include <sys/taskqueue.h>
 #include <sys/malloc.h>
 #include <sys/priv.h>
+
+#include <bus/pci/pcivar.h>
 
 #include <bus/u4b/usb.h>
 #include <bus/u4b/usbdi.h>
@@ -156,6 +159,45 @@ usb_root_mount_rel(struct usb_bus *bus)
 }
 #endif
 
+static void
+do_runtime_suspend(void *context, int pending)
+{
+	usb_suspend(context);
+}
+
+static void
+do_runtime_resume(void *context, int pending)
+{
+	usb_resume(context);
+}
+
+static int
+usb_sysctl_suspend(SYSCTL_HANDLER_ARGS)
+{
+	device_t dev = arg1;
+	struct usb_bus *bus = device_get_softc(dev);
+	int error, val;
+
+	val = bus->is_suspended;
+	error = sysctl_handle_int(oidp, &val, 0, req);
+	if (error || req->newptr == NULL)
+		return error;
+
+	if (val != 0 && val != 1)
+		return EINVAL;
+
+	if (val != bus->is_suspended) {
+		bus->is_suspended = val;
+		if (bus->is_suspended) {
+			taskqueue_enqueue(taskqueue_swi_mp, &bus->suspend_task);
+		} else {
+			taskqueue_enqueue(taskqueue_swi_mp, &bus->resume_task);
+		}
+	}
+
+	return 0;
+}
+
 /*------------------------------------------------------------------------*
  *	usb_attach
  *------------------------------------------------------------------------*/
@@ -163,6 +205,8 @@ static int
 usb_attach(device_t dev)
 {
 	struct usb_bus *bus = device_get_ivars(dev);
+	struct sysctl_ctx_list *ctx;
+	struct sysctl_oid *tree;
 
 	DPRINTF("\n");
 
@@ -178,6 +222,18 @@ usb_attach(device_t dev)
 	}
 #endif
 	usb_attach_sub(dev, bus);
+
+	TASK_INIT(&bus->suspend_task, 0, do_runtime_suspend, dev);
+	TASK_INIT(&bus->resume_task, 0, do_runtime_resume, dev);
+
+	ctx = device_get_sysctl_ctx(dev);
+	tree = device_get_sysctl_tree(dev);
+
+	bus->is_suspended = 0;
+	SYSCTL_ADD_PROC(ctx, SYSCTL_CHILDREN(tree), OID_AUTO, "runtime_suspend",
+			CTLTYPE_INT | CTLFLAG_RW,
+			dev, 0, usb_sysctl_suspend, "I",
+			"Runtime-suspend usb host controller.");
 
 	return (0);			/* return success */
 }
@@ -504,6 +560,8 @@ usb_bus_suspend(struct usb_proc_msg *pm)
 	if (do_unlock)
 		usbd_enum_unlock(udev);
 
+	device_printf(bus->bdev, "Setting controller to D3 state\n");
+	pci_set_powerstate(bus->bdev, PCI_POWERSTATE_D3);
 	USB_BUS_LOCK(bus);
 }
 
@@ -529,6 +587,8 @@ usb_bus_resume(struct usb_proc_msg *pm)
 		return;
 
 	USB_BUS_UNLOCK(bus);
+	device_printf(bus->bdev, "Setting controller to D0 state\n");
+	pci_set_powerstate(bus->bdev, PCI_POWERSTATE_D0);
 
 	do_unlock = usbd_enum_lock(udev);
 #if 0
