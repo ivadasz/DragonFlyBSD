@@ -57,6 +57,10 @@ struct usb_bus {
 	struct root_hold_token *bus_roothold;
 #endif
 
+	int is_suspended;
+	struct task suspend_task;
+	struct task resume_task;
+
 #if USB_HAVE_PER_BUS_PROCESS
 #define	USB_BUS_GIANT_PROC(bus) (&(bus)->giant_callback_proc)
 #define	USB_BUS_NON_GIANT_PROC(bus) (&(bus)->non_giant_callback_proc)
