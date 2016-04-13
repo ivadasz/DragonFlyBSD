@@ -49,6 +49,7 @@
 #include <net/route.h>
 #include <sys/sysctl.h>
 #include <sys/condvar.h>
+#include <sys/taskqueue.h>
 
 #include <bus/u4b/usb.h>
 #include <bus/u4b/usbdi.h>
