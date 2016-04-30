@@ -455,17 +455,24 @@ gpio_cherryview_check_io_pin(struct gpio_intel_softc *sc, uint16_t pin,
 		/* Verify that RX is enabled */
 		if ((reg1 & CHV_GPIO_CTL0_GPIOCFG_MASK) != 0 &&
 		    (reg1 & CHV_GPIO_CTL0_GPIOCFG_MASK) != 0x200) {
+			device_printf(sc->dev,
+			    "pin %u has wrong gpiocfg: 0x%08x\n", pin, reg1);
 			return (0);
 		}
 	}
 	reg2 = chvgpio_read(sc, PIN_CTL1(pin));
 	if (flags & (1U << 1)) {
 		/* Verify that interrupt is disabled */
-		if ((reg2 & CHV_GPIO_CTL1_INTCFG_MASK) != 0)
+		if ((reg2 & CHV_GPIO_CTL1_INTCFG_MASK) != 0) {
+			device_printf(sc->dev,
+			    "pin %u has wrong intcfg: 0x%08x\n", pin, reg2);
 			return (0);
+		}
 		/* Verify that TX is enabled */
 		if ((reg1 & CHV_GPIO_CTL0_GPIOCFG_MASK) != 0 &&
 		    (reg1 & CHV_GPIO_CTL0_GPIOCFG_MASK) != 0x100) {
+			device_printf(sc->dev,
+			    "pin %u has TX disabled: 0x%08x\n", pin, reg1);
 			return (0);
 		}
 	}

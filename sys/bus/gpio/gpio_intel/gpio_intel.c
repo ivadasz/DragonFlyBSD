@@ -359,6 +359,7 @@ gpio_intel_read_pin(device_t dev, void *cookie)
 	struct pin_io_map *map = (struct pin_io_map *)cookie;
 	int val;
 
+	KKASSERT(map->flags & (1U << 0));
 	KKASSERT(map->pin >= 0);
 	KKASSERT(gpio_intel_pin_exists(sc, map->pin));
 
@@ -375,6 +376,7 @@ gpio_intel_write_pin(device_t dev, void *cookie, int value)
 	struct gpio_intel_softc *sc = device_get_softc(dev);
 	struct pin_io_map *map = (struct pin_io_map *)cookie;
 
+	KKASSERT(map->flags & (1U << 1));
 	KKASSERT(map->pin >= 0);
 	KKASSERT(gpio_intel_pin_exists(sc, map->pin));
 
