@@ -361,7 +361,10 @@ smbus_acpi_detach(device_t dev)
 {
 	struct smbus_acpi_softc *sc = device_get_softc(dev);
 
-	acpi_remove_resource_provider(sc->parent);
+	/* Fail detaching if any SMBUS resources are currently allocated */
+	/* XXX We should try to use the device_busy() / device_unbusy() API */
+	if (acpi_remove_resource_provider(sc->parent) != 0)
+		return (EBUSY);
 
 	smbus_acpi_remove_address_space_handler(sc);
 
