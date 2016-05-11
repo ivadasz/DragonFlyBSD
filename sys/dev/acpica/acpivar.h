@@ -467,7 +467,7 @@ int		acpi_acad_get_acline(int *);
 
 /* Abstraction for I2cSerialBus, GpioInt and GpioIo resources */
 void		acpi_add_resource_provider(device_t dev, const char *type);
-void		acpi_remove_resource_provider(device_t dev);
+int		acpi_remove_resource_provider(device_t dev);
 device_t	acpi_get_resource_provider(ACPI_HANDLE handle, char *name,
 		    const char *type);
 void		acpi_put_resource_provider(device_t dev);

@@ -3744,23 +3744,30 @@ acpi_add_resource_provider(device_t dev, const char *type)
 	lockmgr(&resource_provider_lk, LK_RELEASE);
 }
 
-void
+int
 acpi_remove_resource_provider(device_t dev)
 {
 	struct resource_provider *p;
 
 	lockmgr(&resource_provider_lk, LK_EXCLUSIVE);
 	TAILQ_FOREACH(p, &providers, link) {
+		if (p->dev == dev && p->refcnt != 0) {
+			lockmgr(&resource_provider_lk, LK_RELEASE);
+			return (1);
+		}
+	}
+	TAILQ_FOREACH(p, &providers, link) {
 		if (p->dev == dev) {
 			TAILQ_REMOVE(&providers, p, link);
 			lockmgr(&resource_provider_lk, LK_RELEASE);
 			KKASSERT(p->refcnt == 0);
 			kfree(p, M_ACPIDEV);
-			return;
+			return (0);
 		}
 	}
 	lockmgr(&resource_provider_lk, LK_RELEASE);
 	device_printf(dev, "Was not in acpi resource provider list\n");
+	return (0);
 }
 
 device_t
