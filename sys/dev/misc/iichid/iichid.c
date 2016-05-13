@@ -776,10 +776,16 @@ iichid_input(struct iichid_softc *sc, uint16_t x, uint16_t y, int pressed)
 	}
 	track = &sc->track[sc->fill];
 	bzero(track, sizeof(*track));
-	sc->fill++;
 	track->x = x;
 	track->y = y;
 	track->pressure = pressed ? 0xffff : 0;
+	if (sc->fill > 0) {
+		if (track->x == sc->track[sc->fill - 1].x &&
+		    track->y == sc->track[sc->fill - 1].y &&
+		    track->pressure == sc->track[sc->fill - 1].pressure)
+			goto done;
+	}
+	sc->fill++;
 	if (pressed) {
 		if (sc->state) {
 			track->report = IICHID_REPORT_MOVE;
