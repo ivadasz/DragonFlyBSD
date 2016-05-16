@@ -73,6 +73,7 @@ struct iichid_softc {
 	struct iic_hid_descriptor hid_descriptor;
 	u_char		*report_descriptor;
 	u_char		*input_report;
+	int		poweron;
 	struct lock	lk;
 
 	struct kqinfo	kqinfo;
@@ -292,14 +293,17 @@ static int
 iichid_setpower(struct iichid_softc *sc, int on)
 {
 	uint16_t req = (0x08 << 8) | (on ? 0x00 : 0x01);
+	int error = 0;
 
+	lockmgr(&sc->lk, LK_EXCLUSIVE);
 	if (iichid_writereg16(sc, sc->hid_descriptor.wCommandRegister, req)
 	    != 0) {
 		device_printf(sc->dev, "%s(sc, %d) failed\n", __func__, on);
-		return (1);
+		error = 1;
 	}
+	lockmgr(&sc->lk, LK_RELEASE);
 
-	return (0);
+	return (error);
 }
 
 static int
@@ -500,6 +504,13 @@ iichid_open(struct dev_open_args *ap)
 	if (sc->count != 0)
 		return (EBUSY);
 
+	if (sc->poweron) {
+		device_printf(sc->dev, "Already powered on\n");
+	} else {
+		iichid_setpower(sc, 1);
+		sc->poweron = 1;
+	}
+
 	sc->count++;
 
 	return (0);
@@ -517,6 +528,13 @@ iichid_close(struct dev_close_args *ap)
 	if (sc->count == 0) {
 		/* This is not supposed to happen. */
 		return (0);
+	}
+
+	if (sc->poweron) {
+		iichid_setpower(sc, 0);
+		sc->poweron = 0;
+	} else {
+		device_printf(sc->dev, "Already powered off\n");
 	}
 
 	sc->count--;
@@ -922,6 +940,9 @@ iichid_attach(device_t dev)
 		return (ENXIO);
 	}
 
+	iichid_setpower(sc, 0);
+	sc->poweron = 0;
+
 	if (hid_is_digitizer(sc->report_descriptor,
 	    sc->hid_descriptor.wReportDescLength)) {
 		device_printf(sc->dev, "I2C HID digitizer found\n");
@@ -960,7 +981,10 @@ iichid_detach(device_t dev)
 	if (sc->intres != NULL)
 		gpioint_release_interrupt(sc->intres);
 
-	iichid_setpower(sc, 0);
+	if (sc->poweron) {
+		iichid_setpower(sc, 0);
+		sc->poweron = 0;
+	}
 
 	pci_set_powerstate(dev, PCI_POWERSTATE_D3);
 
