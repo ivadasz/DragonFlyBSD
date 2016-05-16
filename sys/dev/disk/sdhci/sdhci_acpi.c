@@ -145,7 +145,7 @@ sdhci_acpi_write_multi_4(device_t dev, struct sdhci_slot *slot,
 }
 
 static void sdhci_acpi_intr(void *arg);
-static void sdhci_acpi_gpioint(void *arg);
+static gpio_intr_t sdhci_acpi_gpioint;
 
 static int
 sdhci_acpi_probe(device_t dev)
@@ -293,7 +293,7 @@ sdhci_acpi_intr(void *arg)
 }
 
 static void
-sdhci_acpi_gpioint(void *arg)
+sdhci_acpi_gpioint(void *arg, enum gpio_event event)
 {
 	struct sdhci_acpi_softc *sc = (struct sdhci_acpi_softc *)arg;
 	int value;

@@ -208,6 +208,36 @@ gpio_cherryview_init(struct gpio_intel_softc *sc)
 	chvgpio_write(sc, CHV_GPIO_REG_IS, 0xffff);
 }
 
+static enum gpio_event
+gpio_cherryview_event_type(struct gpio_intel_softc *sc,
+    struct pin_intr_map *mapping)
+{
+	int event;
+
+	if (mapping->is_level)
+		return (GPIO_EVENT_LEVEL);
+
+	switch (mapping->polarity) {
+	case ACPI_ACTIVE_HIGH:
+		event = GPIO_EVENT_RISING;
+		break;
+	case ACPI_ACTIVE_LOW:
+		event = GPIO_EVENT_FALLING;
+		break;
+	case ACPI_ACTIVE_BOTH:
+		if (gpio_cherryview_read_pin(sc, mapping->pin))
+			event = GPIO_EVENT_RISING;
+		else
+			event = GPIO_EVENT_FALLING;
+		break;
+	default:
+		event = GPIO_EVENT_UNKNOWN;
+		break;
+	}
+
+	return (event);
+}
+
 static void
 gpio_cherryview_intr(void *arg)
 {
@@ -225,8 +255,10 @@ gpio_cherryview_intr(void *arg)
 				chvgpio_write(sc, CHV_GPIO_REG_IS,
 				    (1U << i));
 			}
-			if (mapping->pin != -1 && mapping->handler != NULL)
-				mapping->handler(mapping->arg);
+			if (mapping->pin != -1 && mapping->handler != NULL) {
+				mapping->handler(mapping->arg,
+				    gpio_cherryview_event_type(sc, mapping));
+			}
 			if (mapping->is_level) {
 				chvgpio_write(sc, CHV_GPIO_REG_IS,
 				    (1U << i));
@@ -366,6 +398,7 @@ gpio_cherryview_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
 
 	sc->intrmaps[i].pin = pin;
 	sc->intrmaps[i].intidx = i;
+	sc->intrmaps[i].polarity = polarity;
 	sc->intrmaps[i].orig_intcfg = intcfg;
 	sc->intrmaps[i].orig_gpiocfg = gpiocfg;
 
@@ -392,6 +425,7 @@ gpio_cherryview_unmap_intr(struct gpio_intel_softc *sc,
 
 	map->pin = -1;
 	map->intidx = -1;
+	map->polarity = 0;
 	map->is_level = 0;
 	map->orig_intcfg = 0;
 	map->orig_gpiocfg = 0;

@@ -132,7 +132,7 @@ static int	iichid_reset(struct iichid_softc *sc);
 static int	iichid_setpower(struct iichid_softc *sc, int on);
 static int	iichid_fetch_report(struct iichid_softc *sc, int *actualp);
 static void	iichid_handle_input(struct iichid_softc *sc, int count);
-static void	iichid_intr(void *arg);
+static void	iichid_intr(void *arg, enum gpio_event event);
 static void	iichid_init_digitizer(struct iichid_softc *sc);
 
 static void	iichid_find_active_state(struct iichid_softc *sc);
@@ -382,7 +382,7 @@ iichid_handle_input(struct iichid_softc *sc, int count)
 }
 
 static void
-iichid_intr(void *arg)
+iichid_intr(void *arg, enum gpio_event event)
 {
 	struct iichid_softc *sc = (struct iichid_softc *)arg;
 	int count, val;

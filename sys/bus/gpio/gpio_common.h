@@ -32,27 +32,16 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _GPIO_ACPIVAR_H
-#define _GPIO_ACPIVAR_H
+#ifndef _GPIO_COMMON_H
+#define _GPIO_COMMON_H
 
-#include <bus/gpio/gpio_common.h>
+enum gpio_event {
+	GPIO_EVENT_UNKNOWN = 0,
+	GPIO_EVENT_RISING,
+	GPIO_EVENT_FALLING,
+	GPIO_EVENT_LEVEL,
+};
 
-/* GpioInt resources */
-struct gpioint_resource;
-
-struct gpioint_resource *gpioint_alloc_resource(device_t dev, int rid);
-void	gpioint_free_resource(device_t dev, struct gpioint_resource *resource);
-void	gpioint_establish_interrupt(struct gpioint_resource *resource,
-	    gpio_intr_t handler, void *context);
-void	gpioint_release_interrupt(struct gpioint_resource *resource);
-
-/* GpioIo resources */
-struct gpioio_resource;
-
-struct gpioio_resource *gpioio_alloc_resource(device_t dev, int rid);
-void	gpioio_free_resource(device_t dev, struct gpioio_resource *resource);
-int	gpioio_read_pin(struct gpioio_resource *resource, u_int index);
-void	gpioio_write_pin(struct gpioio_resource *resource, u_int index,
-	    int value);
+typedef void gpio_intr_t(void *, enum gpio_event);
 
 #endif
