@@ -61,7 +61,7 @@ static int	gpio_intel_detach(device_t dev);
 static int	gpio_intel_alloc_intr(device_t dev, u_int pin, int trigger,
 		    int polarity, int termination, void **cookiep);
 static void	gpio_intel_setup_intr(device_t dev, void *cookie, void *arg,
-		    driver_intr_t *handler);
+		    gpio_intr_t *handler);
 static void	gpio_intel_teardown_intr(device_t dev, void *cookie);
 static void	gpio_intel_free_intr(device_t dev, void *cookie);
 static int	gpio_intel_alloc_io_pin(device_t dev, u_int pin, int flags,
@@ -264,7 +264,7 @@ gpio_intel_free_intr(device_t dev, void *cookie)
 
 static void
 gpio_intel_setup_intr(device_t dev, void *cookie, void *arg,
-    driver_intr_t *handler)
+    gpio_intr_t *handler)
 {
 	struct gpio_intel_softc *sc = device_get_softc(dev);
 	struct pin_intr_map *map = (struct pin_intr_map *)cookie;

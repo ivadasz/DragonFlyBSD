@@ -41,6 +41,7 @@
 #include <sys/errno.h>
 #include <sys/lock.h>
 #include <sys/bus.h>
+#include <bus/gpio/gpio_common.h>
 
 #include "opt_acpi.h"
 #include "acpi.h"
@@ -109,7 +110,7 @@ static void	gpio_acpi_do_map_aei(struct gpio_acpi_softc *sc,
 static void	gpio_acpi_map_aei(struct gpio_acpi_softc *sc);
 static void	gpio_acpi_unmap_aei(struct gpio_acpi_softc *sc);
 static void	gpio_acpi_handle_event(void *Context);
-static void	gpio_acpi_aei_handler(void *arg);
+static void	gpio_acpi_aei_handler(void *arg, enum gpio_event event);
 
 /* Sanity-Check for GpioInt resources */
 static BOOLEAN
@@ -232,7 +233,7 @@ gpioint_free_resource(device_t dev, struct gpioint_resource *resource)
 
 void
 gpioint_establish_interrupt(struct gpioint_resource *resource,
-    driver_intr_t handler, void *context)
+    gpio_intr_t handler, void *context)
 {
 	GPIO_SETUP_INTR(resource->provider, resource->pin, context, handler);
 }
@@ -540,7 +541,7 @@ gpio_acpi_handle_event(void *Context)
 }
 
 static void
-gpio_acpi_aei_handler(void *arg)
+gpio_acpi_aei_handler(void *arg, enum gpio_event event)
 {
 	struct acpi_event_info *info = (struct acpi_event_info *)arg;
 	ACPI_STATUS s;

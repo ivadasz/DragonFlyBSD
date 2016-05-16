@@ -1,6 +1,8 @@
 #ifndef _GPIO_INTEL_VAR_H
 #define _GPIO_INTEL_VAR_H
 
+#include <bus/gpio/gpio_common.h>
+
 struct pinrange {
 	int start;
 	int end;
@@ -10,8 +12,9 @@ struct pin_intr_map {
 	int pin;
 	int intidx;
 	void *arg;
-	driver_intr_t *handler;
+	gpio_intr_t *handler;
 	int is_level;
+	int polarity;
 	uint32_t orig_intcfg;
 	uint32_t orig_gpiocfg;
 };
