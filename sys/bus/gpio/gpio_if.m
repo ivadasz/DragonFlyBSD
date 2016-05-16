@@ -34,6 +34,8 @@
 
 #include <sys/bus.h>
 
+#include <bus/gpio/gpio_common.h>
+
 INTERFACE gpio;
 
 #
@@ -65,7 +67,7 @@ METHOD void setup_intr {
 	device_t dev;
 	void *cookie;
 	void *arg;
-	driver_intr_t *handler;
+	gpio_intr_t *handler;
 };
 
 #

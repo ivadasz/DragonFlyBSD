@@ -31,7 +31,7 @@ struct acpi_array_softc {
 	struct button *buttons;
 };
 
-static void acpi_array_intr(void *arg);
+static gpio_intr_t acpi_array_intr;
 
 static int
 acpi_array_probe(device_t dev)
@@ -221,12 +221,12 @@ acpi_array_powerbutton(struct acpi_array_softc *sc)
 
 
 static void
-acpi_array_intr(void *arg)
+acpi_array_intr(void *arg, enum gpio_event event)
 {
 	struct button *button = (struct button *)arg;
 	struct acpi_array_softc *sc = button->button_sc;
 
-	device_printf(sc->dev, "gpio interrupt\n");
+	device_printf(sc->dev, "gpio interrupt, event=%d\n", event);
 
 	if (button->page == 0x01 && button->usage == 0x81) {
 		acpi_array_powerbutton(sc);
