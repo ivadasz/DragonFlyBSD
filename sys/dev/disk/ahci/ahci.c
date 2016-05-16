@@ -603,7 +603,7 @@ ahci_port_can_hostapst(struct ahci_port *ap)
 void
 ahci_port_link_pwr_mgmt(struct ahci_port *ap, int link_pwr_mgmt)
 {
-	u_int32_t cmd, sctl;
+	u_int32_t cmd, sctl, ssts;
 
 	if (link_pwr_mgmt == ap->link_pwr_mgmt)
 		return;
@@ -622,6 +622,16 @@ ahci_port_link_pwr_mgmt(struct ahci_port *ap, int link_pwr_mgmt)
 			PORTNAME(ap));
 
 		ap->link_pwr_mgmt = link_pwr_mgmt;
+
+		ssts = ahci_pread(ap, AHCI_PREG_SSTS);
+		if ((ssts & 0xf) == 0) {
+			kprintf("%s: putting phy offline.\n", PORTNAME(ap));
+			sctl = ahci_pread(ap, AHCI_PREG_SCTL);
+			sctl &= ~0xfu;
+			sctl |= AHCI_PREG_SCTL_DET_DISABLE;
+			ahci_pwrite(ap, AHCI_PREG_SCTL, sctl);
+			goto done;
+		}
 
 		ap->ap_intmask &= ~AHCI_PREG_IE_PRCE;
 		ahci_port_interrupt_enable(ap);
@@ -722,6 +732,15 @@ fail_dipm:
 	} else if (link_pwr_mgmt == AHCI_LINK_PWR_MGMT_NONE) {
 		kprintf("%s: disabling link power management.\n", PORTNAME(ap));
 
+		ssts = ahci_pread(ap, AHCI_PREG_SSTS);
+		if ((ssts & 0xf) == 4) {
+			kprintf("%s: putting phy online.\n", PORTNAME(ap));
+			sctl = ahci_pread(ap, AHCI_PREG_SCTL);
+			sctl &= ~0xfu;
+			ahci_pwrite(ap, AHCI_PREG_SCTL, sctl);
+			goto done;
+		}
+
 		/* Disable device initiated link power management */
 		if (ahci_port_can_dipm(ap)) {
 			ahci_set_feature(ap, NULL, ATA_SATAFT_DEVIPS, 0);
@@ -757,6 +776,7 @@ fail_dipm:
 			PORTNAME(ap), link_pwr_mgmt);
 	}
 
+done:
 	ahci_os_unlock_port(ap);
 }
 
@@ -769,6 +789,8 @@ ahci_port_link_pwr_state(struct ahci_port *ap)
 	uint32_t r;
 
 	r = ahci_pread(ap, AHCI_PREG_SSTS);
+	if (r & SATA_PM_SSTS_DET_PHYOFFLINE)
+		return 5;
 	switch (r & AHCI_PREG_SSTS_IPM) {
 	case AHCI_PREG_SSTS_IPM_ACTIVE:
 		return 1;
