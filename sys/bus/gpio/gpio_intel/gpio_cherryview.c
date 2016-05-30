@@ -40,7 +40,7 @@
 #include <sys/kernel.h>
 #include <sys/module.h>
 #include <sys/errno.h>
-#include <sys/lock.h>
+#include <sys/serialize.h>
 #include <sys/bus.h>
 
 #include <sys/rman.h>
@@ -149,8 +149,7 @@ static struct pinrange chv_se_ranges[] = {
 	{ -1, -1 }
 };
 
-static struct lock gpio_lk;
-LOCK_SYSINIT(chvgpiolk, &gpio_lk, "chvgpio", 0);
+static struct lwkt_serialize gpio_slz = LWKT_SERIALIZE_INITIALIZER;
 
 /*
  * Use global GPIO register lock to workaround erratum:
@@ -163,18 +162,18 @@ chvgpio_read(struct gpio_intel_softc *sc, bus_size_t offset)
 {
 	uint32_t val;
 
-	lockmgr(&gpio_lk, LK_EXCLUSIVE);
+	lwkt_serialize_enter(&gpio_slz);
 	val = bus_read_4(sc->mem_res, offset);
-	lockmgr(&gpio_lk, LK_RELEASE);
+	lwkt_serialize_exit(&gpio_slz);
 	return val;
 }
 
 static inline void
 chvgpio_write(struct gpio_intel_softc *sc, bus_size_t offset, uint32_t val)
 {
-	lockmgr(&gpio_lk, LK_EXCLUSIVE);
+	lwkt_serialize_enter(&gpio_slz);
 	bus_write_4(sc->mem_res, offset, val);
-	lockmgr(&gpio_lk, LK_RELEASE);
+	lwkt_serialize_exit(&gpio_slz);
 }
 
 int
