@@ -4,7 +4,7 @@ KMOD=	usb
 
 # XXX usb_compat_linux.c
 
-SRCS=	bus_if.h device_if.h usb_if.h usb_if.c \
+SRCS=	bus_if.h device_if.h usb_if.h usb_if.c hid_if.h hid_if.c \
 	opt_usb.h opt_bus.h opt_ddb.h \
 	usbdevs.h usbdevs_data.h \
 	usb_busdma.c usb_controller.c usb_core.c usb_debug.c \
