@@ -65,6 +65,8 @@
 #define	SDHCI_QUIRK_DONT_SET_HISPD_BIT			(1<<15)
 /* Alternate clock source is required when supplying a 400 KHz clock. */
 #define	SDHCI_QUIRK_BCM577XX_400KHZ_CLKSRC		(1<<16)
+/* Using GPIO pins for Card present detection */
+#define	SDHCI_QUIRK_GPIO_CARD_PRESENT			(1<<17)
 
 /*
  * Controller registers
