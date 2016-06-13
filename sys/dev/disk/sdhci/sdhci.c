@@ -328,7 +328,7 @@ sdhci_set_clock(struct sdhci_slot *slot, uint32_t clock)
 	clk |= SDHCI_CLOCK_INT_EN;
 	WR2(slot, SDHCI_CLOCK_CONTROL, clk);
 	/* Wait up to 10 ms until it stabilize. */
-	timeout = 10;
+	timeout = 1000;
 	while (!((clk = RD2(slot, SDHCI_CLOCK_CONTROL))
 		& SDHCI_CLOCK_INT_STABLE)) {
 		if (timeout == 0) {
@@ -338,7 +338,7 @@ sdhci_set_clock(struct sdhci_slot *slot, uint32_t clock)
 			return;
 		}
 		timeout--;
-		DELAY(1000);
+		DELAY(10);
 	}
 	/* Pass clock signal to the bus. */
 	clk |= SDHCI_CLOCK_CARD_EN;
@@ -1331,21 +1331,20 @@ sdhci_acmd_irq(struct sdhci_slot *slot)
 	sdhci_reset(slot, SDHCI_RESET_CMD);
 }
 
-/* inserted & 1 === card inserted, inserted & 2 === remember state */
 void
 sdhci_card_removed(struct sdhci_slot *slot, int inserted)
 {
 	SDHCI_LOCK(slot);
-	if (inserted & 2) {
+	if (slot->quirks & SDHCI_QUIRK_GPIO_CARD_PRESENT) {
 		/* Remember inserted/removed state */
-		if (inserted & 1)
+		if (inserted)
 			slot->presence = 1;
 		else
 			slot->presence = 2;
 	} else {
 		slot->presence = 0;
 	}
-	if (inserted & 1) {
+	if (inserted) {
 		if (bootverbose || sdhci_debug)
 			slot_printf(slot, "Card inserted\n");
 		callout_reset(&slot->card_callout, hz / 2,
