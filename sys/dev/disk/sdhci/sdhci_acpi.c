@@ -198,7 +198,10 @@ sdhci_acpi_attach(device_t dev)
 		device_printf(dev, "Gpio Pin allocation failed\n");
 
 	pci_set_powerstate(dev, PCI_POWERSTATE_D0);
-	sc->slot.quirks = 0;
+	if (sc->gpioio_res == NULL)
+		sc->slot.quirks = 0;
+	else
+		sc->slot.quirks = SDHCI_QUIRK_GPIO_CARD_PRESENT;
 	if (sdhci_init_slot(dev, &sc->slot, 0) != 0) {
 		device_printf(dev, "sdhci initialization failed\n");
 		pci_set_powerstate(dev, PCI_POWERSTATE_D3);
@@ -306,9 +309,9 @@ sdhci_acpi_gpioint(void *arg, enum gpio_event event)
 	/* On intel SoC: 0 == card inserted, 1 == card removed */
 	value = gpioio_read_pin(sc->gpioio_res, 0);
 	if (value == 0)
-		sdhci_card_removed(&sc->slot, 3);
+		sdhci_card_removed(&sc->slot, 1);
 	else
-		sdhci_card_removed(&sc->slot, 2);
+		sdhci_card_removed(&sc->slot, 0);
 }
 
 static device_method_t sdhci_methods[] = {
