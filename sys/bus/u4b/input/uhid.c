@@ -102,6 +102,8 @@ struct uhid_softc {
 
 	uint16_t sc_repdesc_size;
 
+	uint8_t sc_buffer[1024];
+
 	uint8_t	sc_iface_no;
 	uint8_t	sc_iface_index;
 	uint8_t	sc_iid;
@@ -127,6 +129,8 @@ static device_detach_t uhid_detach;
 static usb_callback_t uhid_intr_read_callback;
 //static usb_callback_t uhid_write_callback;
 static usb_callback_t uhid_read_callback;
+
+static void uhid_dump(u_char *ptr, uint16_t len);
 
 #if 0
 static void
@@ -184,6 +188,10 @@ uhid_intr_read_callback(struct usb_xfer *xfer, usb_error_t error)
 			if (actlen > (int)sc->sc_isize)
 				actlen = sc->sc_isize;
 			/* XXX handle data */
+			usbd_copy_out(pc, 0, sc->sc_buffer, actlen);
+			kprintf("uhid: %s: report (length: %u):\n",
+			    __func__, actlen);
+			uhid_dump(sc->sc_buffer, actlen);
 		} else {
 			/* ignore it */
 			DPRINTF("ignored transfer, %d bytes\n", actlen);
@@ -306,6 +314,10 @@ uhid_read_callback(struct usb_xfer *xfer, usb_error_t error)
 	switch (USB_GET_STATE(xfer)) {
 	case USB_ST_TRANSFERRED:
 		/* XXX handle data */
+		usbd_copy_out(pc, sizeof(req), sc->sc_buffer, sc->sc_isize);
+		kprintf("uhid: %s: report (length: %u):\n",
+		    __func__, sc->sc_isize);
+		uhid_dump(sc->sc_buffer, sc->sc_isize);
 		return;
 
 	case USB_ST_SETUP:
@@ -637,6 +649,21 @@ uhid_ioctl(struct usb_fifo *fifo, u_long cmd, void *addr,
 }
 #endif
 
+static void
+uhid_dump(u_char *ptr, uint16_t len)
+{
+	unsigned i;
+
+#define GET(n) ((n) < len ? ptr[(n)] : 0)
+
+	for (i = 0; i < len; i += 8)
+		kprintf("%02x %02x %02x %02x %02x %02x %02x %02x\n",
+		    GET(i), GET(i+1), GET(i+2), GET(i+3),
+		    GET(i+4), GET(i+5), GET(i+6), GET(i+7));
+
+#undef GET
+}
+
 static const STRUCT_USB_HOST_ID uhid_devs[] = {
 	/* generic HID class */
 	{USB_IFACE_CLASS(UICLASS_HID),},
@@ -779,6 +806,13 @@ uhid_attach(device_t dev)
 		    sc->sc_fsize);
 		sc->sc_fsize = UHID_BSIZE;
 	}
+
+	device_printf(dev, "report descriptor (length: %u):\n",
+	    sc->sc_repdesc_size);
+	uhid_dump(sc->sc_repdesc_ptr, sc->sc_repdesc_size);
+
+	device_printf(dev, "starting interrupt input transfer\n");
+	usbd_transfer_start(sc->sc_xfer[UHID_INTR_DT_RD]);
 
 #if 0
 	error = usb_fifo_attach(uaa->device, sc, &sc->sc_lock,
