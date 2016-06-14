@@ -301,11 +301,11 @@ device		cryptodev	# /dev/crypto for access to h/w
 device		usb		# USB Bus (required)
 device		uhci		# UHCI PCI->USB interface
 device		ohci		# OHCI PCI->USB interface
-device		uhid		# "Human Interface Devices"
-device		ukbd		# Keyboard
+#device		uhid		# "Human Interface Devices"
+#device		ukbd		# Keyboard
 device		ulpt		# Printer
 device		umass		# Disks/Mass storage - Requires scbus and da
-device		ums		# Mouse
+#device		ums		# Mouse
 # USB Ethernet, requires mii
 device		axe		# ASIX Electronics USB Ethernet
 device		aue		# ADMtek USB ethernet
