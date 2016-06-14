@@ -37,7 +37,7 @@
 INTERFACE hid;
 
 # Retrieve HID descriptor
-METHOD void get_hid_desc {
+METHOD void get_descriptor {
 	device_t dev;
 	char **descp;
 	size_t *sizep;
