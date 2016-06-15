@@ -188,6 +188,8 @@ struct hid_data *hid_start_parse(const void *d, uint32_t len, int kindset);
 void	hid_end_parse(struct hid_data *s);
 int	hid_get_item(struct hid_data *s, struct hid_item *h);
 int	hid_report_size(const void *buf, uint32_t len, enum hid_kind k,
+	    uint8_t id);
+int	hid_report_size_a(const void *buf, uint32_t len, enum hid_kind k,
 	    uint8_t *id);
 int	hid_locate(const void *desc, uint32_t size, int32_t usage,
 	    enum hid_kind kind, uint8_t index, struct hid_location *loc,

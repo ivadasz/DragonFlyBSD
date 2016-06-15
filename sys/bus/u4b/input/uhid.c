@@ -70,6 +70,8 @@
 #include <bus/u4b/input/usb_rdesc.h>
 #include <bus/u4b/quirk/usb_quirk.h>
 
+#include "hid_if.h"
+
 #ifdef USB_DEBUG
 static int uhid_debug = 0;
 
@@ -82,9 +84,9 @@ SYSCTL_INT(_hw_usb_uhid, OID_AUTO, debug, CTLFLAG_RW,
 #define	UHID_FRAME_NUM 	  50		/* bytes, frame number */
 
 enum {
-	UHID_INTR_DT_WR,
+//	UHID_INTR_DT_WR,
 	UHID_INTR_DT_RD,
-	UHID_CTRL_DT_WR,
+//	UHID_CTRL_DT_WR,
 	UHID_CTRL_DT_RD,
 	UHID_N_TRANSFER,
 };
@@ -113,6 +115,8 @@ struct uhid_softc {
 #define	UHID_FLAG_IMMED        0x01	/* set if read should be immediate */
 #define	UHID_FLAG_STATIC_DESC  0x04	/* set if report descriptors are
 					 * static */
+
+	device_t child;
 };
 
 static const uint8_t uhid_xb360gp_report_descr[] = {UHID_XB360GP_REPORT_DESCR()};
@@ -695,6 +699,53 @@ uhid_probe(device_t dev)
 }
 
 static int
+uhid_maxrepid(void *buf, int len)
+{
+	struct hid_data *d;
+	struct hid_item h;
+	int maxid;
+
+	maxid = -1;
+	h.report_ID = 0;
+	for (d = hid_start_parse(buf, len, hid_input); hid_get_item(d, &h); ) {
+		if (h.report_ID > maxid)
+			maxid = h.report_ID;
+	}
+	hid_end_parse(d);
+	return (maxid);
+}
+
+static void
+uhid_parse_descriptor(device_t dev)
+{
+	struct uhid_softc *sc = device_get_softc(dev);
+	void *buf = sc->sc_repdesc_ptr;
+	int len = sc->sc_repdesc_size;
+	int i, maxid, sz;
+
+	maxid = uhid_maxrepid(buf, len);
+	kprintf("uhid: max report id: %d\n", maxid);
+
+	for (i = 0; i <= maxid; i++) {
+		sz = hid_report_size(buf, len, hid_input, i);
+		kprintf("uhid: report id=%d size=%d\n", i, sz);
+		if (sc->child == NULL) {
+			sc->child = device_add_child(dev, NULL, -1);
+		}
+	}
+}
+
+static void
+uhid_get_descriptor(device_t dev, int *id, char **descp, uint16_t *sizep)
+{
+	struct uhid_softc *sc = device_get_softc(dev);
+
+	*id = 0;
+	*descp = sc->sc_repdesc_ptr;
+	*sizep = sc->sc_repdesc_size;
+}
+
+static int
 uhid_attach(device_t dev)
 {
 	struct usb_attach_arg *uaa = device_get_ivars(dev);
@@ -762,7 +813,6 @@ uhid_attach(device_t dev)
 		sc->sc_flags |= UHID_FLAG_STATIC_DESC;
 	}
 	if (sc->sc_repdesc_ptr == NULL) {
-
 		error = usbd_req_get_hid_desc(uaa->device, NULL,
 		    &sc->sc_repdesc_ptr, &sc->sc_repdesc_size,
 		    M_USBDEV, uaa->info.bIfaceIndex);
@@ -779,13 +829,13 @@ uhid_attach(device_t dev)
 		DPRINTF("set idle failed, error=%s (ignored)\n",
 		    usbd_errstr(error));
 	}
-	sc->sc_isize = hid_report_size
+	sc->sc_isize = hid_report_size_a
 	    (sc->sc_repdesc_ptr, sc->sc_repdesc_size, hid_input, &sc->sc_iid);
 
-	sc->sc_osize = hid_report_size
+	sc->sc_osize = hid_report_size_a
 	    (sc->sc_repdesc_ptr, sc->sc_repdesc_size, hid_output, &sc->sc_oid);
 
-	sc->sc_fsize = hid_report_size
+	sc->sc_fsize = hid_report_size_a
 	    (sc->sc_repdesc_ptr, sc->sc_repdesc_size, hid_feature, &sc->sc_fid);
 
 	if (sc->sc_isize > UHID_BSIZE) {
@@ -807,12 +857,22 @@ uhid_attach(device_t dev)
 		sc->sc_fsize = UHID_BSIZE;
 	}
 
+	device_printf(dev,
+	    "iid=%u isize=%u, oid=%u osize=%u, fid=%u fsize=%u\n",
+	    sc->sc_iid, sc->sc_isize,
+	    sc->sc_oid, sc->sc_osize,
+	    sc->sc_fid, sc->sc_fsize);
 	device_printf(dev, "report descriptor (length: %u):\n",
 	    sc->sc_repdesc_size);
 	uhid_dump(sc->sc_repdesc_ptr, sc->sc_repdesc_size);
 
+	uhid_parse_descriptor(dev);
+	bus_generic_attach(dev);
+
 	device_printf(dev, "starting interrupt input transfer\n");
+	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
 	usbd_transfer_start(sc->sc_xfer[UHID_INTR_DT_RD]);
+	lockmgr(&sc->sc_lock, LK_RELEASE);
 
 #if 0
 	error = usb_fifo_attach(uaa->device, sc, &sc->sc_lock,
@@ -834,6 +894,9 @@ static int
 uhid_detach(device_t dev)
 {
 	struct uhid_softc *sc = device_get_softc(dev);
+
+	if (bus_generic_detach(dev) != 0)
+		return (EBUSY);
 
 #if 0
 	usb_fifo_detach(&sc->sc_fifo);
@@ -858,7 +921,7 @@ static device_method_t uhid_methods[] = {
 	DEVMETHOD(device_attach, uhid_attach),
 	DEVMETHOD(device_detach, uhid_detach),
 
-//	DEVMETHOD(hid_get_descriptor, uhid_get_descriptor),
+	DEVMETHOD(hid_get_descriptor, uhid_get_descriptor),
 
 	DEVMETHOD_END
 };

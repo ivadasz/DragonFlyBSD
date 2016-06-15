@@ -240,9 +240,9 @@ ucycom_attach(device_t dev)
 	}
 	/* get report sizes */
 
-	sc->sc_flen = hid_report_size(urd_ptr, urd_len, hid_feature, &sc->sc_fid);
-	sc->sc_ilen = hid_report_size(urd_ptr, urd_len, hid_input, &sc->sc_iid);
-	sc->sc_olen = hid_report_size(urd_ptr, urd_len, hid_output, &sc->sc_oid);
+	sc->sc_flen = hid_report_size_a(urd_ptr, urd_len, hid_feature, &sc->sc_fid);
+	sc->sc_ilen = hid_report_size_a(urd_ptr, urd_len, hid_input, &sc->sc_iid);
+	sc->sc_olen = hid_report_size_a(urd_ptr, urd_len, hid_output, &sc->sc_oid);
 
 	if ((sc->sc_ilen > UCYCOM_MAX_IOLEN) || (sc->sc_ilen < 1) ||
 	    (sc->sc_olen > UCYCOM_MAX_IOLEN) || (sc->sc_olen < 2) ||
