@@ -543,7 +543,43 @@ hid_get_item(struct hid_data *s, struct hid_item *h)
  *	hid_report_size
  *------------------------------------------------------------------------*/
 int
-hid_report_size(const void *buf, uint32_t len, enum hid_kind k, uint8_t *id)
+hid_report_size(const void *buf, uint32_t len, enum hid_kind k, uint8_t id)
+{
+	struct hid_data *d;
+	struct hid_item h;
+	uint32_t temp;
+	uint32_t hpos;
+	uint32_t lpos;
+
+	hpos = 0;
+	lpos = 0xFFFFFFFF;
+
+	for (d = hid_start_parse(buf, len, 1 << k); hid_get_item(d, &h);) {
+		if (h.report_ID == id && h.kind == k) {
+			/* compute minimum */
+			if (lpos > h.loc.pos)
+				lpos = h.loc.pos;
+			/* compute end position */
+			temp = h.loc.pos + (h.loc.size * h.loc.count);
+			/* compute maximum */
+			if (hpos < temp)
+				hpos = temp;
+		}
+	}
+	hid_end_parse(d);
+
+	/* id not found */
+	if (lpos > hpos)
+		temp = 0;
+	else
+		temp = hpos - lpos;
+
+	/* return length in bytes rounded up */
+	return ((temp + 7) / 8);
+}
+
+int
+hid_report_size_a(const void *buf, uint32_t len, enum hid_kind k, uint8_t *id)
 {
 	struct hid_data *d;
 	struct hid_item h;
@@ -558,7 +594,7 @@ hid_report_size(const void *buf, uint32_t len, enum hid_kind k, uint8_t *id)
 
 	for (d = hid_start_parse(buf, len, 1 << k); hid_get_item(d, &h);) {
 		if (h.kind == k) {
-			/* check for ID-byte presense */
+			/* check for ID-byte presence */
 			if ((h.report_ID != 0) && !any_id) {
 				if (id != NULL)
 					*id = h.report_ID;

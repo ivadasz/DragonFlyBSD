@@ -6110,7 +6110,7 @@ uaudio_hid_probe(struct uaudio_softc *sc,
 	}
 
 	/* check if there is an ID byte */
-	hid_report_size(d_ptr, d_len, hid_input, &id);
+	hid_report_size_a(d_ptr, d_len, hid_input, &id);
 
 	if (id != 0)
 		sc->sc_hid.flags |= UAUDIO_HID_HAS_ID;

@@ -1,3 +1,3 @@
-SUBDIR=	uep uhid ukbd ums
+SUBDIR=	uhid
 
 .include <bsd.subdir.mk>
