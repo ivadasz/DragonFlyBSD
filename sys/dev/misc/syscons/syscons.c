@@ -187,7 +187,7 @@ static void init_scp(sc_softc_t *sc, int vty, scr_stat *scp);
 static timeout_t scrn_timer;
 static int and_region(int *s1, int *e1, int s2, int e2);
 static void scrn_update(scr_stat *scp, int show_cursor, int flags);
-static void scrn_update_thread(void *arg);
+//static void scrn_update_thread(void *arg);
 
 static void sc_fb_set_par(void *context, int pending);
 #if NSPLASH > 0
@@ -768,10 +768,12 @@ scopen(struct dev_open_args *ap)
      * will execute the refresh without the syscons_lock held and will
      * allow interrupts while it is doing so.
      */
+#if 0
     if (scp->asynctd == NULL) {
 	    lwkt_create(scrn_update_thread, scp, &scp->asynctd, NULL, 0, -1,
 			"syscons%d", SC_VTY(dev));
     }
+#endif
     lwkt_reltoken(&tty_token);
     return error;
 }
@@ -2391,6 +2393,7 @@ cleanup:
 	syscons_unlock();
 }
 
+#if 0
 /*
  * Thread handles potentially expensive screen updates.   The function is
  * expected to operate safely without locks.
@@ -2413,6 +2416,7 @@ scrn_update_thread(void *arg)
 		lockmgr(&sc_asynctd_lk, LK_RELEASE);
 	}
 }
+#endif
 
 static void
 sc_fb_set_par(void *context, int pending)
