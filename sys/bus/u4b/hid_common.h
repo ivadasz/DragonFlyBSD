@@ -203,4 +203,6 @@ void hid_put_data_unsigned(uint8_t *buf, uint32_t len,
 int	hid_is_collection(const void *desc, uint32_t size, int32_t usage);
 int	hid_is_mouse(const void *d_ptr, uint16_t d_len);
 int	hid_is_keyboard(const void *d_ptr, uint16_t d_len);
+
+typedef void (*hid_input_handler_t)(int id, uint8_t buf, int count);
 #endif					/* _KERNEL */
