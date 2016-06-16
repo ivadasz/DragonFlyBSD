@@ -34,12 +34,35 @@
 
 #include <sys/bus.h>
 
+#include <bus/u4b/hid_common.h>
+
 INTERFACE hid;
 
-# Retrieve HID descriptor
+# Retrieve HID descriptor.
 METHOD void get_descriptor {
 	device_t dev;
+	void *info;	/* retrieved with device_get_ivars() by the child */
 	int *id;
 	char **descp;
 	uint16_t *sizep;
+};
+
+# Set NULL handler to stop handling input reports.
+METHOD void set_handler {
+	device_t dev;
+	hid_input_handler_t handler;
+};
+
+# Activates input from hardware device.
+METHOD void start {
+	device_t dev;
+	int id;
+};
+
+# Deactivates input from hardware device.
+# WARNING: Further input reports may still be delivered via the handler
+#          method after deactivating input with stop().
+METHOD void stop {
+	device_t dev;
+	int id;
 };
