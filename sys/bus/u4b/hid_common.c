@@ -856,3 +856,21 @@ hid_is_keyboard(const void *d_ptr, uint16_t d_len)
 		return (1);
 	return (0);
 }
+
+/*------------------------------------------------------------------------*
+ *     hid_is_digitizer
+ *
+ * This function will decide if a USB descriptor belongs to a USB digitizer.
+ *
+ * Return values:
+ * Zero: Not a USB digitizer.
+ * Else: Is a USB digitizer.
+ *------------------------------------------------------------------------*/
+int
+hid_is_digitizer(const void *d_ptr, uint16_t d_len)
+{
+	if (hid_is_collection(d_ptr, d_len,
+	    HID_USAGE2(HUP_DIGITIZERS, HUD_TOUCHSCREEN)))
+		return (1);
+	return (0);
+}
