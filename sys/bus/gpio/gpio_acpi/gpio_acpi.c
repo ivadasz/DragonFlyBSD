@@ -77,6 +77,12 @@ struct acpi_gpio_handler_data {
 	device_t dev;
 };
 
+struct gpio_resource_walk_ctx {
+	device_t dev;
+	int cnt;
+	void *res;
+};
+
 struct gpio_acpi_softc {
 	device_t dev;
 	device_t parent;
@@ -149,78 +155,70 @@ gpio_acpi_check_gpioint(device_t dev, ACPI_RESOURCE_GPIO *gpio)
  * GpioInt ACPI resource handling
  */
 
+static ACPI_STATUS
+gpioint_handle_resource(ACPI_RESOURCE *Resource, void *Context)
+{
+	ACPI_RESOURCE_GPIO *gpio;
+	struct gpioint_resource *r = NULL;
+	device_t provider;
+	void *cookie;
+	struct gpio_resource_walk_ctx *ctx = Context;
+
+	if (Resource->Type != ACPI_RESOURCE_TYPE_GPIO)
+		return (AE_OK);
+
+	gpio = (ACPI_RESOURCE_GPIO *)&Resource->Data;
+	if (gpio->ConnectionType != ACPI_RESOURCE_GPIO_TYPE_INT)
+		return (AE_OK);
+
+	if (!gpio_acpi_check_gpioint(ctx->dev, gpio))
+		goto done;
+	if (ctx->cnt > 0) {
+		ctx->cnt--;
+		return (AE_OK);
+	}
+	device_printf(ctx->dev, "GpioInt ResourceSource=%s\n",
+	    gpio->ResourceSource.StringPtr);
+	provider = acpi_get_resource_provider(acpi_get_handle(ctx->dev),
+	    gpio->ResourceSource.StringPtr, "gpio");
+	if (provider == NULL) {
+		device_printf(ctx->dev, "No driver for GpioInt "
+		    "ResourceSource \"%s\"\n", gpio->ResourceSource.StringPtr);
+		goto done;
+	}
+	if (GPIO_ALLOC_INTR(provider, gpio->PinTable[0],
+	    gpio->Triggering, gpio->Polarity,
+	    gpio->PinConfig, &cookie) != 0) {
+		device_printf(ctx->dev, "Failed allocating GpioInt "
+		    "ResourceSource \"%s\" pin %u\n",
+		    gpio->ResourceSource.StringPtr,
+		    gpio->PinTable[0]);
+		acpi_put_resource_provider(provider);
+		goto done;
+	}
+	r = kmalloc(sizeof(*r), M_DEVBUF, M_WAITOK | M_ZERO);
+	r->provider = provider;
+	r->pin = cookie;
+	r->trigger = gpio->Triggering;
+	r->polarity = gpio->Polarity;
+	r->pinconfig = gpio->PinConfig;
+
+	ctx->res = r;
+
+done:
+	return (AE_CTRL_TERMINATE);
+}
+
 struct gpioint_resource *
 gpioint_alloc_resource(device_t dev, int rid)
 {
 	ACPI_HANDLE handle;
-	ACPI_RESOURCE_GPIO *gpio;
-	ACPI_RESOURCE *res, *end;
-	ACPI_BUFFER b;
-	ACPI_STATUS s;
-	struct gpioint_resource *r = NULL;
-	device_t provider;
-	void *cookie;
-	int n = 0;
+	struct gpio_resource_walk_ctx ctx = { dev, rid, NULL };
 
 	handle = acpi_get_handle(dev);
-	b.Pointer = NULL;
-	b.Length = ACPI_ALLOCATE_BUFFER;
-	s = AcpiGetCurrentResources(handle, &b);
-	if (ACPI_FAILURE(s))
-		return (NULL);
 
-	end = (ACPI_RESOURCE *)((char *)b.Pointer + b.Length);
-	for (res = (ACPI_RESOURCE *)b.Pointer; res < end && r == NULL;
-	    res = ACPI_NEXT_RESOURCE(res)) {
-		if (res->Type == ACPI_RESOURCE_TYPE_END_TAG)
-			break;
-		switch (res->Type) {
-		case ACPI_RESOURCE_TYPE_GPIO:
-			gpio = (ACPI_RESOURCE_GPIO *)&res->Data;
-			if (gpio->ConnectionType !=
-			    ACPI_RESOURCE_GPIO_TYPE_INT) {
-				break;
-			}
-			if (!gpio_acpi_check_gpioint(dev, gpio))
-				goto done;
-			if (n < rid) {
-				n++;
-				break;
-			}
-			device_printf(dev, "GpioInt ResourceSource=%s\n",
-			    gpio->ResourceSource.StringPtr);
-			provider = acpi_get_resource_provider(handle,
-			    gpio->ResourceSource.StringPtr, "gpio");
-			if (provider == NULL) {
-				device_printf(dev, "No driver for GpioInt "
-				    "ResourceSource \"%s\"\n",
-				    gpio->ResourceSource.StringPtr);
-				goto done;
-			}
-			if (GPIO_ALLOC_INTR(provider, gpio->PinTable[0],
-			    gpio->Triggering, gpio->Polarity,
-			    gpio->PinConfig, &cookie) != 0) {
-				device_printf(dev, "Failed allocating GpioInt "
-				    "ResourceSource \"%s\" pin %u\n",
-				    gpio->ResourceSource.StringPtr,
-				    gpio->PinTable[0]);
-				goto done;
-			}
-			r = kmalloc(sizeof(*r), M_DEVBUF, M_WAITOK | M_ZERO);
-			r->provider = provider;
-			r->pin = cookie;
-			r->trigger = gpio->Triggering;
-			r->polarity = gpio->Polarity;
-			r->pinconfig = gpio->PinConfig;
-			goto done;
-		default:
-			break;
-		}
-	}
-done:
-	AcpiOsFree(b.Pointer);
-
-	return (r);
+	(void)AcpiWalkResources(handle, "_CRS", gpioint_handle_resource, &ctx);
+	return (ctx.res);
 }
 
 void
@@ -264,8 +262,7 @@ gpioio_alloc_pins(device_t dev, device_t provider, ACPI_RESOURCE_GPIO *gpio,
 
 	if (gpio->IoRestriction == ACPI_IO_RESTRICT_INPUT) {
 		flags = (1U << 0);
-	} else if (gpio->IoRestriction ==
-	    ACPI_IO_RESTRICT_OUTPUT) {
+	} else if (gpio->IoRestriction == ACPI_IO_RESTRICT_OUTPUT) {
 		flags = (1U << 1);
 	} else {
 		flags = (1U << 0) | (1U << 1);
@@ -291,66 +288,63 @@ err:
 	return (NULL);
 }
 
+static ACPI_STATUS
+gpioio_handle_resource(ACPI_RESOURCE *Resource, void *Context)
+{
+	ACPI_RESOURCE_GPIO *gpio;
+	struct gpioio_resource *r = NULL;
+	struct gpio_resource_walk_ctx *ctx = Context;
+	device_t provider;
+
+	if (Resource->Type != ACPI_RESOURCE_TYPE_GPIO)
+		return (AE_OK);
+
+	gpio = (ACPI_RESOURCE_GPIO *)&Resource->Data;
+	if (gpio->ConnectionType != ACPI_RESOURCE_GPIO_TYPE_IO)
+		return (AE_OK);
+
+	if (gpio->PinTableLength == 0) {
+		device_printf(ctx->dev, "GpioIo resource with no pins?\n");
+		goto done;
+	}
+	if (ctx->cnt > 0) {
+		ctx->cnt--;
+		return (AE_OK);
+	}
+	provider = acpi_get_resource_provider(acpi_get_handle(ctx->dev),
+	    gpio->ResourceSource.StringPtr, "gpio");
+	if (provider == NULL) {
+		device_printf(ctx->dev, "No driver for GpioIo "
+		    "ResourceSource \"%s\"\n", gpio->ResourceSource.StringPtr);
+		goto done;
+	}
+	r = kmalloc(sizeof(*r) + gpio->PinTableLength * sizeof(void *),
+	    M_DEVBUF, M_WAITOK | M_ZERO);
+	r->provider = provider;
+	r->numpins = gpio->PinTableLength;
+	if (gpioio_alloc_pins(ctx->dev, provider, gpio, 0,
+	    gpio->PinTableLength, r->pins) == NULL) {
+		acpi_put_resource_provider(provider);
+		kfree(r, M_DEVBUF);
+		r = NULL;
+	}
+
+	ctx->res = r;
+
+done:
+	return (AE_CTRL_TERMINATE);
+}
+
 struct gpioio_resource *
 gpioio_alloc_resource(device_t dev, int rid)
 {
 	ACPI_HANDLE handle;
-	ACPI_RESOURCE_GPIO *gpio;
-	ACPI_RESOURCE *res, *end;
-	ACPI_BUFFER b;
-	ACPI_STATUS s;
-	struct gpioio_resource *r = NULL;
-	device_t provider;
-	int n = 0;
+	struct gpio_resource_walk_ctx ctx = { dev, rid, NULL };
 
 	handle = acpi_get_handle(dev);
-	b.Pointer = NULL;
-	b.Length = ACPI_ALLOCATE_BUFFER;
-	s = AcpiGetCurrentResources(handle, &b);
-	if (ACPI_FAILURE(s))
-		return (NULL);
 
-	end = (ACPI_RESOURCE *)((char *)b.Pointer + b.Length);
-	for (res = (ACPI_RESOURCE *)b.Pointer; res < end && r == NULL;
-	    res = ACPI_NEXT_RESOURCE(res)) {
-		if (res->Type == ACPI_RESOURCE_TYPE_END_TAG)
-			break;
-		if (res->Type == ACPI_RESOURCE_TYPE_GPIO) {
-			gpio = (ACPI_RESOURCE_GPIO *)&res->Data;
-			if (gpio->ConnectionType != ACPI_RESOURCE_GPIO_TYPE_IO)
-				continue;
-			if (gpio->PinTableLength == 0) {
-				device_printf(dev,
-				    "GpioIo resource with no pins?\n");
-				break;
-			}
-			if (n < rid) {
-				n++;
-				continue;
-			}
-			provider = acpi_get_resource_provider(handle,
-			    gpio->ResourceSource.StringPtr, "gpio");
-			if (provider == NULL) {
-				device_printf(dev, "No driver for GpioIo "
-				    "ResourceSource \"%s\"\n",
-				    gpio->ResourceSource.StringPtr);
-				break;
-			}
-			r = kmalloc(sizeof(*r) +
-			    gpio->PinTableLength * sizeof(void *),
-			    M_DEVBUF, M_WAITOK | M_ZERO);
-			r->provider = provider;
-			r->numpins = gpio->PinTableLength;
-			if (gpioio_alloc_pins(dev, provider, gpio, 0,
-			    gpio->PinTableLength, r->pins) == NULL) {
-				kfree(r, M_DEVBUF);
-				r = NULL;
-			}
-			break;;
-		}
-	}
-	AcpiOsFree(b.Pointer);
-	return (r);
+	(void)AcpiWalkResources(handle, "_CRS", gpioio_handle_resource, &ctx);
+	return (ctx.res);
 }
 
 void
