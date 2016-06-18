@@ -319,6 +319,8 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 	int error;
 	int unit;
 	uint32_t last;
+	uint16_t val;
+	int shift = 0;
 
 	/*
 	 * Debugging - dump registers
@@ -373,7 +375,7 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 		error = wait_status(sc, IG4_STATUS_TX_NOTFULL);
 		if (error)
 			goto done;
-		last |= (u_char)cmd;
+		last |= (u_char)wcount;
 		reg_write(sc, IG4_REG_DATA_CMD, last);
 		last = 0;
 	}
@@ -423,13 +425,14 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 	/*
 	 * Bulk read (i2c) and count field handling (smbus)
 	 */
+	val = 0;
 	while (rcount) {
 		/*
 		 * Maintain a pipeline by queueing the allowance for the next
 		 * read before waiting for the current read.
 		 */
 		if (rcount > 1) {
-			if (op & SMB_TRANS_NOCNT)
+			if ((op & SMB_TRANS_NOCNT) && !(op & SMB_TRANS_WORDCNT))
 				last = (rcount == 2) ? IG4_DATA_STOP : 0;
 			else
 				last = 0;
@@ -447,7 +450,25 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 		}
 		last = data_read(sc);
 
-		if (op & SMB_TRANS_NOCNT) {
+		if (op & SMB_TRANS_WORDCNT) {
+			/*
+			 * Handle 2 byte count field, which is not part of
+			 * the rcount'ed buffer.  The first read word in a
+			 * bulk transfer is the count.
+			 *
+			 * XXX if rcount is loaded as 0 how do I generate a
+			 *     STOP now without issuing another RD or WR?
+			 */
+			val = (u_char)last & 0xff;
+			shift = 8;
+			op &= ~SMB_TRANS_WORDCNT;
+			op &= ~SMB_TRANS_NOCNT;
+			*rbuf = (u_char)last;
+			++rbuf;
+			--rcount;
+			if (actualp)
+				++*actualp;
+		} else if (op & SMB_TRANS_NOCNT) {
 			*rbuf = (u_char)last;
 			++rbuf;
 			--rcount;
@@ -462,8 +483,28 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 			 * XXX if rcount is loaded as 0 how do I generate a
 			 *     STOP now without issuing another RD or WR?
 			 */
-			if (rcount > (u_char)last)
-				rcount = (u_char)last;
+			val |= (uint16_t)(u_char)last << shift;
+			if (shift > 0) {
+				*rbuf = (u_char)last;
+				++rbuf;
+				--rcount;
+				if (actualp)
+					++*actualp;
+				if (val <= 2) {
+					rcount = 0;
+					reg_write(sc, IG4_REG_DATA_CMD,
+					    IG4_DATA_COMMAND_RD | IG4_DATA_STOP);
+				} else if (rcount > val - 2) {
+					if (rcount > 2 && val - 2 == 1) {
+						reg_write(sc, IG4_REG_DATA_CMD,
+						    IG4_DATA_COMMAND_RD | IG4_DATA_STOP);
+					}
+					rcount = val - 2;
+				}
+			} else {
+				if (rcount > val)
+					rcount = val;
+			}
 			op |= SMB_TRANS_NOCNT;
 		}
 	}
@@ -590,7 +631,7 @@ ig4iic_attach(ig4iic_softc_t *sc)
 		device_printf(sc->dev, "controller error during attach-1\n");
 	if (set_controller(sc, IG4_I2C_ENABLE))
 		device_printf(sc->dev, "controller error during attach-2\n");
-	error = bus_setup_intr(sc->dev, sc->intr_res, 0,
+	error = bus_setup_intr(sc->dev, sc->intr_res, INTR_MPSAFE,
 			       ig4iic_intr, sc, &sc->intr_handle, NULL);
 	if (error) {
 		device_printf(sc->dev,

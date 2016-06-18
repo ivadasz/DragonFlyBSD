@@ -2,6 +2,7 @@ SUBDIR=	alpm amdpm aps coretemp
 SUBDIR+=intpm kate km lm powernow uguru
 SUBDIR+=viapm wbsio perfbias clockmod
 SUBDIR+=memtemp corepower corecstat
+SUBDIR+=bytpmc
 
 # Empty for concurrent build
 #

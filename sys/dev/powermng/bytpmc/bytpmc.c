@@ -3,23 +3,32 @@
 #include <sys/bus.h>
 #include <sys/rman.h>
 #include <sys/sensors.h>
+#include <sys/eventhandler.h>
+#include <sys/reboot.h>
 
-#define BYT_PMC_FN_DISABLE	0x34
-#define BYT_PMC_FN_DISABLE2	0x38
+#define BYT_PMC_FN_DISABLE		0x34
+#define BYT_PMC_FN_DISABLE2		0x38
+#define BYT_PMC_S0I_READY_RESIDENCY	0x80
+#define BYT_PMC_S0I1_RESIDENCY		0x84
+#define BYT_PMC_S0I2_RESIDENCY		0x88
+#define BYT_PMC_S0I3_RESIDENCY		0x8c
+#define BYT_PMC_POWER_STATUS		0x98
 
 struct bytpmc_softc {
 	struct device		*sc_dev;
 	struct resource		*sc_regs;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
-//	struct ksensor		sc_sensor;
-//	struct ksensordev	sc_sensordev;
+	struct ksensor		sc_sensor[4];
+	struct ksensordev	sc_sensordev;
+	uint32_t		lastvals[4];
 };
 
 static int	bytpmc_probe(struct device *);
 static int	bytpmc_attach(struct device *);
 static int	bytpmc_detach(struct device *);
-//static void	bytpmc_refresh(void *);
+static void	bytpmc_refresh(void *);
+static void	bytpmc_shutdown_final(void *arg, int howto);
 
 static device_method_t bytpmc_methods[] = {
 	DEVMETHOD(device_probe,		bytpmc_probe),
@@ -53,7 +62,7 @@ static int
 bytpmc_attach(struct device *dev)
 {
 	struct bytpmc_softc	*sc;
-	int rid;
+	int i, rid;
 
 	if (device_get_unit(dev) != 0)
 		return ENXIO;
@@ -75,18 +84,31 @@ bytpmc_attach(struct device *dev)
 	    bus_space_read_4(sc->sc_iot, sc->sc_ioh, BYT_PMC_FN_DISABLE));
 	device_printf(dev, "function disable 2: 0x%08x\n",
 	    bus_space_read_4(sc->sc_iot, sc->sc_ioh, BYT_PMC_FN_DISABLE2));
+	device_printf(dev, "power island power status: 0x%08x\n",
+	    bus_space_read_4(sc->sc_iot, sc->sc_ioh, BYT_PMC_POWER_STATUS));
 
-#if 0
 	strlcpy(sc->sc_sensordev.xname, device_get_nameunit(dev),
 	    sizeof(sc->sc_sensordev.xname));
 
-	sc->sc_sensor.type = SENSOR_TEMP;
-	sensor_attach(&sc->sc_sensordev, &sc->sc_sensor);
+	for (i = 0; i < 4; i++) {
+		sc->sc_sensor[i].type = SENSOR_PERCENT;
+		sensor_attach(&sc->sc_sensordev, &sc->sc_sensor[i]);
+	}
+	sc->lastvals[0] = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
+	    BYT_PMC_S0I_READY_RESIDENCY);
+	sc->lastvals[1] = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
+	    BYT_PMC_S0I1_RESIDENCY);
+	sc->lastvals[2] = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
+	    BYT_PMC_S0I2_RESIDENCY);
+	sc->lastvals[3] = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
+	    BYT_PMC_S0I3_RESIDENCY);
 
-	sensor_task_register(sc, km_refresh, 5);
+	sensor_task_register(sc, bytpmc_refresh, 1);
 
 	sensordev_install(&sc->sc_sensordev);
-#endif
+
+	EVENTHANDLER_REGISTER(shutdown_final, bytpmc_shutdown_final, sc,
+	    SHUTDOWN_PRI_LAST);
 
 	return 0;
 }
@@ -96,28 +118,44 @@ bytpmc_detach(struct device *dev)
 {
 	struct bytpmc_softc *sc = device_get_softc(dev);
 
-	bus_release_resource(sc->sc_dev, SYS_RES_MEMORY, 0, sc->sc_regs);
-
-#if 0
-
 	sensordev_deinstall(&sc->sc_sensordev);
 	sensor_task_unregister(sc);
-#endif
+
+	bus_release_resource(sc->sc_dev, SYS_RES_MEMORY, 0, sc->sc_regs);
 
 	return 0;
 }
 
-#if 0
 static void
-km_refresh(void *arg)
+bytpmc_refresh(void *arg)
 {
-	struct km_softc	*sc = arg;
-	struct ksensor	*s = &sc->sc_sensor;
-	uint32_t	r;
-	int		c;
+	struct bytpmc_softc *sc = arg;
+	struct ksensor *s;
+	uint32_t vals[4];
+	int i;
 
-	r = pci_read_config(sc->sc_dev, KM_REP_TEMP_CONTR_R, 4);
-	c = KM_GET_CURTMP(r);
-	s->value = c * 125000 + 273150000;
+	vals[0] = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
+	    BYT_PMC_S0I_READY_RESIDENCY);
+	vals[1] = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
+	    BYT_PMC_S0I1_RESIDENCY);
+	vals[2] = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
+	    BYT_PMC_S0I2_RESIDENCY);
+	vals[3] = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
+	    BYT_PMC_S0I3_RESIDENCY);
+
+	for (i = 0; i < 4; i++) {
+		s = &sc->sc_sensor[i];
+		s->value = (uint32_t)((vals[i] - sc->lastvals[i]) * 32 / 1000);
+		sc->lastvals[i] = vals[i];
+	}
 }
-#endif
+
+static void
+bytpmc_shutdown_final(void *arg, int howto)
+{
+	if ((howto & RB_POWEROFF) == 0 && (howto & RB_HALT) == 0) {
+		outb(0xCF9, 0x0E);
+		DELAY(1000000);
+		kprintf("bytpmc reset failed - timeout\n");
+	}
+}

@@ -69,7 +69,7 @@ ACPI_MODULE_NAME("ACPI_WMI");
 struct acpi_wmi_softc {
 	device_t	wmi_dev;	/* wmi device id */
 	ACPI_HANDLE	wmi_handle;	/* handle of the PNP0C14 node */
-	device_t	ec_dev;		/* acpi_ec0 */
+//	device_t	ec_dev;		/* acpi_ec0 */
 	struct cdev	*wmistat_dev_t;	/* wmistat device handle */
 	struct sbuf	wmistat_sbuf;	/* sbuf for /dev/wmistat output */
 	pid_t		wmistat_open_pid; /* pid operating on /dev/wmistat */
@@ -239,10 +239,11 @@ acpi_wmi_attach(device_t dev)
 	sc->wmi_handle = acpi_get_handle(dev);
 	TAILQ_INIT(&sc->wmi_info_list);
 	/* XXX Only works with one EC, but nearly all systems only have one. */
-	if ((sc->ec_dev = devclass_get_device(devclass_find("acpi_ec"), 0))
-	    == NULL)
-		device_printf(dev, "cannot find EC device\n");
-	else if (ACPI_FAILURE((status = AcpiInstallNotifyHandler(sc->wmi_handle,
+//	if ((sc->ec_dev = devclass_get_device(devclass_find("acpi_ec"), 0))
+//	    == NULL)
+//		device_printf(dev, "cannot find EC device\n");
+//	else
+	if (ACPI_FAILURE((status = AcpiInstallNotifyHandler(sc->wmi_handle,
 		    ACPI_DEVICE_NOTIFY, acpi_wmi_notify_handler, sc))))
 		device_printf(sc->wmi_dev, "couldn't install notify handler - %s\n",
 		    AcpiFormatException(status));
@@ -663,7 +664,7 @@ acpi_wmi_ec_handler(UINT32 function, ACPI_PHYSICAL_ADDRESS address,
 {
 	struct acpi_wmi_softc *sc;
 	int i;
-	UINT64 ec_data;
+//	UINT64 ec_data;
 	UINT8 ec_addr;
 	ACPI_STATUS status;
 
@@ -681,6 +682,7 @@ acpi_wmi_ec_handler(UINT32 function, ACPI_PHYSICAL_ADDRESS address,
 
 	for (i = 0; i < width; i += 8, ++ec_addr) {
 		switch (function) {
+#if 0
 		case ACPI_READ:
 			status = ACPI_EC_READ(sc->ec_dev, ec_addr, &ec_data, 1);
 			if (ACPI_SUCCESS(status))
@@ -690,6 +692,7 @@ acpi_wmi_ec_handler(UINT32 function, ACPI_PHYSICAL_ADDRESS address,
 			ec_data = (UINT8)((*value) >> i);
 			status = ACPI_EC_WRITE(sc->ec_dev, ec_addr, ec_data, 1);
 			break;
+#endif
 		default:
 			device_printf(sc->wmi_dev,
 			    "invalid acpi_wmi_ec_handler function %d\n",

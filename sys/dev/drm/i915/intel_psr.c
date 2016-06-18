@@ -413,6 +413,7 @@ void intel_psr_enable(struct intel_dp *intel_dp)
 		if (INTEL_INFO(dev)->gen >= 9)
 			intel_psr_activate(intel_dp);
 	} else {
+		kprintf("%s: Enabling PSR\n", __func__);
 		vlv_psr_setup_vsc(intel_dp);
 
 		/* Enable PSR on the panel */

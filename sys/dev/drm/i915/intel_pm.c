@@ -5395,29 +5395,42 @@ static void cherryview_init_gt_powersave(struct drm_device *dev)
 		dev_priv->mem_freq = 1600;
 		break;
 	}
-	DRM_DEBUG_DRIVER("DDR speed: %d MHz\n", dev_priv->mem_freq);
+	DRM_INFO("DDR speed: %d MHz\n", dev_priv->mem_freq);
+	DRM_INFO("cz_freq: %d MHz\n", dev_priv->rps.cz_freq);
 
 	dev_priv->rps.max_freq = cherryview_rps_max_freq(dev_priv);
 	dev_priv->rps.rp0_freq = dev_priv->rps.max_freq;
-	DRM_DEBUG_DRIVER("max GPU freq: %d MHz (%u)\n",
+	DRM_INFO("max GPU freq: %d MHz (%u)\n",
 			 intel_gpu_freq(dev_priv, dev_priv->rps.max_freq),
 			 dev_priv->rps.max_freq);
 
 	dev_priv->rps.efficient_freq = cherryview_rps_rpe_freq(dev_priv);
-	DRM_DEBUG_DRIVER("RPe GPU freq: %d MHz (%u)\n",
+	DRM_INFO("RPe GPU freq: %d MHz (%u)\n",
 			 intel_gpu_freq(dev_priv, dev_priv->rps.efficient_freq),
 			 dev_priv->rps.efficient_freq);
 
 	dev_priv->rps.rp1_freq = cherryview_rps_guar_freq(dev_priv);
-	DRM_DEBUG_DRIVER("RP1(Guar) GPU freq: %d MHz (%u)\n",
+	DRM_INFO("RP1(Guar) GPU freq: %d MHz (%u)\n",
 			 intel_gpu_freq(dev_priv, dev_priv->rps.rp1_freq),
 			 dev_priv->rps.rp1_freq);
 
 	/* PUnit validated range is only [RPe, RP0] */
 	dev_priv->rps.min_freq = dev_priv->rps.efficient_freq;
-	DRM_DEBUG_DRIVER("min GPU freq: %d MHz (%u)\n",
+	DRM_INFO("min GPU freq: %d MHz (%u)\n",
 			 intel_gpu_freq(dev_priv, dev_priv->rps.min_freq),
 			 dev_priv->rps.min_freq);
+
+	if (dev_priv->rps.max_freq <= 20) {
+		dev_priv->rps.max_freq = 40;
+		dev_priv->rps.rp0_freq = dev_priv->rps.max_freq;
+	}
+//	if (dev_priv->rps.min_freq == 0)
+		dev_priv->rps.min_freq = 20;
+	if (dev_priv->rps.idle_freq == 0)
+		dev_priv->rps.idle_freq = 20;
+	if (dev_priv->rps.efficient_freq == 0)
+		dev_priv->rps.efficient_freq = 20;
+	dev_priv->rps.rp1_freq = dev_priv->rps.min_freq;
 
 	WARN_ONCE((dev_priv->rps.max_freq |
 		   dev_priv->rps.efficient_freq |

@@ -1679,6 +1679,8 @@ usb_alloc_device(device_t parent_dev, struct usb_bus *bus,
 			DPRINTFN(0, "device init %d failed "
 			    "(%s, ignored)\n", device_index, 
 			    usbd_errstr(err));
+			kprintf("%s: device init %d failed: %s\n",
+			    __func__, device_index, usbd_errstr(err));
 			goto done;
 		}
 	}
@@ -1723,6 +1725,8 @@ usb_alloc_device(device_t parent_dev, struct usb_bus *bus,
 		if (err) {
 			DPRINTFN(0, "setting up USB template failed maybe the USB "
 			    "template module has not been loaded\n");
+			kprintf("%s: setting up USB template failed\n",
+			    __func__);
 			goto done;
 		}
 	}
@@ -1737,6 +1741,8 @@ usb_alloc_device(device_t parent_dev, struct usb_bus *bus,
 		if (err != 0) {
 			err = usbd_req_re_enumerate(udev, NULL);
 			if (err != 0) {
+				kprintf("%s: usbd_req_re_enumerate failed\n",
+				    __func__);
 				goto done;
 			}
 		}

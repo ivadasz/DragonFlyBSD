@@ -495,8 +495,10 @@ usbd_do_request_flags(struct usb_device *udev, struct lock *lock,
 		err = (hr_func) (udev, req, &desc, &temp);
 		USB_BUS_UNLOCK(udev->bus);
 
-		if (err)
+		if (err) {
+			kprintf("%s: after hr_func, error=%d\n", __func__, err);
 			goto done;
+		}
 
 		if (length > temp) {
 			if (!(flags & USB_SHORT_XFER_OK)) {
@@ -646,6 +648,7 @@ usbd_do_request_flags(struct usb_device *udev, struct lock *lock,
 		err = xfer->error;
 
 		if (err) {
+			kprintf("%s: xfer->error=%d\n", __func__, err);
 			break;
 		}
 
@@ -703,11 +706,13 @@ usbd_do_request_flags(struct usb_device *udev, struct lock *lock,
 			}
 		}
 		if (err) {
+			kprintf("%s: err=%d\n", __func__, err);
 			break;
 		}
 	}
 
 	if (err) {
+		kprintf("%s: basically done, err=%d\n", __func__, err);
 		/*
 		 * Make sure that the control endpoint is no longer
 		 * blocked in case of a non-transfer related error:
@@ -1963,15 +1968,23 @@ usbd_setup_device_desc(struct usb_device *udev, struct lock *lock)
 		/* get partial device descriptor, some devices crash on this */
 		err = usbd_req_get_desc(udev, lock, NULL, &udev->ddesc,
 		    USB_MAX_IPACKET, USB_MAX_IPACKET, 0, UDESC_DEVICE, 0, 0);
-		if (err != 0)
+		if (err != 0) {
+			kprintf("%s: usbd_req_get_desc failed: %d\n",
+			    __func__, err);
 			break;
+		}
 
 		/* get the full device descriptor */
 		err = usbd_req_get_device_desc(udev, lock, &udev->ddesc);
+		if (err != 0) {
+			kprintf("%s: usbd_req_get_device_desc failed: %d\n",
+			    __func__, err);
+		}
+		err = 0;
 		break;
 
 	default:
-		DPRINTF("Minimum bMaxPacketSize is large enough "
+		kprintf("Minimum bMaxPacketSize is large enough "
 		    "to hold the complete device descriptor or "
 		    "only one bMaxPacketSize choice\n");
 
@@ -1979,13 +1992,19 @@ usbd_setup_device_desc(struct usb_device *udev, struct lock *lock)
 		err = usbd_req_get_device_desc(udev, lock, &udev->ddesc);
 
 		/* try one more time, if error */
-		if (err != 0)
+		if (err != 0) {
 			err = usbd_req_get_device_desc(udev, lock, &udev->ddesc);
+			if (err != 0) {
+				kprintf(
+				    "%s: usbd_req_get_device_desc failed: %d\n",
+				    __func__, err);
+			}
+		}
 		break;
 	}
 
 	if (err != 0) {
-		DPRINTFN(0, "getting device descriptor "
+		kprintf("getting device descriptor "
 		    "at addr %d failed, %s\n", udev->address,
 		    usbd_errstr(err));
 		return (err);
