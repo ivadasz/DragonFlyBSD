@@ -9,6 +9,9 @@
 
 MALLOC_DEFINE(M_RPM, "m_rpm", "RPM memory allocations");
 
+static int do_rpm = 0;
+TUNABLE_INT("kern.do_runtime_suspend", &do_rpm);
+
 struct rpm_client {
 	SLIST_ENTRY(rpm_client) entries;
 	struct rpm_ops *ops;
@@ -120,6 +123,9 @@ void
 pm_runtime_register(device_t dev, struct rpm_ops *ops)
 {
 	struct rpm_client *client;
+
+	if (!do_rpm)
+		return;
 
 	kprintf("%s: Registering runtime pm device\n", __func__);
 

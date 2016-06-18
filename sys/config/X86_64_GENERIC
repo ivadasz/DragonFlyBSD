@@ -65,46 +65,46 @@ device		pci
 # AHCI driver, this will override NATA for AHCI devices,
 # both drivers may be included.
 #
-device		ahci
+#device		ahci
 
 # SiI3124/3132 driver
 #
-device		sili
+#device		sili
 
 # NEW-ATA (NATA) and ATAPI devices
 #
-device		nata
-device		natadisk		# ATA disk drives
-device		natapicd		# ATAPI CDROM drives
-device		natapifd		# ATAPI floppy drives
-device		natapist		# ATAPI tape drives
-device		natapicam		# Emulate ATAPI devices as SCSI
-device		nataraid		# support for ATA software RAID
+#device		nata
+#device		natadisk		# ATA disk drives
+#device		natapicd		# ATAPI CDROM drives
+#device		natapifd		# ATAPI floppy drives
+#device		natapist		# ATAPI tape drives
+#device		natapicam		# Emulate ATAPI devices as SCSI
+#device		nataraid		# support for ATA software RAID
 					# controllers
 options 	ATA_STATIC_ID		# Static device numbering
 
 # SCSI Controllers
-device		ahc		# AHA2940 and onboard AIC7xxx devices
-device		ahd		# AHA39320/29320 and onboard AIC79xx devices
-device		amd		# AMD 53C974 (Tekram DC-390(T))
-device		isp		# Qlogic family
+#device		ahc		# AHA2940 and onboard AIC7xxx devices
+#device		ahd		# AHA39320/29320 and onboard AIC79xx devices
+#device		amd		# AMD 53C974 (Tekram DC-390(T))
+#device		isp		# Qlogic family
 #device		ispfw		# Firmware for QLogic HBAs- normally a module
-device		mpt		# LSI-Logic MPT/Fusion
-device		mps		# LSI-Logic MPT-Fusion 2
-device		ncr		# NCR/Symbios Logic
-device		sym		# NCR/Symbios Logic (newer chipsets)
-options 	SYM_SETUP_LP_PROBE_MAP=0x40
+#device		mpt		# LSI-Logic MPT/Fusion
+#device		mps		# LSI-Logic MPT-Fusion 2
+#device		ncr		# NCR/Symbios Logic
+#device		sym		# NCR/Symbios Logic (newer chipsets)
+#options 	SYM_SETUP_LP_PROBE_MAP=0x40
 				# Allow ncr to attach legacy NCR devices when
 				# both sym and ncr are configured
 
-device		adv0	at isa?
-device		adw
-device		bt
-device		aic
+#device		adv0	at isa?
+#device		adw
+#device		bt
+#device		aic
 
-device		ncv		# NCR 53C500
-device		nsp		# Workbit Ninja SCSI-3
-device		stg		# TMC 18C30/18C50
+#device		ncv		# NCR 53C500
+#device		nsp		# Workbit Ninja SCSI-3
+#device		stg		# TMC 18C30/18C50
 
 # SCSI peripherals
 device		scbus		# SCSI bus (required)
@@ -115,41 +115,41 @@ device		pass		# Passthrough device (direct SCSI access)
 device		sg		# Passthrough device (linux scsi generic)
 
 # RAID controllers interfaced to the SCSI subsystem
-device		arcmsr		# Areca SATA II RAID
-device		asr		# DPT SmartRAID V, VI and Adaptec SCSI RAID
-device		ciss		# Compaq SmartRAID 5* series
-device		dpt		# DPT Smartcache - See LINT64 for options!
-device		"hpt27xx"	# Highpoint RocketRAID 27xx series
-device		hptiop		# Highpoint RocketRAID 3xxx series
-device		hptmv		# Highpoint RocketRAID 182x
-device		hptrr		# Highpoint RocketRAID 17xx, 22xx, 23xx, 25xx
-device		iir		# Intel Integrated RAID
-device		mly		# Mylex AcceleRAID/eXtremeRAID
-device		mrsas		# LSI MegaRAID SAS (Thunderbolt series and up)
-device		twa		# 3ware 9000 series PATA/SATA RAID
-device		tws		# 3ware 9750 series SATA/SAS RAID
+#device		arcmsr		# Areca SATA II RAID
+#device		asr		# DPT SmartRAID V, VI and Adaptec SCSI RAID
+#device		ciss		# Compaq SmartRAID 5* series
+#device		dpt		# DPT Smartcache - See LINT64 for options!
+#device		"hpt27xx"	# Highpoint RocketRAID 27xx series
+#device		hptiop		# Highpoint RocketRAID 3xxx series
+#device		hptmv		# Highpoint RocketRAID 182x
+#device		hptrr		# Highpoint RocketRAID 17xx, 22xx, 23xx, 25xx
+#device		iir		# Intel Integrated RAID
+#device		mly		# Mylex AcceleRAID/eXtremeRAID
+#device		mrsas		# LSI MegaRAID SAS (Thunderbolt series and up)
+#device		twa		# 3ware 9000 series PATA/SATA RAID
+#device		tws		# 3ware 9750 series SATA/SAS RAID
 
 # RAID controllers
-device		aac		# Adaptec FSA RAID, Dell PERC2/PERC3
-device		aacp		# SCSI passthrough for aac (requires CAM)
-device		amr		# AMI MegaRAID
-device		amrp		# SCSI Passthrough interface (optional, CAM req.)
-device		ida		# Compaq Smart RAID
-device		ips		# IBM ServeRAID
-device		mlx		# Mylex DAC960 family
-device		mfi		# LSI MegaRAID SAS
-device		mfip		# LSI MegaRAID SAS passthrough, requires CAM
-device		twe		# 3ware Escalade 7000/8000's
+#device		aac		# Adaptec FSA RAID, Dell PERC2/PERC3
+#device		aacp		# SCSI passthrough for aac (requires CAM)
+#device		amr		# AMI MegaRAID
+#device		amrp		# SCSI Passthrough interface (optional, CAM req.)
+#device		ida		# Compaq Smart RAID
+#device		ips		# IBM ServeRAID
+#device		mlx		# Mylex DAC960 family
+#device		mfi		# LSI MegaRAID SAS
+#device		mfip		# LSI MegaRAID SAS passthrough, requires CAM
+#device		twe		# 3ware Escalade 7000/8000's
 
 # VirtIO support
-device		virtio		# VirtIO core
-device		virtio_blk	# VirtIO disk driver
-device		vtnet		# VirtIO network driver
-device		virtio_pci	# VirtIO transport over PCI bus
+#device		virtio		# VirtIO core
+#device		virtio_blk	# VirtIO disk driver
+#device		vtnet		# VirtIO network driver
+#device		virtio_pci	# VirtIO transport over PCI bus
 
 # atkbdc0 controls both the keyboard and the PS/2 mouse
 device		atkbdc0	at isa? port IO_KBD
-device		atkbd0	at atkbdc? irq 1
+device		atkbd0	at atkbdc? irq 1 flags 0x1
 device		psm0	at atkbdc? irq 12
 
 device		vga0	at isa?
@@ -179,13 +179,13 @@ device		clockmod
 
 # HW monitoring devices
 #device		aps0	at isa? port 0x1600
-device		lm0	at isa? port 0x290
-device		it0	at isa?	port 0x290
-device		it1	at isa?	port 0xc00
-device		it2	at isa?	port 0xd00
-device		it3	at isa?	port 0x228
-device		wbsio0	at isa? port 0x2e
-device		wbsio1	at isa? port 0x4e
+#device		lm0	at isa? port 0x290
+#device		it0	at isa?	port 0x290
+#device		it1	at isa?	port 0xc00
+#device		it2	at isa?	port 0xd00
+#device		it3	at isa?	port 0x228
+#device		wbsio0	at isa? port 0x2e
+#device		wbsio1	at isa? port 0x4e
 # Intel Core and newer CPUs on-die digital thermal sensor support
 device		coretemp
 device		dimm		# DIMM information (location, etc.)
@@ -202,56 +202,56 @@ device		cardbus
 device		cbb
 
 # Serial (COM) ports
-device		sio0	at isa? port IO_COM1 flags 0x10 irq 4
-device		sio1	at isa? port IO_COM2 irq 3
-device		sio2	at isa? disable port IO_COM3 irq 5
-device		sio3	at isa? disable port IO_COM4 irq 9
+#device		sio0	at isa? port IO_COM1 flags 0x10 irq 4
+#device		sio1	at isa? port IO_COM2 irq 3
+#device		sio2	at isa? disable port IO_COM3 irq 5
+#device		sio3	at isa? disable port IO_COM4 irq 9
 
 # PCI Ethernet NICs.
-device		de		# DEC/Intel DC21x4x (``Tulip'')
-device		txp		# 3Com 3cR990 (``Typhoon'')
+#device		de		# DEC/Intel DC21x4x (``Tulip'')
+#device		txp		# 3Com 3cR990 (``Typhoon'')
 
-device		em		# Intel PRO/1000 adapter Gigabit Ethernet Card (``Wiseman'')
+#device		em		# Intel PRO/1000 adapter Gigabit Ethernet Card (``Wiseman'')
 				# Requires ig_hal
-device		igb		# Intel Pro/1000 (82575, 82576, 82580, i350)
+#device		igb		# Intel Pro/1000 (82575, 82576, 82580, i350)
 				# Requires ig_hal
-device		ig_hal		# Intel PRO/1000 hardware abstraction layer
-device		ix		# Intel PRO/10GbE PCIE Ethernet Family
+#device		ig_hal		# Intel PRO/1000 hardware abstraction layer
+#device		ix		# Intel PRO/10GbE PCIE Ethernet Family
 
-device		oce		# Emulex OneConnect 10Gb
+#device		oce		# Emulex OneConnect 10Gb
 
 # PCI Ethernet NICs that use the common MII bus controller code.
 # NOTE: Be sure to keep the 'device miibus' line in order to use these NICs!
-device		miibus		# MII bus support
-device		ae		# Attansic/Atheros L2 Fast Ethernet
-device		age		# Attansic/Atheros L1 Gigabit Ethernet
-device		alc		# Atheros AR8131/AR8132
-device		ale		# Atheros AR8121/AR8113/AR8114
-device		bce		# Broadcom NetXtreme II Gigabit Ethernet
-device		bfe		# Broadcom BCM440x 10/100 Ethernet
-device		bnx		# Broadcom NetXtreme 5718/57785 Gigabit Ethernet
-device		dc		# DEC/Intel 21143 and various workalikes
-device		et		# Agere ET1310 10/100/1000 Ethernet
-device		fxp		# Intel EtherExpress PRO/100B (82557, 82558)
-device		jme		# JMicron Gigabit/Fast Ethernet
-device		pcn		# AMD Am79C97x PCI 10/100 NICs
-device		rl		# RealTek 8129/8139
-device		re		# RealTek 8139C+/8169
-device		sf		# Adaptec AIC-6915 (``Starfire'')
-device		sis		# Silicon Integrated Systems SiS 900/SiS 7016
-device		sk		# SysKonnect GEnesis, LinkSys EG1023, D-Link
-device		ste		# Sundance ST201 (D-Link DFE-550TX)
-device		tl		# Texas Instruments ThunderLAN
-device		tx		# SMC EtherPower II (83c170 ``EPIC'')
-device		vge		# VIA 612x GigE
-device		vr		# VIA Rhine, Rhine II
-device		wb		# Winbond W89C840F
-device		xl		# 3Com 3c90x (``Boomerang'', ``Cyclone'')
-device		bge		# Broadcom BCM570x (``Tigon III'')
-device		stge		# Sundance/Tamarack TC9021 Gigabit Ethernet
-device		msk		# Marvell/SysKonnect Yukon II Gigabit Ethernet
-device		nfe		# NVIDIA nForce MCP 10/100/Gigabit Ethernet
-device		xe		# Xircom Ethernet
+#device		miibus		# MII bus support
+#device		ae		# Attansic/Atheros L2 Fast Ethernet
+#device		age		# Attansic/Atheros L1 Gigabit Ethernet
+#device		alc		# Atheros AR8131/AR8132
+#device		ale		# Atheros AR8121/AR8113/AR8114
+#device		bce		# Broadcom NetXtreme II Gigabit Ethernet
+#device		bfe		# Broadcom BCM440x 10/100 Ethernet
+#device		bnx		# Broadcom NetXtreme 5718/57785 Gigabit Ethernet
+#device		dc		# DEC/Intel 21143 and various workalikes
+#device		et		# Agere ET1310 10/100/1000 Ethernet
+#device		fxp		# Intel EtherExpress PRO/100B (82557, 82558)
+#device		jme		# JMicron Gigabit/Fast Ethernet
+#device		pcn		# AMD Am79C97x PCI 10/100 NICs
+#device		rl		# RealTek 8129/8139
+#device		re		# RealTek 8139C+/8169
+#device		sf		# Adaptec AIC-6915 (``Starfire'')
+#device		sis		# Silicon Integrated Systems SiS 900/SiS 7016
+#device		sk		# SysKonnect GEnesis, LinkSys EG1023, D-Link
+#device		ste		# Sundance ST201 (D-Link DFE-550TX)
+#device		tl		# Texas Instruments ThunderLAN
+#device		tx		# SMC EtherPower II (83c170 ``EPIC'')
+#device		vge		# VIA 612x GigE
+#device		vr		# VIA Rhine, Rhine II
+#device		wb		# Winbond W89C840F
+#device		xl		# 3Com 3c90x (``Boomerang'', ``Cyclone'')
+#device		bge		# Broadcom BCM570x (``Tigon III'')
+#device		stge		# Sundance/Tamarack TC9021 Gigabit Ethernet
+#device		msk		# Marvell/SysKonnect Yukon II Gigabit Ethernet
+#device		nfe		# NVIDIA nForce MCP 10/100/Gigabit Ethernet
+#device		xe		# Xircom Ethernet
 
 # Wireless NIC cards
 options 	IEEE80211_DEBUG		#enable debugging msgs
@@ -307,8 +307,8 @@ device		cryptodev	# /dev/crypto for access to h/w
 # USB support
 #
 device		usb		# USB Bus (required)
-device		uhci		# UHCI PCI->USB interface
-device		ohci		# OHCI PCI->USB interface
+#device		uhci		# UHCI PCI->USB interface
+#device		ohci		# OHCI PCI->USB interface
 device		uhid		# "Human Interface Devices"
 device		ukbd		# Keyboard
 device		ulpt		# Printer
@@ -323,9 +323,9 @@ device		kue		# Kawasaki LSI USB ethernet
 #device		rum		# Ralink Technology RT2501USB/RT2601USB
 
 # FireWire support
-device		firewire	# FireWire bus code
-device		sbp		# SCSI over FireWire (Requires scbus and da)
-device		fwe		# Ethernet over FireWire (non-standard!)
+#device		firewire	# FireWire bus code
+#device		sbp		# SCSI over FireWire (Requires scbus and da)
+#device		fwe		# Ethernet over FireWire (non-standard!)
 
 # MMC/SD
 device		mmc

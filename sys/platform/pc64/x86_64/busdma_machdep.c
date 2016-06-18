@@ -562,7 +562,9 @@ bus_dmamem_alloc(bus_dma_tag_t dmat, void **vaddr, int flags,
 			kfree(*vaddr, M_DEVBUF);
 			*vaddr = kmalloc(maxsize, M_DEVBUF,
 			    mflags | M_POWEROF2);
-			check_kmalloc(dmat, *vaddr, 1);
+			if (check_kmalloc(dmat, *vaddr, 1))
+				kprintf("%s: still wrong alignment/boundary\n",
+				    __func__);
 		}
 	} else {
 		/*

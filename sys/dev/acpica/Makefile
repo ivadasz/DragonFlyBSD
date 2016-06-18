@@ -107,17 +107,18 @@ SRCS+=	acpi_cpu_machdep.c
 # Machine-specific code such as sleep/wakeup
 SRCS+=	acpi_machdep.c acpi_wakecode.h
 SRCS+=	acpi_wakeup.c
-.if ${MACHINE_ARCH} == "x86_64"
-SRCS+=	pmtimer.c
-.endif
+#.if ${MACHINE_ARCH} == "x86_64"
+#SRCS+=	pmtimer.c
+#.endif
 CLEANFILES+=	acpi_wakecode.h acpi_wakecode.o acpi_wakecode.bin
 
 acpi_wakecode.h: acpi_wakecode.S
 	${MAKE} -f ${SYSDIR}/${OSACPI_MD_DIR}/Makefile \
 		MAKESRCPATH=${SYSDIR}/${OSACPI_MD_DIR}
 
-SUBDIR=	acpi_asus acpi_dock acpi_fujitsu acpi_hp acpi_panasonic acpi_pvpanic
-SUBDIR+=acpi_sony acpi_thinkpad acpi_toshiba acpi_video acpi_wmi aibs
+SUBDIR=	acpi_array acpi_asus acpi_dock acpi_fujitsu acpi_hp acpi_panasonic
+SUBDIR+=acpi_pvpanic acpi_sony acpi_thinkpad acpi_toshiba acpi_video acpi_wmi
+SUBDIR+=aibs
 
 # Empty for concurrent build
 #

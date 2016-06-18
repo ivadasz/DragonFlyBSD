@@ -124,6 +124,8 @@ static int	iichid_get_descriptor_address(struct iichid_softc *sc,
 static void	iichid_dump_bytes(uint8_t *buf, u_int count);
 static int	iichid_readreg(struct iichid_softc *sc, uint16_t reg,
 		    u_char *buf, int count, int *actualp);
+static int	iichid_readbuf(struct iichid_softc *sc, uint16_t reg,
+		    u_char *buf, int count, int *actualp);
 static int	iichid_readreg_check(struct iichid_softc *sc, uint16_t reg,
 		    u_char *buf, int count);
 static int	iichid_writereg16(struct iichid_softc *sc, uint16_t reg,
@@ -232,6 +234,18 @@ iichid_readreg(struct iichid_softc *sc, uint16_t reg, u_char *buf, int count,
 	}
 	return (0);
 }
+static int
+iichid_readbuf(struct iichid_softc *sc, uint16_t reg, u_char *buf, int count,
+    int *actualp)
+{
+	if (iicserial_transfer(sc->iicres, 1, (char *)&reg, 2, buf, count,
+	    actualp) != 0 ) {
+		device_printf(sc->dev,
+		    "failed to read %d bytes from reg 0x%04x\n", count, reg);
+		return (1);
+	}
+	return (0);
+}
 
 static int
 iichid_readreg_check(struct iichid_softc *sc, uint16_t reg, u_char *buf,
@@ -314,7 +328,7 @@ iichid_fetch_report(struct iichid_softc *sc, int *actualp)
 	uint16_t maxcount = sc->hid_descriptor.wMaxInputLength;
 	int count;
 
-	if (iichid_readreg(sc, reg, sc->input_report, maxcount, &count) != 0) {
+	if (iichid_readbuf(sc, reg, sc->input_report, maxcount, &count) != 0) {
 		device_printf(sc->dev, "fetching input report failed\n");
 		return (1);
 	}
@@ -912,33 +926,36 @@ iichid_attach(device_t dev)
 	device_printf(dev, "HID descriptor:\n");
 	iichid_dump_bytes((u_char *)&sc->hid_descriptor, 30);
 
-	sc->report_descriptor = kmalloc(sc->hid_descriptor.wReportDescLength,
-	    M_DEVBUF, M_WAITOK | M_ZERO);
-
-	if (iichid_readreg_check(sc, sc->hid_descriptor.wReportDescRegister,
-	    sc->report_descriptor, sc->hid_descriptor.wReportDescLength) != 0) {
-		pci_set_powerstate(dev, PCI_POWERSTATE_D3);
-		iic_free_resource(dev, sc->iicres);
-		gpioint_free_resource(dev, sc->intres);
-		kfree(sc->report_descriptor, M_DEVBUF);
-		return (ENXIO);
-	}
-	device_printf(dev, "Report descriptor (%d bytes):\n",
-	    sc->hid_descriptor.wReportDescLength);
-	iichid_dump_bytes(sc->report_descriptor,
-	    sc->hid_descriptor.wReportDescLength);
+	iichid_setpower(sc, 1);
 
 	sc->input_report = kmalloc(sc->hid_descriptor.wMaxInputLength,
 	    M_DEVBUF, M_WAITOK | M_ZERO);
 
 	gpioint_establish_interrupt(sc->intres, iichid_intr, sc);
 
-	iichid_setpower(sc, 1);
-
 	if (iichid_reset(sc) != 0) {
 		iichid_detach(dev);
 		return (ENXIO);
 	}
+
+	sc->report_descriptor = kmalloc(sc->hid_descriptor.wReportDescLength,
+	    M_DEVBUF, M_WAITOK | M_ZERO);
+
+	if (iichid_readreg_check(sc, sc->hid_descriptor.wReportDescRegister,
+	    sc->report_descriptor, sc->hid_descriptor.wReportDescLength) != 0) {
+		gpioint_release_interrupt(sc->intres);
+		iichid_setpower(sc, 0);
+		pci_set_powerstate(dev, PCI_POWERSTATE_D3);
+		iic_free_resource(dev, sc->iicres);
+		gpioint_free_resource(dev, sc->intres);
+		kfree(sc->report_descriptor, M_DEVBUF);
+		kfree(sc->input_report, M_DEVBUF);
+		return (ENXIO);
+	}
+	device_printf(dev, "Report descriptor (%d bytes):\n",
+	    sc->hid_descriptor.wReportDescLength);
+	iichid_dump_bytes(sc->report_descriptor,
+	    sc->hid_descriptor.wReportDescLength);
 
 	iichid_setpower(sc, 0);
 	sc->poweron = 0;

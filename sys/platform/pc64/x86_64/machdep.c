@@ -620,7 +620,13 @@ cpu_mwait_attach(void)
 		for (j = 0; j < subcnt; ++j) {
 			KASSERT(hint_idx < cpu_mwait_hints_cnt,
 			    ("invalid mwait hint index %d", hint_idx));
-			cpu_mwait_hints[hint_idx] = MWAIT_EAX_HINT(i, j);
+			kprintf("%s: hint_idx=%d i=%d j=%d\n", __func__, hint_idx, i, j);
+			if (i == 6 && j == 2)
+				cpu_mwait_hints[hint_idx] = MWAIT_EAX_HINT(i, 8);
+			else if (7 == 6 && j == 2)
+				cpu_mwait_hints[hint_idx] = MWAIT_EAX_HINT(i, 4);
+			else
+				cpu_mwait_hints[hint_idx] = MWAIT_EAX_HINT(i, j);
 			++hint_idx;
 		}
 	}
@@ -655,7 +661,13 @@ cpu_mwait_attach(void)
 		for (j = 0; j < subcnt; ++j) {
 			KASSERT(hint_idx < cpu_mwait_deep_hints_cnt,
 			    ("invalid mwait deep hint index %d", hint_idx));
-			cpu_mwait_deep_hints[hint_idx] = MWAIT_EAX_HINT(i, j);
+			kprintf("%s: hint_idx=%d i=%d j=%d\n", __func__, hint_idx, i, j);
+			if (i == 6 && j == 2)
+				cpu_mwait_hints[hint_idx] = MWAIT_EAX_HINT(i, 8);
+			else if (i == 7 && j == 2)
+				cpu_mwait_hints[hint_idx] = MWAIT_EAX_HINT(i, 4);
+			else
+				cpu_mwait_deep_hints[hint_idx] = MWAIT_EAX_HINT(i, j);
 			++hint_idx;
 		}
 	}
@@ -2931,13 +2943,22 @@ cpu_mwait_hint_valid(uint32_t hint)
 {
 	int cx_idx, sub;
 
+	kprintf("%s: checking hint: 0x%x\n", __func__, hint);
+
 	cx_idx = MWAIT_EAX_TO_CX(hint);
-	if (cx_idx >= CPU_MWAIT_CX_MAX)
+	if (cx_idx >= CPU_MWAIT_CX_MAX) {
 		return FALSE;
+	}
 
 	sub = MWAIT_EAX_TO_CX_SUB(hint);
-	if (sub >= cpu_mwait_cx_info[cx_idx].subcnt)
+	if (sub >= cpu_mwait_cx_info[cx_idx].subcnt) {
+#if 0
 		return FALSE;
+#else
+		kprintf("%s: would fail: sub=%d, cpu_mwait_cx_info[%d].subcnt==%d\n",
+		    __func__, sub, cx_idx, cpu_mwait_cx_info[cx_idx].subcnt);
+#endif
+	}
 
 	return TRUE;
 }

@@ -333,6 +333,19 @@ iicserial_rawtrans(struct iicserial_resource *resource,
 			   wbuf, wcount, rbuf, rcount, actualp);
 }
 
+int
+iicserial_transfer(struct iicserial_resource *resource, int flags,
+    char *wbuf, int wcount, char *rbuf, int rcount, int *actualp)
+{
+	int f;
+
+	f = SMB_TRANS_NOCMD | SMB_TRANS_NOCNT | SMB_TRANS_7BIT;
+	if (flags)
+		f |= SMB_TRANS_WORDCNT;
+	return SMBUS_TRANS(resource->provider, resource->address, 0, f,
+			   wbuf, wcount, rbuf, rcount, actualp);
+}
+
 static int
 smbus_acpi_probe(device_t dev)
 {
