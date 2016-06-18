@@ -101,6 +101,7 @@
 
 /* Usages Digitizers */
 #define	HUD_UNDEFINED		0x0000
+#define	HUD_TOUCHSCREEN		0x0004
 #define	HUD_TIP_PRESSURE	0x0030
 #define	HUD_BARREL_PRESSURE	0x0031
 #define	HUD_IN_RANGE		0x0032
@@ -129,6 +130,8 @@
 #define	HUC_AC_PAN		0x0238
 
 #define	HID_USAGE2(p,u) (((p) << 16) | (u))
+#define	HID_GET_USAGE(u) ((u) & 0xffff)
+#define	HID_GET_USAGE_PAGE(u) (((u) >> 16) & 0xffff)
 
 /* Bits in the input/output/feature items */
 #define	HIO_CONST	0x001
@@ -203,6 +206,7 @@ void hid_put_data_unsigned(uint8_t *buf, uint32_t len,
 int	hid_is_collection(const void *desc, uint32_t size, int32_t usage);
 int	hid_is_mouse(const void *d_ptr, uint16_t d_len);
 int	hid_is_keyboard(const void *d_ptr, uint16_t d_len);
+int	hid_is_digitizer(const void *d_ptr, uint16_t d_len);
 
 typedef void (*hid_input_handler_t)(int id, uint8_t buf, int count);
 #endif					/* _KERNEL */
