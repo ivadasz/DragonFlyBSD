@@ -117,6 +117,8 @@ struct uhid_softc {
 					 * static */
 
 	device_t child;
+	hid_input_handler_t input_handler;
+	void *input_arg;
 };
 
 static const uint8_t uhid_xb360gp_report_descr[] = {UHID_XB360GP_REPORT_DESCR()};
@@ -196,6 +198,10 @@ uhid_intr_read_callback(struct usb_xfer *xfer, usb_error_t error)
 			kprintf("uhid: %s: report (length: %u):\n",
 			    __func__, actlen);
 			uhid_dump(sc->sc_buffer, actlen);
+			if (sc->input_handler != NULL) {
+				sc->input_handler(0, sc->sc_buffer, actlen,
+				    sc->input_arg);
+			}
 		} else {
 			/* ignore it */
 			DPRINTF("ignored transfer, %d bytes\n", actlen);
@@ -731,18 +737,55 @@ uhid_parse_descriptor(device_t dev)
 		kprintf("uhid: report id=%d size=%d\n", i, sz);
 		if (sc->child == NULL) {
 			sc->child = device_add_child(dev, NULL, -1);
+			/* XXX */
+			device_set_ivars(sc->child, NULL);
 		}
 	}
 }
 
 static void
-uhid_get_descriptor(device_t dev, int *id, char **descp, uint16_t *sizep)
+uhid_get_descriptor(device_t dev, void *info, int *id, char **descp,
+    uint16_t *sizep)
 {
 	struct uhid_softc *sc = device_get_softc(dev);
 
 	*id = 0;
 	*descp = sc->sc_repdesc_ptr;
 	*sizep = sc->sc_repdesc_size;
+}
+
+static void
+uhid_set_handler(device_t dev, void *info, hid_input_handler_t handler,
+    void *arg)
+{
+	struct uhid_softc *sc = device_get_softc(dev);
+
+	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
+	sc->input_handler = handler;
+	sc->input_arg = arg;
+	lockmgr(&sc->sc_lock, LK_RELEASE);
+}
+
+static void
+uhid_start(device_t dev, void *info)
+{
+	struct uhid_softc *sc = device_get_softc(dev);
+
+	device_printf(dev, "starting interrupt input transfer\n");
+	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
+	usbd_transfer_start(sc->sc_xfer[UHID_INTR_DT_RD]);
+	lockmgr(&sc->sc_lock, LK_RELEASE);
+}
+
+static void
+uhid_stop(device_t dev, void *info)
+{
+	struct uhid_softc *sc = device_get_softc(dev);
+
+	device_printf(dev, "stopping interrupt input transfer\n");
+	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
+	usbd_transfer_stop(sc->sc_xfer[UHID_INTR_DT_RD]);
+	lockmgr(&sc->sc_lock, LK_RELEASE);
 }
 
 static int
@@ -869,11 +912,6 @@ uhid_attach(device_t dev)
 	uhid_parse_descriptor(dev);
 	bus_generic_attach(dev);
 
-	device_printf(dev, "starting interrupt input transfer\n");
-	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
-	usbd_transfer_start(sc->sc_xfer[UHID_INTR_DT_RD]);
-	lockmgr(&sc->sc_lock, LK_RELEASE);
-
 #if 0
 	error = usb_fifo_attach(uaa->device, sc, &sc->sc_lock,
 	    &uhid_fifo_methods, &sc->sc_fifo,
@@ -922,6 +960,9 @@ static device_method_t uhid_methods[] = {
 	DEVMETHOD(device_detach, uhid_detach),
 
 	DEVMETHOD(hid_get_descriptor, uhid_get_descriptor),
+	DEVMETHOD(hid_set_handler, uhid_set_handler),
+	DEVMETHOD(hid_start, uhid_start),
+	DEVMETHOD(hid_stop, uhid_stop),
 
 	DEVMETHOD_END
 };
