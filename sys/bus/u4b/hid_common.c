@@ -870,7 +870,9 @@ int
 hid_is_digitizer(const void *d_ptr, uint16_t d_len)
 {
 	if (hid_is_collection(d_ptr, d_len,
-	    HID_USAGE2(HUP_DIGITIZERS, HUD_TOUCHSCREEN)))
+	    HID_USAGE2(HUP_DIGITIZERS, HUD_TOUCHSCREEN)) ||
+	    hid_is_collection(d_ptr, d_len,
+	    HID_USAGE2(HUP_DIGITIZERS, HUD_FINGER)))
 		return (1);
 	return (0);
 }
