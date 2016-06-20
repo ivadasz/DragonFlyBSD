@@ -3720,96 +3720,104 @@ struct resource_provider {
 	device_t dev;
 	u_int refcnt;
 	char type[64];
-	TAILQ_ENTRY(resource_provider) link;
 };
 
 static struct lock resource_provider_lk;
 
 LOCK_SYSINIT(resource_provider, &resource_provider_lk, "acpires", 0);
 
-static TAILQ_HEAD(resource_provider_list, resource_provider) providers =
-    TAILQ_HEAD_INITIALIZER(providers);
+static void
+acpi_resource_provider_objhandler(ACPI_HANDLE h, void *data)
+{
+}
 
 void
-acpi_add_resource_provider(device_t dev, const char *type)
+acpi_add_resource_provider(ACPI_HANDLE handle, device_t dev, const char *type)
 {
+	ACPI_STATUS s;
 	struct resource_provider *p;
 
 	p = kmalloc(sizeof(*p), M_ACPIDEV, M_WAITOK | M_ZERO);
 	p->dev = dev;
 	strlcpy(p->type, type, sizeof(p->type));
 	p->refcnt = 0;
-	lockmgr(&resource_provider_lk, LK_EXCLUSIVE);
-	TAILQ_INSERT_TAIL(&providers, p, link);
-	lockmgr(&resource_provider_lk, LK_RELEASE);
+	s = AcpiAttachData(handle, acpi_resource_provider_objhandler, p);
+	if (ACPI_FAILURE(s))
+		kfree(p, M_ACPIDEV);
 }
 
 int
-acpi_remove_resource_provider(device_t dev)
+acpi_remove_resource_provider(ACPI_HANDLE handle, device_t dev)
 {
+	ACPI_STATUS s;
 	struct resource_provider *p;
 
 	lockmgr(&resource_provider_lk, LK_EXCLUSIVE);
-	TAILQ_FOREACH(p, &providers, link) {
-		if (p->dev == dev && p->refcnt != 0) {
-			lockmgr(&resource_provider_lk, LK_RELEASE);
-			return (1);
-		}
+	s = AcpiGetData(handle, acpi_resource_provider_objhandler, (void **)&p);
+	if (ACPI_FAILURE(s)) {
+		lockmgr(&resource_provider_lk, LK_RELEASE);
+		device_printf(dev, "Failed to get resource provider data\n");
+		return (0);
 	}
-	TAILQ_FOREACH(p, &providers, link) {
-		if (p->dev == dev) {
-			TAILQ_REMOVE(&providers, p, link);
-			lockmgr(&resource_provider_lk, LK_RELEASE);
-			KKASSERT(p->refcnt == 0);
-			kfree(p, M_ACPIDEV);
-			return (0);
-		}
+
+	if (p->dev != dev) {
+		lockmgr(&resource_provider_lk, LK_RELEASE);
+		device_printf(dev,
+		    "Was not registered as acpi resource provider\n");
+		return (0);
 	}
+
+	if (p->refcnt != 0) {
+		lockmgr(&resource_provider_lk, LK_RELEASE);
+		return (1);
+	}
+
+	s = AcpiDetachData(handle, acpi_resource_provider_objhandler);
 	lockmgr(&resource_provider_lk, LK_RELEASE);
-	device_printf(dev, "Was not in acpi resource provider list\n");
+	if (ACPI_SUCCESS(s)) {
+		KKASSERT(p->refcnt == 0);
+		kfree(p, M_ACPIDEV);
+	}
 	return (0);
 }
 
 device_t
 acpi_get_resource_provider(ACPI_HANDLE handle, char *name,
-    const char *type)
+    const char *type, void **cookie)
 {
-	struct resource_provider *p;
 	ACPI_HANDLE source;
 	ACPI_STATUS status;
-	device_t dev;
+	struct resource_provider *p;
 
 	status = acpi_GetHandleInScope(handle, name, &source);
 	if (ACPI_FAILURE(status))
 		return NULL;
 
-	dev = NULL;
 	lockmgr(&resource_provider_lk, LK_EXCLUSIVE);
-	TAILQ_FOREACH(p, &providers, link) {
-		if (acpi_get_handle(p->dev) == source &&
-		    strcmp(p->type, type) == 0) {
-			p->refcnt++;
-			dev = p->dev;
-			break;
-		}
+	status = AcpiGetData(source, acpi_resource_provider_objhandler,
+	    (void **)&p);
+	if (ACPI_FAILURE(status) || p == NULL) {
+		lockmgr(&resource_provider_lk, LK_RELEASE);
+		return (NULL);
 	}
-	lockmgr(&resource_provider_lk, LK_RELEASE);
 
-	return (dev);
+	if (strcmp(p->type, type) != 0) {
+		lockmgr(&resource_provider_lk, LK_RELEASE);
+		return (NULL);
+	}
+
+	p->refcnt++;
+	lockmgr(&resource_provider_lk, LK_RELEASE);
+	*cookie = p;
+	return (p->dev);
 }
 
 void
-acpi_put_resource_provider(device_t dev)
+acpi_put_resource_provider(void *cookie)
 {
-	struct resource_provider *p;
+	struct resource_provider *p = cookie;
 
 	lockmgr(&resource_provider_lk, LK_EXCLUSIVE);
-	TAILQ_FOREACH(p, &providers, link) {
-		if (p->dev == dev) {
-			p->refcnt--;
-			lockmgr(&resource_provider_lk, LK_RELEASE);
-			return;
-		}
-	}
+	p->refcnt--;
 	lockmgr(&resource_provider_lk, LK_RELEASE);
 }

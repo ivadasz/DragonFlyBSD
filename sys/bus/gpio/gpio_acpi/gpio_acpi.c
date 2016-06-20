@@ -53,6 +53,7 @@
 
 struct gpioint_resource {
 	device_t provider;
+	void *resource_cookie;
 	void *pin;
 	int trigger;
 	int polarity;
@@ -61,6 +62,7 @@ struct gpioint_resource {
 
 struct gpioio_resource {
 	device_t provider;
+	void *resource_cookie;
 	u_int numpins;
 	void *pins[];
 };
@@ -161,7 +163,7 @@ gpioint_handle_resource(ACPI_RESOURCE *Resource, void *Context)
 	ACPI_RESOURCE_GPIO *gpio;
 	struct gpioint_resource *r = NULL;
 	device_t provider;
-	void *cookie;
+	void *cookie, *resource_cookie;
 	struct gpio_resource_walk_ctx *ctx = Context;
 
 	if (Resource->Type != ACPI_RESOURCE_TYPE_GPIO)
@@ -180,7 +182,7 @@ gpioint_handle_resource(ACPI_RESOURCE *Resource, void *Context)
 	device_printf(ctx->dev, "GpioInt ResourceSource=%s\n",
 	    gpio->ResourceSource.StringPtr);
 	provider = acpi_get_resource_provider(acpi_get_handle(ctx->dev),
-	    gpio->ResourceSource.StringPtr, "gpio");
+	    gpio->ResourceSource.StringPtr, "gpio", &resource_cookie);
 	if (provider == NULL) {
 		device_printf(ctx->dev, "No driver for GpioInt "
 		    "ResourceSource \"%s\"\n", gpio->ResourceSource.StringPtr);
@@ -193,11 +195,12 @@ gpioint_handle_resource(ACPI_RESOURCE *Resource, void *Context)
 		    "ResourceSource \"%s\" pin %u\n",
 		    gpio->ResourceSource.StringPtr,
 		    gpio->PinTable[0]);
-		acpi_put_resource_provider(provider);
+		acpi_put_resource_provider(resource_cookie);
 		goto done;
 	}
 	r = kmalloc(sizeof(*r), M_DEVBUF, M_WAITOK | M_ZERO);
 	r->provider = provider;
+	r->resource_cookie = resource_cookie;
 	r->pin = cookie;
 	r->trigger = gpio->Triggering;
 	r->polarity = gpio->Polarity;
@@ -225,7 +228,7 @@ void
 gpioint_free_resource(device_t dev, struct gpioint_resource *resource)
 {
 	GPIO_FREE_INTR(resource->provider, resource->pin);
-	acpi_put_resource_provider(resource->provider);
+	acpi_put_resource_provider(resource->resource_cookie);
 	kfree(resource, M_DEVBUF);
 }
 
@@ -295,6 +298,7 @@ gpioio_handle_resource(ACPI_RESOURCE *Resource, void *Context)
 	struct gpioio_resource *r = NULL;
 	struct gpio_resource_walk_ctx *ctx = Context;
 	device_t provider;
+	void *resource_cookie;
 
 	if (Resource->Type != ACPI_RESOURCE_TYPE_GPIO)
 		return (AE_OK);
@@ -312,7 +316,7 @@ gpioio_handle_resource(ACPI_RESOURCE *Resource, void *Context)
 		return (AE_OK);
 	}
 	provider = acpi_get_resource_provider(acpi_get_handle(ctx->dev),
-	    gpio->ResourceSource.StringPtr, "gpio");
+	    gpio->ResourceSource.StringPtr, "gpio", &resource_cookie);
 	if (provider == NULL) {
 		device_printf(ctx->dev, "No driver for GpioIo "
 		    "ResourceSource \"%s\"\n", gpio->ResourceSource.StringPtr);
@@ -321,10 +325,11 @@ gpioio_handle_resource(ACPI_RESOURCE *Resource, void *Context)
 	r = kmalloc(sizeof(*r) + gpio->PinTableLength * sizeof(void *),
 	    M_DEVBUF, M_WAITOK | M_ZERO);
 	r->provider = provider;
+	r->resource_cookie = resource_cookie;
 	r->numpins = gpio->PinTableLength;
 	if (gpioio_alloc_pins(ctx->dev, provider, gpio, 0,
 	    gpio->PinTableLength, r->pins) == NULL) {
-		acpi_put_resource_provider(provider);
+		acpi_put_resource_provider(r->resource_cookie);
 		kfree(r, M_DEVBUF);
 		r = NULL;
 	}
@@ -354,7 +359,7 @@ gpioio_free_resource(device_t dev, struct gpioio_resource *resource)
 
 	for (i = 0; i < resource->numpins; i++)
 		GPIO_RELEASE_IO_PIN(resource->provider, resource->pins[i]);
-	acpi_put_resource_provider(resource->provider);
+	acpi_put_resource_provider(resource->resource_cookie);
 	kfree(resource, M_DEVBUF);
 }
 
@@ -676,7 +681,8 @@ gpio_acpi_attach(device_t dev)
 
 	gpio_acpi_map_aei(sc);
 
-	acpi_add_resource_provider(sc->parent, "gpio");
+	acpi_add_resource_provider(acpi_get_handle(sc->parent), sc->parent,
+	    "gpio");
 
 	return (0);
 }
@@ -688,7 +694,8 @@ gpio_acpi_detach(device_t dev)
 
 	/* Fail detaching if any GPIO resources are currently allocated */
 	/* XXX We should try to use the device_busy() / device_unbusy() API */
-	if (acpi_remove_resource_provider(sc->parent) != 0)
+	if (acpi_remove_resource_provider(acpi_get_handle(sc->parent),
+	    sc->parent) != 0)
 		return (EBUSY);
 
 	if (sc->infos != NULL)
