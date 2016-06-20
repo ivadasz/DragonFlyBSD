@@ -66,6 +66,7 @@ struct acpi_i2c_handler_data {
 
 struct iicserial_resource {
 	device_t provider;
+	void *resource_cookie;
 	uint16_t address;
 };
 
@@ -253,14 +254,16 @@ iic_do_alloc_resource(ACPI_HANDLE handle, ACPI_RESOURCE_I2C_SERIALBUS *serial)
 {
 	struct iicserial_resource *r;
 	device_t provider;
+	void *resource_cookie;
 
 	provider = acpi_get_resource_provider(handle,
-	    serial->ResourceSource.StringPtr, "i2cserial");
+	    serial->ResourceSource.StringPtr, "i2cserial", &resource_cookie);
 	if (provider == NULL)
 		return (NULL);
 	/* XXX Try to reserve the I2c address here.  */
 	r = kmalloc(sizeof(*r), M_DEVBUF, M_WAITOK | M_ZERO);
 	r->provider = provider;
+	r->resource_cookie = resource_cookie;
 	r->address = serial->SlaveAddress;
 	return (r);
 }
@@ -309,7 +312,7 @@ iic_alloc_resource(device_t dev, int rid)
 void
 iic_free_resource(device_t dev, struct iicserial_resource *resource)
 {
-	acpi_put_resource_provider(resource->provider);
+	acpi_put_resource_provider(resource->resource_cookie);
 	kfree(resource, M_DEVBUF);
 }
 
@@ -351,7 +354,8 @@ smbus_acpi_attach(device_t dev)
 
 	smbus_acpi_install_address_space_handler(sc);
 
-	acpi_add_resource_provider(sc->parent, "i2cserial");
+	acpi_add_resource_provider(acpi_get_handle(sc->parent), sc->parent,
+	    "i2cserial");
 
 	return (0);
 }
@@ -363,7 +367,8 @@ smbus_acpi_detach(device_t dev)
 
 	/* Fail detaching if any SMBUS resources are currently allocated */
 	/* XXX We should try to use the device_busy() / device_unbusy() API */
-	if (acpi_remove_resource_provider(sc->parent) != 0)
+	if (acpi_remove_resource_provider(acpi_get_handle(sc->parent),
+	    sc->parent) != 0)
 		return (EBUSY);
 
 	smbus_acpi_remove_address_space_handler(sc);
