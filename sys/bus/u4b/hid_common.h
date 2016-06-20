@@ -101,7 +101,13 @@
 
 /* Usages Digitizers */
 #define	HUD_UNDEFINED		0x0000
+#define	HUD_DIGITIZER		0x0001
+#define	HUD_PEN			0x0002
 #define	HUD_TOUCHSCREEN		0x0004
+#define	HUD_TOUCHPAD		0x0005
+#define	HUD_STYLUS 		0x0020
+#define	HUD_PUCK 		0x0021
+#define	HUD_FINGER 		0x0022
 #define	HUD_TIP_PRESSURE	0x0030
 #define	HUD_BARREL_PRESSURE	0x0031
 #define	HUD_IN_RANGE		0x0032
