@@ -116,6 +116,7 @@ struct uhid_softc {
 #define	UHID_FLAG_STATIC_DESC  0x04	/* set if report descriptors are
 					 * static */
 
+	int sc_have_multi_id;
 	device_t child;
 	hid_input_handler_t input_handler;
 	void *input_arg;
@@ -199,7 +200,14 @@ uhid_intr_read_callback(struct usb_xfer *xfer, usb_error_t error)
 			    __func__, actlen);
 			uhid_dump(sc->sc_buffer, actlen);
 			if (sc->input_handler != NULL) {
-				sc->input_handler(0, sc->sc_buffer, actlen,
+				uint8_t id = 0;
+				uint8_t *buffer = sc->sc_buffer;
+				if (sc->sc_have_multi_id) {
+					id = buffer[0];
+					buffer++;
+					actlen--;
+				}
+				sc->input_handler(id, buffer, actlen,
 				    sc->input_arg);
 			}
 		} else {
@@ -705,6 +713,21 @@ uhid_probe(device_t dev)
 }
 
 static int
+uhid_have_multi_id(void *buf, int len)
+{
+	struct hid_data *d;
+	struct hid_item h;
+
+	h.report_ID = 0;
+	for (d = hid_start_parse(buf, len, hid_input); hid_get_item(d, &h); ) {
+		if (h.report_ID != 0)
+			return (1);
+	}
+	hid_end_parse(d);
+	return (0);
+}
+
+static int
 uhid_maxrepid(void *buf, int len)
 {
 	struct hid_data *d;
@@ -735,28 +758,22 @@ uhid_parse_descriptor(device_t dev)
 	for (i = 0; i <= maxid; i++) {
 		sz = hid_report_size(buf, len, hid_input, i);
 		kprintf("uhid: report id=%d size=%d\n", i, sz);
-		if (sc->child == NULL) {
-			sc->child = device_add_child(dev, NULL, -1);
-			/* XXX */
-			device_set_ivars(sc->child, NULL);
-		}
 	}
+	if (sc->child == NULL)
+		sc->child = device_add_child(dev, NULL, -1);
 }
 
 static void
-uhid_get_descriptor(device_t dev, void *info, int *id, char **descp,
-    uint16_t *sizep)
+uhid_get_descriptor(device_t dev, char **descp, uint16_t *sizep)
 {
 	struct uhid_softc *sc = device_get_softc(dev);
 
-	*id = 0;
 	*descp = sc->sc_repdesc_ptr;
 	*sizep = sc->sc_repdesc_size;
 }
 
 static void
-uhid_set_handler(device_t dev, void *info, hid_input_handler_t handler,
-    void *arg)
+uhid_set_handler(device_t dev, hid_input_handler_t handler, void *arg)
 {
 	struct uhid_softc *sc = device_get_softc(dev);
 
@@ -767,7 +784,7 @@ uhid_set_handler(device_t dev, void *info, hid_input_handler_t handler,
 }
 
 static void
-uhid_start(device_t dev, void *info)
+uhid_start(device_t dev)
 {
 	struct uhid_softc *sc = device_get_softc(dev);
 
@@ -778,7 +795,7 @@ uhid_start(device_t dev, void *info)
 }
 
 static void
-uhid_stop(device_t dev, void *info)
+uhid_stop(device_t dev)
 {
 	struct uhid_softc *sc = device_get_softc(dev);
 
@@ -908,6 +925,9 @@ uhid_attach(device_t dev)
 	device_printf(dev, "report descriptor (length: %u):\n",
 	    sc->sc_repdesc_size);
 	uhid_dump(sc->sc_repdesc_ptr, sc->sc_repdesc_size);
+
+	sc->sc_have_multi_id = uhid_have_multi_id(sc->sc_repdesc_ptr,
+	    sc->sc_repdesc_size);
 
 	uhid_parse_descriptor(dev);
 	bus_generic_attach(dev);
