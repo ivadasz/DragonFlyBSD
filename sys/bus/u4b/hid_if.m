@@ -41,8 +41,6 @@ INTERFACE hid;
 # Retrieve HID descriptor.
 METHOD void get_descriptor {
 	device_t dev;
-	void *info;	/* retrieved with device_get_ivars() by the child */
-	int *id;
 	char **descp;
 	uint16_t *sizep;
 };
@@ -50,7 +48,6 @@ METHOD void get_descriptor {
 # Set NULL handler to stop handling input reports.
 METHOD void set_handler {
 	device_t dev;
-	void *info;	/* retrieved with device_get_ivars() by the child */
 	hid_input_handler_t handler;
 	void *arg;
 };
@@ -58,7 +55,6 @@ METHOD void set_handler {
 # Activates input from hardware device.
 METHOD void start {
 	device_t dev;
-	void *info;	/* retrieved with device_get_ivars() by the child */
 };
 
 # Deactivates input from hardware device.
@@ -66,5 +62,4 @@ METHOD void start {
 #          method after deactivating input with stop().
 METHOD void stop {
 	device_t dev;
-	void *info;	/* retrieved with device_get_ivars() by the child */
 };

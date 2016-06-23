@@ -213,6 +213,8 @@ int	hid_is_collection(const void *desc, uint32_t size, int32_t usage);
 int	hid_is_mouse(const void *d_ptr, uint16_t d_len);
 int	hid_is_keyboard(const void *d_ptr, uint16_t d_len);
 int	hid_is_digitizer(const void *d_ptr, uint16_t d_len);
+int	hid_is_absmouse(const void *d_ptr, uint16_t d_len);
 
-typedef void (*hid_input_handler_t)(int id, uint8_t *buf, int count, void *arg);
+typedef void (*hid_input_handler_t)(uint8_t id, uint8_t *buf, int count,
+				    void *arg);
 #endif					/* _KERNEL */

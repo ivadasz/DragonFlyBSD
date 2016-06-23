@@ -876,3 +876,66 @@ hid_is_digitizer(const void *d_ptr, uint16_t d_len)
 		return (1);
 	return (0);
 }
+
+/*------------------------------------------------------------------------*
+ *	hid_is_mouse
+ *
+ * This function will decide if a USB descriptor belongs to a USB tablet.
+ *
+ * Return values:
+ * Zero: Not a USB tablet.
+ * Else: Is a USB tablet.
+ *------------------------------------------------------------------------*/
+int
+hid_is_absmouse(const void *d_ptr, uint16_t d_len)
+{
+	struct hid_data *hd;
+	struct hid_item hi;
+	int mdepth;
+	int found;
+
+	hd = hid_start_parse(d_ptr, d_len, 1 << hid_input);
+	if (hd == NULL)
+		return (0);
+
+	mdepth = 0;
+	found = 0;
+
+	while (hid_get_item(hd, &hi)) {
+		switch (hi.kind) {
+		case hid_collection:
+			if (mdepth != 0)
+				mdepth++;
+			else if (hi.collection == 1 &&
+			     hi.usage ==
+			      HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_POINTER)) {
+				kprintf("%s: got a mouse\n", __func__);
+				mdepth++;
+			}
+			kprintf("%s: collection=0x%x usage=0x%x\n",
+			    __func__, hi.collection, hi.usage);
+			break;
+		case hid_endcollection:
+			if (mdepth != 0)
+				mdepth--;
+			break;
+		case hid_input:
+			if (mdepth == 0)
+				break;
+			kprintf("%s: hi.usage=0x%x\n", __func__, hi.usage);
+			if (hi.usage ==
+			     HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_X) &&
+			    (hi.flags & (HIO_CONST|HIO_RELATIVE)) == 0)
+				found++;
+			if (hi.usage ==
+			     HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_Y) &&
+			    (hi.flags & (HIO_CONST|HIO_RELATIVE)) == 0)
+				found++;
+			break;
+		default:
+			break;
+		}
+	}
+	hid_end_parse(hd);
+	return (found);
+}
