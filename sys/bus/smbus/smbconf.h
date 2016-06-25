@@ -86,7 +86,6 @@
 #define SMB_TRANS_7BIT		0x0008	/* change address mode to 7-bit */
 #define SMB_TRANS_10BIT		0x0010	/* change address mode to 10-bit */
 #define SMB_TRANS_NOREPORT	0x0020	/* do not report errors */
-#define SMB_TRANS_WORDCNT	0x0040	/* do 2 byte tx or rx count field */
 
 /*
  * ivars codes

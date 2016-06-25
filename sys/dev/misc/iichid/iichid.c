@@ -124,8 +124,6 @@ static int	iichid_get_descriptor_address(struct iichid_softc *sc,
 static void	iichid_dump_bytes(uint8_t *buf, u_int count);
 static int	iichid_readreg(struct iichid_softc *sc, uint16_t reg,
 		    u_char *buf, int count, int *actualp);
-static int	iichid_readbuf(struct iichid_softc *sc, uint16_t reg,
-		    u_char *buf, int count, int *actualp);
 static int	iichid_readreg_check(struct iichid_softc *sc, uint16_t reg,
 		    u_char *buf, int count);
 static int	iichid_writereg16(struct iichid_softc *sc, uint16_t reg,
@@ -234,18 +232,6 @@ iichid_readreg(struct iichid_softc *sc, uint16_t reg, u_char *buf, int count,
 	}
 	return (0);
 }
-static int
-iichid_readbuf(struct iichid_softc *sc, uint16_t reg, u_char *buf, int count,
-    int *actualp)
-{
-	if (iicserial_transfer(sc->iicres, 1, (char *)&reg, 2, buf, count,
-	    actualp) != 0 ) {
-		device_printf(sc->dev,
-		    "failed to read %d bytes from reg 0x%04x\n", count, reg);
-		return (1);
-	}
-	return (0);
-}
 
 static int
 iichid_readreg_check(struct iichid_softc *sc, uint16_t reg, u_char *buf,
@@ -328,7 +314,7 @@ iichid_fetch_report(struct iichid_softc *sc, int *actualp)
 	uint16_t maxcount = sc->hid_descriptor.wMaxInputLength;
 	int count;
 
-	if (iichid_readbuf(sc, reg, sc->input_report, maxcount, &count) != 0) {
+	if (iichid_readreg(sc, reg, sc->input_report, maxcount, &count) != 0) {
 		device_printf(sc->dev, "fetching input report failed\n");
 		return (1);
 	}

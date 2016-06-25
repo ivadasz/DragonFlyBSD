@@ -45,8 +45,6 @@ int	iicserial_bread(struct iicserial_resource *resource, char cmd,
 	    u_char *count, char *buf);
 int	iicserial_rawtrans(struct iicserial_resource *resource,
 	    char *wbuf, int wcount, char *rbuf, int rcount, int *actualp);
-int	iicserial_transfer(struct iicserial_resource *resource, int flags,
-	    char *wbuf, int wcount, char *rbuf, int rcount, int *actualp);
 /* XXX more smbus accesses via "struct iicserial_resource" */
 
 #endif
