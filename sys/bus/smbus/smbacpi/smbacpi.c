@@ -317,6 +317,38 @@ iic_free_resource(device_t dev, struct iicserial_resource *resource)
 }
 
 int
+iicserial_readb(struct iicserial_resource *resource, char cmd, uint8_t *byte)
+{
+	int ret;
+	uint8_t val;
+
+	ret = SMBUS_READB(resource->provider, resource->address, cmd, &val);
+	if (ret == 0)
+		*byte = val;
+
+	return (ret);
+}
+
+int
+iicserial_writeb(struct iicserial_resource *resource, char cmd, uint8_t byte)
+{
+	return SMBUS_WRITEB(resource->provider, resource->address, cmd, byte);
+}
+
+int
+iicserial_readw(struct iicserial_resource *resource, char cmd, uint16_t *word)
+{
+	int ret;
+	uint16_t val;
+
+	ret = SMBUS_READW(resource->provider, resource->address, cmd, &val);
+	if (ret == 0)
+		*word = val;
+
+	return (ret);
+}
+
+int
 iicserial_bread(struct iicserial_resource *resource, char cmd, u_char *count,
     char *buf)
 {

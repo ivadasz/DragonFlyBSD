@@ -53,6 +53,8 @@
 #include <bus/pci/pcireg.h>
 #include <bus/smbus/smbconf.h>
 
+#include <dev/misc/iosf/iosf_mbi.h>
+
 #include "smbus_if.h"
 
 #include "ig4_reg.h"
@@ -68,6 +70,102 @@ static void ig4iic_dump(ig4iic_softc_t *sc);
 static int ig4_dump;
 SYSCTL_INT(_debug, OID_AUTO, ig4_dump, CTLTYPE_INT | CTLFLAG_RW,
 	   &ig4_dump, 0, "");
+
+#define PUNIT_SEMAPHORE 0x7
+
+static
+int
+get_sem(struct device *dev, uint32_t *sem)
+{
+	uint32_t reg_val;
+	int ret;
+
+	ret = iosf_mbi_read(BT_MBI_UNIT_PMC, MBI_REG_READ, PUNIT_SEMAPHORE,
+			    &reg_val);
+	if (ret) {
+		device_printf(dev, "iosf failed to read punit semaphore\n");
+		return ret;
+	}
+
+	*sem = reg_val & 0x1;
+
+	return 0;
+}
+
+static
+void
+reset_semaphore(device_t dev)
+{
+	uint32_t data;
+
+	if (iosf_mbi_read(BT_MBI_UNIT_PMC, MBI_REG_READ,
+			  PUNIT_SEMAPHORE, &data)) {
+		device_printf(dev, "iosf failed to reset punit semaphore\n");
+		return;
+	}
+
+	data = data & 0xfffffffeU;
+	if (iosf_mbi_write(BT_MBI_UNIT_PMC, MBI_REG_WRITE,
+			   PUNIT_SEMAPHORE, data))
+		device_printf(dev, "iosf failed to reset punit semaphore\n");
+}
+
+static
+int
+i2c_acquire_ownership(device_t dev)
+{
+	ig4iic_softc_t *sc = device_get_softc(dev);
+	uint32_t sem = 0;
+	int ret;
+	int timeout = 200;
+
+#if 1
+	if (1) {
+		return 1;
+	}
+#endif
+
+	/* host driver writes 0x2 to side band semaphore register */
+	ret = iosf_mbi_write(BT_MBI_UNIT_PMC, MBI_REG_WRITE,
+			     PUNIT_SEMAPHORE, 0x2);
+	if (ret) {
+		device_printf(dev, "iosf failed to request punit semaphore\n");
+		return ret;
+	}
+
+	/* host driver waits for bit 0 to be set in semaphore register */
+	while (1) {
+		ret = get_sem(dev, &sem);
+		if (!ret && sem) {
+			return (0);
+		}
+
+		DELAY(1000);
+		timeout--;
+		if (timeout <= 0) {
+			if (sc->semfails < 50) {
+				device_printf(dev,
+				    "punit semaphore timed out, resetting\n");
+			}
+			reset_semaphore(dev);
+			iosf_mbi_read(BT_MBI_UNIT_PMC, MBI_REG_READ,
+				      PUNIT_SEMAPHORE, &sem);
+			if (sc->semfails < 50) {
+				device_printf(dev, "PUNIT SEM: %d\n", sem);
+			}
+			sc->semfails++;
+			return (-ETIMEDOUT);
+		}
+	}
+}
+
+static
+int
+i2c_release_ownership(device_t dev)
+{
+	reset_semaphore(dev);
+	return (0);
+}
 
 /*
  * Low-level inline support functions
@@ -125,6 +223,9 @@ set_controller(ig4iic_softc_t *sc, uint32_t ctl)
 	}
 	return error;
 }
+
+extern void cpu_mwait_inhibit_deep(void);
+extern void cpu_mwait_release_deep(void);
 
 /*
  * Wait up to 25ms for the requested status using a 25uS polling loop.
@@ -188,7 +289,11 @@ wait_status(ig4iic_softc_t *sc, uint32_t status)
 		 * work, otherwise poll with the lock held.
 		 */
 		if (status & IG4_STATUS_RX_NOTEMPTY) {
+			if (sc->shared_host)
+				cpu_mwait_inhibit_deep();
 			lksleep(sc, &sc->lk, 0, "i2cwait", (hz + 99) / 100);
+			if (sc->shared_host)
+				cpu_mwait_release_deep();
 		} else {
 			DELAY(25);
 		}
@@ -766,14 +871,18 @@ int
 ig4iic_smb_writeb(device_t dev, u_char slave, char cmd, char byte)
 {
 	ig4iic_softc_t *sc = device_get_softc(dev);
-	int error;
+	int error, gotsem = 1;
 
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
 
+	if (sc->shared_host)
+		gotsem = i2c_acquire_ownership(sc->dev);
 	set_slave_addr(sc, slave, 0);
 	error = smb_transaction(sc, cmd, SMB_TRANS_NOCNT,
 				&byte, 1, NULL, 0, NULL);
 
+	if (gotsem == 0)
+		i2c_release_ownership(sc->dev);
 	lockmgr(&sc->lk, LK_RELEASE);
 	return error;
 }
@@ -786,16 +895,20 @@ ig4iic_smb_writew(device_t dev, u_char slave, char cmd, short word)
 {
 	ig4iic_softc_t *sc = device_get_softc(dev);
 	char buf[2];
-	int error;
+	int error, gotsem = 1;
 
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
 
+	if (sc->shared_host)
+		gotsem = i2c_acquire_ownership(sc->dev);
 	set_slave_addr(sc, slave, 0);
 	buf[0] = word & 0xFF;
 	buf[1] = word >> 8;
 	error = smb_transaction(sc, cmd, SMB_TRANS_NOCNT,
 				buf, 2, NULL, 0, NULL);
 
+	if (gotsem == 0)
+		i2c_release_ownership(sc->dev);
 	lockmgr(&sc->lk, LK_RELEASE);
 	return error;
 }
@@ -807,14 +920,18 @@ int
 ig4iic_smb_readb(device_t dev, u_char slave, char cmd, char *byte)
 {
 	ig4iic_softc_t *sc = device_get_softc(dev);
-	int error;
+	int error, gotsem = 1;
 
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
 
+	if (sc->shared_host)
+		gotsem = i2c_acquire_ownership(sc->dev);
 	set_slave_addr(sc, slave, 0);
 	error = smb_transaction(sc, cmd, SMB_TRANS_NOCNT,
 				NULL, 0, byte, 1, NULL);
 
+	if (gotsem == 0)
+		i2c_release_ownership(sc->dev);
 	lockmgr(&sc->lk, LK_RELEASE);
 	return error;
 }
@@ -827,16 +944,20 @@ ig4iic_smb_readw(device_t dev, u_char slave, char cmd, short *word)
 {
 	ig4iic_softc_t *sc = device_get_softc(dev);
 	char buf[2];
-	int error;
+	int error, gotsem = 1;
 
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
 
+	if (sc->shared_host)
+		gotsem = i2c_acquire_ownership(sc->dev);
 	set_slave_addr(sc, slave, 0);
 	if ((error = smb_transaction(sc, cmd, SMB_TRANS_NOCNT,
 				     NULL, 0, buf, 2, NULL)) == 0) {
 		*word = (u_char)buf[0] | ((u_char)buf[1] << 8);
 	}
 
+	if (gotsem == 0)
+		i2c_release_ownership(sc->dev);
 	lockmgr(&sc->lk, LK_RELEASE);
 	return error;
 }
@@ -851,10 +972,12 @@ ig4iic_smb_pcall(device_t dev, u_char slave, char cmd,
 	ig4iic_softc_t *sc = device_get_softc(dev);
 	char rbuf[2];
 	char wbuf[2];
-	int error;
+	int error, gotsem = 1;
 
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
 
+	if (sc->shared_host)
+		gotsem = i2c_acquire_ownership(sc->dev);
 	set_slave_addr(sc, slave, 0);
 	wbuf[0] = sdata & 0xFF;
 	wbuf[1] = sdata >> 8;
@@ -863,6 +986,8 @@ ig4iic_smb_pcall(device_t dev, u_char slave, char cmd,
 		*rdata = (u_char)rbuf[0] | ((u_char)rbuf[1] << 8);
 	}
 
+	if (gotsem == 0)
+		i2c_release_ownership(sc->dev);
 	lockmgr(&sc->lk, LK_RELEASE);
 	return error;
 }
@@ -872,14 +997,18 @@ ig4iic_smb_bwrite(device_t dev, u_char slave, char cmd,
 		  u_char wcount, char *buf)
 {
 	ig4iic_softc_t *sc = device_get_softc(dev);
-	int error;
+	int error, gotsem = 1;
 
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
 
+	if (sc->shared_host)
+		gotsem = i2c_acquire_ownership(sc->dev);
 	set_slave_addr(sc, slave, 0);
 	error = smb_transaction(sc, cmd, 0,
 				buf, wcount, NULL, 0, NULL);
 
+	if (gotsem == 0)
+		i2c_release_ownership(sc->dev);
 	lockmgr(&sc->lk, LK_RELEASE);
 	return error;
 }
@@ -890,15 +1019,19 @@ ig4iic_smb_bread(device_t dev, u_char slave, char cmd,
 {
 	ig4iic_softc_t *sc = device_get_softc(dev);
 	int rcount = *countp_char;
-	int error;
+	int error, gotsem = 1;
 
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
 
+	if (sc->shared_host)
+		gotsem = i2c_acquire_ownership(sc->dev);
 	set_slave_addr(sc, slave, 0);
 	error = smb_transaction(sc, cmd, 0,
 				NULL, 0, buf, rcount, &rcount);
 	*countp_char = rcount;
 
+	if (gotsem == 0)
+		i2c_release_ownership(sc->dev);
 	lockmgr(&sc->lk, LK_RELEASE);
 	return error;
 }
@@ -909,14 +1042,18 @@ ig4iic_smb_trans(device_t dev, int slave, char cmd, int op,
 		 int *actualp)
 {
 	ig4iic_softc_t *sc = device_get_softc(dev);
-	int error;
+	int error, gotsem = 1;
 
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
 
+	if (sc->shared_host)
+		gotsem = i2c_acquire_ownership(sc->dev);
 	set_slave_addr(sc, slave, op);
 	error = smb_transaction(sc, cmd, op,
 				wbuf, wcount, rbuf, rcount, actualp);
 
+	if (gotsem == 0)
+		i2c_release_ownership(sc->dev);
 	lockmgr(&sc->lk, LK_RELEASE);
 	return error;
 }
@@ -988,3 +1125,4 @@ ig4iic_dump(ig4iic_softc_t *sc)
 #undef REGDUMP
 
 DRIVER_MODULE(smbus, ig4iic, smbus_driver, smbus_devclass, NULL, NULL);
+MODULE_DEPEND(ig4iic, iosf, 1, 1, 1);

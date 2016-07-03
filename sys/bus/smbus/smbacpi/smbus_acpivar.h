@@ -41,6 +41,12 @@ struct iicserial_resource;
 struct	iicserial_resource *iic_alloc_resource(device_t dev, int rid);
 void	iic_free_resource(device_t dev, struct iicserial_resource *resource);
 
+int	iicserial_readb(struct iicserial_resource *resource, char cmd,
+	    uint8_t *byte);
+int	iicserial_writeb(struct iicserial_resource *resource, char cmd,
+	    uint8_t byte);
+int	iicserial_readw(struct iicserial_resource *resource, char cmd,
+	    uint16_t *word);
 int	iicserial_bread(struct iicserial_resource *resource, char cmd,
 	    u_char *count, char *buf);
 int	iicserial_rawtrans(struct iicserial_resource *resource,

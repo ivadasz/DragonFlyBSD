@@ -72,6 +72,8 @@ struct ig4iic_softc {
 	int		read_started : 1;
 	int		write_started : 1;
 	struct lock	lk;
+	int		shared_host;
+	int		semfails;
 };
 
 typedef struct ig4iic_softc ig4iic_softc_t;

@@ -1,5 +1,5 @@
 KMOD=   intelpmic
-SRCS=   intelpmic.c
+SRCS=   intelpmic.c acpi_lpat.c
 SRCS+=	device_if.h bus_if.h pci_if.h opt_acpi.h acpi_if.h
 
 .include <bsd.kmod.mk>

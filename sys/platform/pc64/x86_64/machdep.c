@@ -491,6 +491,7 @@ again:
 struct cpu_idle_stat {
 	int	hint;
 	int	reserved;
+	u_long	nodeep;
 	u_long	halt;
 	u_long	spin;
 	u_long	repeat;
@@ -1106,6 +1107,31 @@ cpu_idle_default_hook(void)
 /* Other subsystems (e.g., ACPI) can hook this later. */
 void (*cpu_idle_hook)(void) = cpu_idle_default_hook;
 
+void cpu_mwait_inhibit_deep(void);
+void cpu_mwait_release_deep(void);
+
+void
+cpu_mwait_inhibit_deep(void)
+{
+	globaldata_t gd = mycpu;
+	struct cpu_idle_stat *stat = &cpu_idle_stats[gd->gd_cpuid];
+
+	crit_enter();
+	stat->nodeep++;
+	crit_exit();
+}
+
+void
+cpu_mwait_release_deep(void)
+{
+	globaldata_t gd = mycpu;
+	struct cpu_idle_stat *stat = &cpu_idle_stats[gd->gd_cpuid];
+
+	crit_enter();
+	stat->nodeep--;
+	crit_exit();
+}
+
 static __inline int
 cpu_mwait_cx_hint(struct cpu_idle_stat *stat)
 {
@@ -1113,8 +1139,14 @@ cpu_mwait_cx_hint(struct cpu_idle_stat *stat)
 	u_int idx;
 
 	hint = stat->hint;
-	if (hint >= 0)
+	if (hint >= 0) {
+		if (stat->nodeep &&
+		    hint > cpu_mwait_hints[cpu_mwait_hints_cnt - 1]) {
+			idx = cpu_mwait_hints_cnt - 1;
+			hint = cpu_mwait_hints[idx];
+		}
 		goto done;
+	}
 
 	idx = (stat->repeat + stat->repeat_last + stat->repeat_delta) >>
 	    cpu_mwait_repeat_shift;
@@ -1129,6 +1161,10 @@ cpu_mwait_cx_hint(struct cpu_idle_stat *stat)
 	} else {
 		if (idx >= cpu_mwait_hints_cnt)
 			idx = cpu_mwait_hints_cnt - 1;
+		hint = cpu_mwait_hints[idx];
+	}
+	if (idx >= cpu_mwait_hints_cnt && stat->nodeep) {
+		idx = cpu_mwait_hints_cnt - 1;
 		hint = cpu_mwait_hints[idx];
 	}
 done:
