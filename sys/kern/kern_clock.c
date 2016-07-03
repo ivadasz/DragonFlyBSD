@@ -317,6 +317,8 @@ initclocks_pcpu(void)
 	crit_exit();
 }
 
+extern int estcpufreq;
+
 /*
  * This routine is called on just the BSP, just after SMP initialization
  * completes to * finish initializing any clocks that might contend/block
@@ -349,7 +351,7 @@ initclocks_other(void *dummy)
 					  NULL, stathz);
 		/* XXX correct the frequency for scheduler / estcpu tests */
 		systimer_init_periodic_nq(&gd->gd_schedclock, schedclock,
-					  NULL, ESTCPUFREQ);
+					  NULL, estcpufreq);
 #ifdef IFPOLL_ENABLE
 		ifpoll_init_pcpu(gd->gd_cpuid);
 #endif
@@ -413,6 +415,59 @@ set_timeofday(struct timespec *ts)
 
 	crit_exit();
 }
+
+static void
+adj_hz_thiscpu(int new_hz)
+{
+	struct globaldata *gd;
+
+	gd = mycpu;
+	crit_enter();
+	systimer_adjust_periodic(&gd->gd_hardclock, new_hz);
+	crit_exit();
+}
+
+static void
+adj_hz(int new_hz)
+{
+	int cpuid, origcpu = mycpuid;
+
+	if (ncpus > 1) {
+		for (cpuid = 0; cpuid < ncpus; ++cpuid) {
+			lwkt_migratecpu(cpuid);
+			adj_hz_thiscpu(new_hz);
+		}
+		lwkt_migratecpu(origcpu);
+	} else {
+		adj_hz_thiscpu(new_hz);
+	}
+
+	get_mplock();
+	hz = new_hz;
+	rel_mplock();
+}
+
+static int
+sysctl_handle_hzclock(SYSCTL_HANDLER_ARGS)
+{
+        int error, val;
+
+	val = hz;
+        error = sysctl_handle_int(oidp, &val, 0, req);
+        if (error != 0 || req->newptr == NULL) {
+                return (error);
+        }
+	if (val <= 0 || val > 1000)
+		return EINVAL;
+
+	adj_hz(val);
+
+        return (error);
+}
+
+SYSCTL_PROC(_kern, OID_AUTO, hzclock, (CTLTYPE_INT | CTLFLAG_RW), 0, 0,
+	sysctl_handle_hzclock, "I", "hz frequency");
+
 	
 /*
  * Each cpu has its own hardclock, but we only increments ticks and softticks
@@ -938,6 +993,58 @@ SYSCTL_PROC(_kern, OID_AUTO, pctrack, (CTLTYPE_OPAQUE|CTLFLAG_RD), 0, 0,
 	sysctl_pctrack, "S,kinfo_pcheader", "CPU PC tracking");
 
 #endif
+
+static void
+adj_schedclock_thiscpu(int new_schedclock)
+{
+	struct globaldata *gd;
+
+	gd = mycpu;
+	crit_enter();
+	systimer_adjust_periodic(&gd->gd_schedclock, new_schedclock);
+	crit_exit();
+}
+
+static void
+adj_schedclock(int new_schedclock)
+{
+	int cpuid, origcpu = mycpuid;
+
+	if (ncpus > 1) {
+		for (cpuid = 0; cpuid < ncpus; ++cpuid) {
+			lwkt_migratecpu(cpuid);
+			adj_schedclock_thiscpu(new_schedclock);
+		}
+		lwkt_migratecpu(origcpu);
+	} else {
+		adj_schedclock_thiscpu(new_schedclock);
+	}
+
+	get_mplock();
+	estcpufreq = new_schedclock;
+	rel_mplock();
+}
+
+static int
+sysctl_handle_schedclock(SYSCTL_HANDLER_ARGS)
+{
+        int error, val;
+
+	val = estcpufreq;
+        error = sysctl_handle_int(oidp, &val, 0, req);
+        if (error != 0 || req->newptr == NULL) {
+                return (error);
+        }
+	if (val <= 0 || val > 1000)
+		return EINVAL;
+
+	adj_schedclock(val);
+
+        return (error);
+}
+
+SYSCTL_PROC(_kern, OID_AUTO, schedclock, (CTLTYPE_INT | CTLFLAG_RW), 0, 0,
+	sysctl_handle_schedclock, "I", "schedclock frequency");
 
 /*
  * The scheduler clock typically runs at a 50Hz rate.  NOTE! systimer,

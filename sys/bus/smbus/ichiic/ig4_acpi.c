@@ -78,6 +78,27 @@ static char *ig4iic_ids[] = {
 };
 
 static
+void
+ig4iic_acpi_check_shared(ig4iic_softc_t *sc)
+{
+	ACPI_STATUS status;
+	ACPI_BUFFER b;
+	ACPI_OBJECT *bp;
+
+	b.Length = ACPI_ALLOCATE_BUFFER;
+	status = AcpiEvaluateObjectTyped(acpi_get_handle(sc->dev), "_SEM",
+	    NULL, &b, ACPI_TYPE_INTEGER);
+	if (ACPI_SUCCESS(status)) {
+		bp = b.Pointer;
+		if (bp->Integer.Value != 0) {
+			sc->shared_host = 1;
+			device_printf(sc->dev, "Detected shared host\n");
+		}
+		AcpiOsFree(b.Pointer);
+	}
+}
+
+static
 int
 ig4iic_acpi_probe(device_t dev)
 {
@@ -125,6 +146,8 @@ ig4iic_acpi_attach(device_t dev)
 
 	/* power up the controller */
 	pci_set_powerstate(dev, PCI_POWERSTATE_D0);
+
+	ig4iic_acpi_check_shared(sc);
 
 	error = ig4iic_attach(sc);
 	if (error)

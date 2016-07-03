@@ -42,6 +42,7 @@ static devclass_t iosf_devclass;
 static struct lwkt_serialize iosf_slz = LWKT_SERIALIZE_INITIALIZER;
 
 DRIVER_MODULE(iosf, hostb, iosf_driver, iosf_devclass, NULL, NULL);
+MODULE_VERSION(iosf, 1);
 
 device_t iosf_dev = NULL;
 

@@ -42,6 +42,7 @@
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
+#include <sys/proc.h>
 #include <sys/sysctl.h>
 #include <vm/pmap.h>
 #include <machine/vmparam.h>
@@ -68,6 +69,7 @@ static int sysctl_kern_vmm_guest(SYSCTL_HANDLER_ARGS);
 
 int	hz;
 int	stathz;
+int	estcpufreq;
 int	profhz;
 int	ustick;				/* tick interval in microseconds */
 int	nstick;				/* tick interval in nanoseconds */
@@ -194,6 +196,7 @@ init_param1(void)
 	hz = HZ;
 	TUNABLE_INT_FETCH("kern.hz", &hz);
 	stathz = hz * 128 / 100;
+	estcpufreq = ESTCPUFREQ;
 	profhz = stathz;
 	ustick = 1000000 / hz;
 	nstick = 1000000000 / hz;
