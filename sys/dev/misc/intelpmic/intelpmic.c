@@ -46,8 +46,7 @@ struct intelpmic_softc {
 
 	int checked_fuel_gauge_control;
 
-	struct ksensor	current_sensor;
-	struct ksensor	voltage_sensor;
+	struct ksensor	watt_sensor;
 	struct ksensordev sensordev;
 };
 
@@ -396,8 +395,10 @@ intelpmic_thermal_handler(UINT32 Function,
 
         lwkt_serialize_exit(&sc->thermal_slz);
 
+#if 0
 	device_printf(sc->dev, "%s: read: reg=0x%x result=%d Value=0x%llx\n",
 	    __func__, reg, result, (unsigned long long)*Value);
+#endif
 
 	if (result < 0) {
 		if (result == -EINVAL)
@@ -438,9 +439,11 @@ intelpmic_refresh(void *arg)
 	if (ret == 0) {
 		ret = iicserial_readb(sc->iicres, 0x01, &b);
 		if (ret == 0) {
+#if 0
 			device_printf(sc->dev,
 			    "power source: 0x%02x, power mode: 0x%02x\n",
 			    a, b);
+#endif
 		} else {
 			return;
 		}
@@ -474,11 +477,15 @@ intelpmic_refresh(void *arg)
 			device_printf(sc->dev, "failed to read current\n");
 		}
 	}
+#if 0
 	device_printf(sc->dev,
 	    "voltage: %u mV, %s current: %u mA -> %u mW\n",
 	    (voltage * 11) / 10,
 	    (a & 0x40) ? "charging" : "discharging",
 	    current, (voltage * 11 * current) / 10000);
+#endif
+	int64_t val = ((voltage * 11) * current) / 10;
+	sc->watt_sensor.value = (a & 0x40) ? val : -val;
 }
 
 static int
@@ -535,11 +542,8 @@ intelpmic_attach(device_t dev)
 	strlcpy(sc->sensordev.xname, device_get_nameunit(dev),
 	    sizeof(sc->sensordev.xname));
 
-	sc->current_sensor.type = SENSOR_TEMP;
-	sensor_attach(&sc->sensordev, &sc->current_sensor);
-
-	sc->voltage_sensor.type = SENSOR_TEMP;
-	sensor_attach(&sc->sensordev, &sc->voltage_sensor);
+	sc->watt_sensor.type = SENSOR_WATTS;
+	sensor_attach(&sc->sensordev, &sc->watt_sensor);
 
 	sensor_task_register(sc, intelpmic_refresh, 5);
 	sensordev_install(&sc->sensordev);
