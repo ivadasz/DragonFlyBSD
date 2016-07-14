@@ -4786,7 +4786,7 @@ iwm_allow_mcast(struct ieee80211vap *vap, struct iwm_softc *sc)
 	IEEE80211_ADDR_COPY(cmd->bssid, ni->ni_bssid);
 
 	error = iwm_mvm_send_cmd_pdu(sc, IWM_MCAST_FILTER_CMD,
-	    IWM_CMD_SYNC, size, cmd);
+	    IWM_CMD_ASYNC, size, cmd);
 	kfree(cmd, M_DEVBUF);
 
 	return (error);
