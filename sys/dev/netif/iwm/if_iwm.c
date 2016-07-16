@@ -185,6 +185,7 @@ __FBSDID("$FreeBSD$");
 #include "if_iwm_time_event.h"
 #include "if_iwm_power.h"
 #include "if_iwm_scan.h"
+#include "if_iwm_scan_fw.h"
 #include "if_iwm_sf.h"
 #include "if_iwm_sta.h"
 #include "if_iwm_pcie_trans.h"
@@ -6174,6 +6175,7 @@ iwm_preinit(void *arg)
 	 * At this point we've committed - if we fail to do setup,
 	 * we now also have to tear down the net80211 state.
 	 */
+	iwm_fwscan_attach(ic);
 	ieee80211_ifattach(ic);
 	ic->ic_vap_create = iwm_vap_create;
 	ic->ic_vap_delete = iwm_vap_delete;
