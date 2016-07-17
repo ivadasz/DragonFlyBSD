@@ -606,7 +606,7 @@ ieee80211_sta_ps_timer_check(struct ieee80211vap *vap)
 
 	/* XXX lock assert */
 
-	/* For no, only do this in STA mode */
+	/* For now, only do this in STA mode */
 	if (! (vap->iv_caps & IEEE80211_C_SWSLEEP))
 		goto out;
 

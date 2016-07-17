@@ -315,7 +315,8 @@ ieee80211_start_pkt(struct ieee80211vap *vap, struct mbuf *m)
 	/*
 	 * Cancel any background scan.
 	 */
-	if (ic->ic_flags & IEEE80211_F_SCAN)
+	if ((vap->iv_bss->ni_flags & IEEE80211_NODE_PWR_MGT) &&
+	    (ic->ic_flags & IEEE80211_F_SCAN))
 		ieee80211_cancel_anyscan(vap);
 	/*
 	 * Find the node for the destination so we can do
