@@ -92,6 +92,7 @@ const struct iwm_cfg iwm7260_cfg = {
 	.fw_name = IWM7260_FW,
 	IWM_DEVICE_7000_COMMON,
 	.host_interrupt_operation_mode = 1,
+	.lp_xtal_workaround = 1,
 };
 
 const struct iwm_cfg iwm3160_cfg = {

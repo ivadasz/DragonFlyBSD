@@ -115,6 +115,7 @@ struct iwm_cfg {
         int host_interrupt_operation_mode;
         uint8_t nvm_hw_section_num;
         int apmg_wake_up_wa;
+	int lp_xtal_workaround;
 };
 
 /*
