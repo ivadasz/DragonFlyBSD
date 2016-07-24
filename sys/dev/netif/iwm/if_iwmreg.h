@@ -147,6 +147,13 @@
 #define IWM_CSR_ANA_PLL_CFG         (0x20c)
 
 /*
+ * CSR HW resources monitor registers
+ */
+#define IWM_CSR_MONITOR_CFG_REG		(0x214)
+#define IWM_CSR_MONITOR_STATUS_REG	(0x228)
+#define IWM_CSR_MONITOR_XTAL_RESOURCES	(0x00000010)
+
+/*
  * CSR Hardware Revision Workaround Register.  Indicates hardware rev;
  * "step" determines CCK backoff for txpower calculation.  Used for 4965 only.
  * See also IWM_CSR_HW_REV register.
@@ -250,6 +257,7 @@
  *         001 -- MAC power-down
  *         010 -- PHY (radio) power-down
  *         011 -- Error
+ *    10:  XTAL ON request
  *   9-6:  SYS_CONFIG
  *         Indicates current system configuration, reflecting pins on chip
  *         as forced high/low by device circuit board.
@@ -281,6 +289,7 @@
 #define IWM_CSR_GP_CNTRL_REG_FLAG_INIT_DONE              (0x00000004)
 #define IWM_CSR_GP_CNTRL_REG_FLAG_MAC_ACCESS_REQ         (0x00000008)
 #define IWM_CSR_GP_CNTRL_REG_FLAG_GOING_TO_SLEEP         (0x00000010)
+#define IWM_CSR_GP_CNTRL_REG_FLAG_XTAL_ON                (0x00000400)
 
 #define IWM_CSR_GP_CNTRL_REG_VAL_MAC_ACCESS_EN           (0x00000001)
 
@@ -454,6 +463,34 @@ enum iwm_secure_boot_status_reg {
 #define IWM_LMPM_CHICK_EXTENDED_ADDR_SPACE	0x01
 
 #define IWM_FH_TCSR_0_REG0 (0x1D00)
+
+/*
+ * SHR target access (Shared block memory space)
+ *
+ * Shared internal registers can be accessed directly from PCI bus through SHR
+ * arbiter without need for the MAC HW to be powered up. This is possible due to
+ * indirect read/write via HEEP_CTRL_WRD_PCIEX_CTRL (0xEC) and
+ * HEEP_CTRL_WRD_PCIEX_DATA (0xF4) registers.
+ *
+ * Use iwl_write32()/iwl_read32() family to access these registers. The MAC HW
+ * need not be powered up so no "grab inc access" is required.
+ */
+
+/*
+ * Registers for accessing shared registers (e.g. SHR_APMG_GP1,
+ * SHR_APMG_XTAL_CFG). For example, to read from SHR_APMG_GP1 register (0x1DC),
+ * first, write to the control register:
+ * HEEP_CTRL_WRD_PCIEX_CTRL[15:0] = 0x1DC (offset of the SHR_APMG_GP1 register)
+ * HEEP_CTRL_WRD_PCIEX_CTRL[29:28] = 2 (read access)
+ * second, read from the data register HEEP_CTRL_WRD_PCIEX_DATA[31:0].
+ *
+ * To write the register, first, write to the data register
+ * HEEP_CTRL_WRD_PCIEX_DATA[31:0] and then:
+ * HEEP_CTRL_WRD_PCIEX_CTRL[15:0] = 0x1DC (offset of the SHR_APMG_GP1 register)
+ * HEEP_CTRL_WRD_PCIEX_CTRL[29:28] = 3 (write access)
+ */
+#define IWM_HEEP_CTRL_WRD_PCIEX_CTRL_REG	(0x0ec)
+#define IWM_HEEP_CTRL_WRD_PCIEX_DATA_REG	(0x0f4)
 
 /*
  * HBUS (Host-side Bus)
@@ -988,6 +1025,7 @@ struct iwm_tlv_ucode_header {
 #define IWM_APMG_SVR_VOLTAGE_CONFIG_BIT_MSK		(0x000001E0) /* bit 8:5 */
 #define IWM_APMG_SVR_DIGITAL_VOLTAGE_1_32		(0x00000060)
 
+#define IWM_APMG_PCIDEV_STT_VAL_PERSIST_DIS		(0x00000200)
 #define IWM_APMG_PCIDEV_STT_VAL_L1_ACT_DIS		(0x00000800)
 
 #define IWM_APMG_RTC_INT_STT_RFKILL			(0x10000000)
@@ -1001,6 +1039,26 @@ struct iwm_tlv_ucode_header {
 #define IWM_DEVICE_SET_NMI_VAL_DRV	0x80
 #define IWM_DEVICE_SET_NMI_8000_REG	0x00a01c24
 #define IWM_DEVICE_SET_NMI_8000_VAL	0x1000000
+
+/* Shared registers (0x0..0x3ff, via target indirect or periphery */
+#define IWM_SHR_BASE	0x00a10000
+
+/* Shared GP1 register */
+#define IWM_SHR_APMG_GP1_REG		0x01dc
+#define IWM_SHR_APMG_GP1_REG_PRPH	(IWM_SHR_BASE + IWM_SHR_APMG_GP1_REG)
+#define IWM_SHR_APMG_GP1_WF_XTAL_LP_EN	0x00000004
+#define IWM_SHR_APMG_GP1_CHICKEN_BIT_SELECT 0x80000000
+
+/* Shared DL_CFG register */
+#define IWM_SHR_APMG_DL_CFG_REG		0x01c4
+#define IWM_SHR_APMG_DL_CFG_REG_PRPH	(IWM_SHR_BASE + IWM_SHR_APMG_DL_CFG_REG)
+#define IWM_SHR_APMG_DL_CFG_RTCS_CLK_SELECTOR_MSK 0x000000c0
+#define IWM_SHR_APMG_DL_CFG_RTCS_CLK_INTERNAL_XTAL 0x00000080
+#define IWM_SHR_APMG_DL_CFG_DL_CLOCK_POWER_UP 0x00000100
+
+/* Shared APMG_XTAL_CFG register */
+#define IWM_SHR_APMG_XTAL_CFG_REG		0x1c0
+#define IWM_SHR_APMG_XTAL_CFG_XTAL_ON_REQ	0x80000000
 
 /*
  * Device reset for family 8000

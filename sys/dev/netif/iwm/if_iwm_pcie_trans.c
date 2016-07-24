@@ -390,6 +390,22 @@ iwm_prepare_card_hw(struct iwm_softc *sc)
 	return rv;
 }
 
+static uint32_t
+iwm_trans_pcie_read_shr(struct iwm_softc *sc, uint32_t reg)
+{
+	IWM_WRITE(sc, IWM_HEEP_CTRL_WRD_PCIEX_CTRL_REG,
+		  ((reg & 0x0000ffff) | (2 << 28)));
+	return IWM_READ(sc, IWM_HEEP_CTRL_WRD_PCIEX_DATA_REG);
+}
+
+static void
+iwm_trans_pcie_write_shr(struct iwm_softc *sc, uint32_t reg, uint32_t val)
+{
+	IWM_WRITE(sc, IWM_HEEP_CTRL_WRD_PCIEX_DATA_REG, val);
+	IWM_WRITE(sc, IWM_HEEP_CTRL_WRD_PCIEX_CTRL_REG,
+		  ((reg & 0x0000ffff) | (3 << 28)));
+}
+
 void
 iwm_apm_config(struct iwm_softc *sc)
 {
@@ -536,6 +552,116 @@ iwm_apm_init(struct iwm_softc *sc)
 	return error;
 }
 
+/*
+ * Enable LP XTAL to avoid HW bug where device may consume much power if
+ * FW is not loaded after device reset. LP XTAL is disabled by default
+ * after device HW reset. Do it only if XTAL is fed by internal source.
+ * Configure device's "persistence" mode to avoid resetting XTAL again when
+ * SHRD_HW_RST occurs in S3.
+ */
+static void
+iwm_pcie_apm_lp_xtal_enable(struct iwm_softc *sc)
+{
+	int ret;
+	uint32_t apmg_gp1_reg;
+	uint32_t apmg_xtal_cfg_reg;
+	uint32_t dl_cfg_reg;
+
+	/* Force XTAL ON */
+	IWM_SETBITS(sc, IWM_CSR_GP_CNTRL, IWM_CSR_GP_CNTRL_REG_FLAG_XTAL_ON);
+
+	/* Reset entire device - do controller reset (results in SHRD_HW_RST) */
+	IWM_SETBITS(sc, IWM_CSR_RESET, IWM_CSR_RESET_REG_FLAG_SW_RESET);
+	DELAY(1000);
+
+	/*
+	 * Set "initialization complete" bit to move adapter from
+	 * D0U* --> D0A* (powered-up active) state.
+	 */
+	IWM_SETBITS(sc, IWM_CSR_GP_CNTRL, IWM_CSR_GP_CNTRL_REG_FLAG_INIT_DONE);
+
+	/*
+	 * Wait for clock stabilization; once stabilized, access to
+	 * device-internal resources is possible.
+	 */
+	ret = iwm_poll_bit(sc, IWM_CSR_GP_CNTRL,
+			   IWM_CSR_GP_CNTRL_REG_FLAG_MAC_CLOCK_READY,
+			   IWM_CSR_GP_CNTRL_REG_FLAG_MAC_CLOCK_READY,
+			   25000);
+	if (!ret) {
+		device_printf(sc->sc_dev,
+		    "%s: Access time out - failed to enable LP XTAL\n",
+		    __func__);
+		/* Release XTAL ON request */
+		IWM_CLRBITS(sc, IWM_CSR_GP_CNTRL,
+			   IWM_CSR_GP_CNTRL_REG_FLAG_XTAL_ON);
+		return;
+	}
+
+	/*
+	 * Clear "disable persistence" to avoid LP XTAL resetting when
+	 * SHRD_HW_RST is applied in S3.
+	 */
+	iwm_clear_bits_prph(sc, IWM_APMG_PCIDEV_STT_REG,
+				 IWM_APMG_PCIDEV_STT_VAL_PERSIST_DIS);
+
+	/*
+	 * Force APMG XTAL to be active to prevent its disabling by HW
+	 * caused by APMG idle state.
+	 */
+	apmg_xtal_cfg_reg = iwm_trans_pcie_read_shr(sc,
+						    IWM_SHR_APMG_XTAL_CFG_REG);
+	iwm_trans_pcie_write_shr(sc, IWM_SHR_APMG_XTAL_CFG_REG,
+				 apmg_xtal_cfg_reg |
+				 IWM_SHR_APMG_XTAL_CFG_XTAL_ON_REQ);
+
+	/*
+	 * Reset entire device again - do controller reset (results in
+	 * SHRD_HW_RST). Turn MAC off before proceeding.
+	 */
+	IWM_SETBITS(sc, IWM_CSR_RESET, IWM_CSR_RESET_REG_FLAG_SW_RESET);
+	DELAY(1000);
+
+	/* Enable LP XTAL by indirect access through CSR */
+	apmg_gp1_reg = iwm_trans_pcie_read_shr(sc, IWM_SHR_APMG_GP1_REG);
+	iwm_trans_pcie_write_shr(sc, IWM_SHR_APMG_GP1_REG, apmg_gp1_reg |
+				 IWM_SHR_APMG_GP1_WF_XTAL_LP_EN |
+				 IWM_SHR_APMG_GP1_CHICKEN_BIT_SELECT);
+
+	/* Clear delay line clock power up */
+	dl_cfg_reg = iwm_trans_pcie_read_shr(sc, IWM_SHR_APMG_DL_CFG_REG);
+	iwm_trans_pcie_write_shr(sc, IWM_SHR_APMG_DL_CFG_REG, dl_cfg_reg &
+				 ~IWM_SHR_APMG_DL_CFG_DL_CLOCK_POWER_UP);
+
+	/*
+	 * Enable persistence mode to avoid LP XTAL resetting when
+	 * SHRD_HW_RST is applied in S3.
+	 */
+	IWM_SETBITS(sc, IWM_CSR_HW_IF_CONFIG_REG,
+		   IWM_CSR_HW_IF_CONFIG_REG_PERSIST_MODE);
+
+	/*
+	 * Clear "initialization complete" bit to move adapter from
+	 * D0A* (powered-up Active) --> D0U* (Uninitialized) state.
+	 */
+	IWM_CLRBITS(sc, IWM_CSR_GP_CNTRL,
+		    IWM_CSR_GP_CNTRL_REG_FLAG_INIT_DONE);
+
+	/* Activates XTAL resources monitor */
+	IWM_SETBITS(sc, IWM_CSR_MONITOR_CFG_REG,
+		    IWM_CSR_MONITOR_XTAL_RESOURCES);
+
+	/* Release XTAL ON request */
+	IWM_CLRBITS(sc, IWM_CSR_GP_CNTRL,
+		    IWM_CSR_GP_CNTRL_REG_FLAG_XTAL_ON);
+	DELAY(10);
+
+	/* Release APMG XTAL */
+	iwm_trans_pcie_write_shr(sc, IWM_SHR_APMG_XTAL_CFG_REG,
+				 apmg_xtal_cfg_reg &
+				 ~IWM_SHR_APMG_XTAL_CFG_XTAL_ON_REQ);
+}
+
 void
 iwm_apm_stop(struct iwm_softc *sc)
 {
@@ -548,6 +674,11 @@ iwm_apm_stop(struct iwm_softc *sc)
 	    IWM_CSR_RESET_REG_FLAG_MASTER_DISABLED,
 	    IWM_CSR_RESET_REG_FLAG_MASTER_DISABLED, 100))
 		device_printf(sc->sc_dev, "timeout waiting for master\n");
+
+	if (sc->cfg->lp_xtal_workaround) {
+		iwm_pcie_apm_lp_xtal_enable(sc);
+		return;
+	}
 
 	/* Reset the entire device */
 	IWM_SETBITS(sc, IWM_CSR_RESET, IWM_CSR_RESET_REG_FLAG_SW_RESET);
