@@ -5667,6 +5667,13 @@ iwm_intr(void *arg)
 		}
 	}
 
+	/* Chip got too hot and stopped itself */
+	if (r1 & IWM_CSR_INT_BIT_CT_KILL) {
+		handled |= IWM_CSR_INT_BIT_CT_KILL;
+		device_printf(sc->sc_dev,
+		    "%s: Microcode CT kill error detected.\n", __func__);
+	}
+
 	/*
 	 * The Linux driver uses periodic interrupts to avoid races.
 	 * We cargo-cult like it's going out of fashion.
