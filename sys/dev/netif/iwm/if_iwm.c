@@ -1437,13 +1437,15 @@ iwm_nic_rx_init(struct iwm_softc *sc)
 	IWM_WRITE(sc, IWM_FH_MEM_RCSR_CHNL0_RBDCB_WPTR, 0);
 	IWM_WRITE(sc, IWM_FH_MEM_RCSR_CHNL0_FLUSH_RB_REQ, 0);
 	IWM_WRITE(sc, IWM_FH_RSCSR_CHNL0_RDPTR, 0);
+
+	/* Reset driver's Rx queue write index */
 	IWM_WRITE(sc, IWM_FH_RSCSR_CHNL0_RBDCB_WPTR_REG, 0);
 
-	/* Set physical address of RX ring (256-byte aligned). */
+	/* Tell device where to find RBD circular buffer in DRAM */
 	IWM_WRITE(sc,
 	    IWM_FH_RSCSR_CHNL0_RBDCB_BASE_REG, sc->rxq.desc_dma.paddr >> 8);
 
-	/* Set physical address of RX status (16-byte aligned). */
+	/* Tell device where in DRAM to update its Rx status */
 	IWM_WRITE(sc,
 	    IWM_FH_RSCSR_CHNL0_STTS_WPTR_REG, sc->rxq.stat_dma.paddr >> 4);
 
@@ -1462,13 +1464,14 @@ iwm_nic_rx_init(struct iwm_softc *sc)
 	 * 256 RBDs
 	 */
 	IWM_WRITE(sc, IWM_FH_MEM_RCSR_CHNL0_CONFIG_REG,
-	    IWM_FH_RCSR_RX_CONFIG_CHNL_EN_ENABLE_VAL		|
-	    IWM_FH_RCSR_CHNL0_RX_IGNORE_RXF_EMPTY		|  /* HW bug */
-	    IWM_FH_RCSR_CHNL0_RX_CONFIG_IRQ_DEST_INT_HOST_VAL	|
-	    IWM_FH_RCSR_RX_CONFIG_REG_VAL_RB_SIZE_4K		|
+	    IWM_FH_RCSR_RX_CONFIG_CHNL_EN_ENABLE_VAL |
+	    IWM_FH_RCSR_CHNL0_RX_IGNORE_RXF_EMPTY |
+	    IWM_FH_RCSR_CHNL0_RX_CONFIG_IRQ_DEST_INT_HOST_VAL |
+	    IWM_FH_RCSR_RX_CONFIG_REG_VAL_RB_SIZE_4K |
 	    (IWM_RX_RB_TIMEOUT << IWM_FH_RCSR_RX_CONFIG_REG_IRQ_RBTH_POS) |
 	    IWM_RX_QUEUE_SIZE_LOG << IWM_FH_RCSR_RX_CONFIG_RBDCB_SIZE_POS);
 
+	/* Set interrupt coalescing timer to default (2048 usecs) */
 	IWM_WRITE_1(sc, IWM_CSR_INT_COALESCING, IWM_HOST_INT_TIMEOUT_DEF);
 
 	/* W/A for interrupt coalescing bug in 7260 and 3160 */
