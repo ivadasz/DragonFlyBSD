@@ -3691,9 +3691,10 @@ iwm_tx(struct iwm_softc *sc, struct mbuf *m, struct ieee80211_node *ni, int ac)
 		flags |= IWM_TX_CMD_FLG_ACK;
 	}
 
-	if (type == IEEE80211_FC0_TYPE_DATA
-	    && (totlen + IEEE80211_CRC_LEN > vap->iv_rtsthreshold)
-	    && !IEEE80211_IS_MULTICAST(wh->i_addr1)) {
+	if (type == IEEE80211_FC0_TYPE_DATA &&
+	    !IEEE80211_IS_MULTICAST(wh->i_addr1) &&
+	    (totlen + IEEE80211_CRC_LEN > vap->iv_rtsthreshold ||
+	     (ic->ic_flags & IEEE80211_F_USEPROT))) {
 		flags |= IWM_TX_CMD_FLG_PROT_REQUIRE;
 	}
 
