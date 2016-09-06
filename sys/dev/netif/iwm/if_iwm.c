@@ -2393,12 +2393,11 @@ iwm_nvm_init(struct iwm_softc *sc)
 		if (ret)
 			continue;
 		size_read += len;
-		temp = kmalloc(len, M_DEVBUF, M_INTWAIT);
+		temp = kmemdup(nvm_buffer, len, M_DEVBUF, M_INTWAIT);
 		if (!temp) {
 			ret = ENOMEM;
 			break;
 		}
-		memcpy(temp, nvm_buffer, len);
 
 		nvm_sections[section].data = temp;
 		nvm_sections[section].length = len;

@@ -348,12 +348,11 @@ iwm_phy_db_set_section(struct iwm_phy_db *phy_db,
 
 	if (entry->data != NULL)
 		kfree(entry->data, M_DEVBUF);
-	entry->data = kmalloc(size, M_DEVBUF, M_WAITOK);
+	entry->data = kmemdup(phy_db_notif->data, size, M_DEVBUF, M_WAITOK);
 	if (!entry->data) {
 		entry->size = 0;
 		return ENOMEM;
 	}
-	memcpy(entry->data, phy_db_notif->data, size);
 
 	entry->size = size;
 
