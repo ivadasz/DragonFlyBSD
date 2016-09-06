@@ -160,4 +160,13 @@ iwm_mvm_get_phy_config(struct iwm_softc *sc)
 	return sc->sc_fw.phy_config & phy_config;
 }
 
+static inline void *
+kmemdup(void *src, unsigned long size, struct malloc_type *type, int flags)
+{
+	void *dest = kmalloc(size, type, flags);
+	if (dest)
+		memcpy(dest, src, size);
+	return dest;
+}
+
 #endif	/* __IF_IWM_UTIL_H__ */
