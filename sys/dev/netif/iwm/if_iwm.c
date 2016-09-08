@@ -2709,7 +2709,6 @@ iwm_pcie_load_given_ucode_8000(struct iwm_softc *sc,
 	    &first_ucode_section);
 }
 
-/* XXX Get rid of this definition */
 static inline void
 iwm_enable_fw_load_int(struct iwm_softc *sc)
 {
@@ -5547,7 +5546,6 @@ iwm_intr(void *arg)
 	struct iwm_softc *sc = arg;
 	int handled = 0;
 	int r1, r2, rv = 0;
-	int isperiodic = 0;
 
 #if defined(__DragonFly__)
 	if (sc->sc_mem == NULL) {
@@ -5671,29 +5669,47 @@ iwm_intr(void *arg)
 		    "%s: Microcode CT kill error detected.\n", __func__);
 	}
 
-	/*
-	 * The Linux driver uses periodic interrupts to avoid races.
-	 * We cargo-cult like it's going out of fashion.
-	 */
-	if (r1 & IWM_CSR_INT_BIT_RX_PERIODIC) {
-		handled |= IWM_CSR_INT_BIT_RX_PERIODIC;
-		IWM_WRITE(sc, IWM_CSR_INT, IWM_CSR_INT_BIT_RX_PERIODIC);
-		if ((r1 & (IWM_CSR_INT_BIT_FH_RX | IWM_CSR_INT_BIT_SW_RX)) == 0)
-			IWM_WRITE_1(sc,
-			    IWM_CSR_INT_PERIODIC_REG, IWM_CSR_INT_PERIODIC_DIS);
-		isperiodic = 1;
-	}
+	/* All uCode command responses, including Tx command responses,
+	 * Rx "responses" (frame-received notification), and other
+	 * notifications from uCode come through here*/
+	if (r1 & (IWM_CSR_INT_BIT_FH_RX | IWM_CSR_INT_BIT_SW_RX |
+		  IWM_CSR_INT_BIT_RX_PERIODIC)) {
+		if (r1 & (IWM_CSR_INT_BIT_FH_RX | IWM_CSR_INT_BIT_SW_RX)) {
+			handled |= (IWM_CSR_INT_BIT_FH_RX | IWM_CSR_INT_BIT_SW_RX);
+			IWM_WRITE(sc, IWM_CSR_FH_INT_STATUS, IWM_CSR_FH_INT_RX_MASK);
+		}
+		if (r1 & IWM_CSR_INT_BIT_RX_PERIODIC) {
+			handled |= IWM_CSR_INT_BIT_RX_PERIODIC;
+			IWM_WRITE(sc, IWM_CSR_INT, IWM_CSR_INT_BIT_RX_PERIODIC);
+		}
+		/* Sending RX interrupt require many steps to be done in the
+		 * the device:
+		 * 1- write interrupt to current index in ICT table.
+		 * 2- dma RX frame.
+		 * 3- update RX shared data to indicate last write index.
+		 * 4- send interrupt.
+		 * This could lead to RX race, driver could receive RX interrupt
+		 * but the shared data changes does not reflect this;
+		 * periodic interrupt will detect any dangling Rx activity.
+		 */
 
-	if ((r1 & (IWM_CSR_INT_BIT_FH_RX | IWM_CSR_INT_BIT_SW_RX)) || isperiodic) {
-		handled |= (IWM_CSR_INT_BIT_FH_RX | IWM_CSR_INT_BIT_SW_RX);
-		IWM_WRITE(sc, IWM_CSR_FH_INT_STATUS, IWM_CSR_FH_INT_RX_MASK);
+		/* Disable periodic interrupt; we use it as just a one-shot. */
+		IWM_WRITE_1(sc,
+		    IWM_CSR_INT_PERIODIC_REG, IWM_CSR_INT_PERIODIC_DIS);
+
+		/*
+		 * Enable periodic interrupt in 8 msec only if we received
+		 * real RX interrupt (instead of just periodic int), to catch
+		 * any dangling Rx interrupt.  If it was just the periodic
+		 * interrupt, there was no dangling Rx activity, and no need
+		 * to extend the periodic interrupt; one-shot is enough.
+		 */
+		if (r1 & (IWM_CSR_INT_BIT_FH_RX | IWM_CSR_INT_BIT_SW_RX))
+			IWM_WRITE_1(sc, IWM_CSR_INT_PERIODIC_REG,
+			    IWM_CSR_INT_PERIODIC_ENA);
 
 		iwm_notif_intr(sc);
 
-		/* enable periodic interrupt, see above */
-		if (r1 & (IWM_CSR_INT_BIT_FH_RX | IWM_CSR_INT_BIT_SW_RX) && !isperiodic)
-			IWM_WRITE_1(sc, IWM_CSR_INT_PERIODIC_REG,
-			    IWM_CSR_INT_PERIODIC_ENA);
 	}
 
 	if (__predict_false(r1 & ~handled))
