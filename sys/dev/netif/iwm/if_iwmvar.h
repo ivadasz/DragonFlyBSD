@@ -551,6 +551,8 @@ struct iwm_softc {
 
 	/* Indicate if device power save is allowed */
 	boolean_t		sc_ps_disabled;
+
+	int			sc_int_enabled;
 };
 
 #define IWM_LOCK_INIT(_sc) \

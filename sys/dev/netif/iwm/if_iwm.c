@@ -279,7 +279,6 @@ static int	iwm_alloc_tx_ring(struct iwm_softc *, struct iwm_tx_ring *,
 static void	iwm_reset_tx_ring(struct iwm_softc *, struct iwm_tx_ring *);
 static void	iwm_free_tx_ring(struct iwm_softc *, struct iwm_tx_ring *);
 static void	iwm_enable_interrupts(struct iwm_softc *);
-static void	iwm_restore_interrupts(struct iwm_softc *);
 static void	iwm_disable_interrupts(struct iwm_softc *);
 static void	iwm_ict_reset(struct iwm_softc *);
 static int	iwm_allow_mcast(struct ieee80211vap *, struct iwm_softc *);
@@ -1231,19 +1230,16 @@ iwm_free_tx_ring(struct iwm_softc *sc, struct iwm_tx_ring *ring)
 static void
 iwm_enable_interrupts(struct iwm_softc *sc)
 {
+	sc->sc_int_enabled = 1;
 	sc->sc_intmask = IWM_CSR_INI_SET_MASK;
-	IWM_WRITE(sc, IWM_CSR_INT_MASK, sc->sc_intmask);
-}
-
-static void
-iwm_restore_interrupts(struct iwm_softc *sc)
-{
 	IWM_WRITE(sc, IWM_CSR_INT_MASK, sc->sc_intmask);
 }
 
 static void
 iwm_disable_interrupts(struct iwm_softc *sc)
 {
+	sc->sc_int_enabled = 0;
+
 	/* disable interrupts */
 	IWM_WRITE(sc, IWM_CSR_INT_MASK, 0);
 
@@ -1367,6 +1363,9 @@ iwm_stop_device(struct iwm_softc *sc)
 	 * should be masked. Re-ACK all the interrupts here.
 	 */
 	iwm_disable_interrupts(sc);
+
+	/* XXX iwm_disable_interrupts already clears int_enabled */
+	sc->sc_int_enabled = 0;
 
 	/*
 	 * Even if we stop the HW, we still want the RF kill
@@ -5507,7 +5506,7 @@ iwm_intr(void *arg)
 {
 	struct iwm_softc *sc = arg;
 	int handled = 0;
-	int r1, r2, rv = 0;
+	int r1;
 
 #if defined(__DragonFly__)
 	if (sc->sc_mem == NULL) {
@@ -5529,7 +5528,7 @@ iwm_intr(void *arg)
 		/*
 		 * ok, there was something.  keep plowing until we have all.
 		 */
-		r1 = r2 = 0;
+		r1 = 0;
 		while (tmp) {
 			r1 |= tmp;
 			ict[sc->ict_cur] = 0;
@@ -5550,10 +5549,15 @@ iwm_intr(void *arg)
 		/* "hardware gone" (where, fishing?) */
 		if (r1 == 0xffffffff || (r1 & 0xfffffff0) == 0xa5a5a5a0)
 			goto out;
-		r2 = IWM_READ(sc, IWM_CSR_FH_INT_STATUS);
 	}
-	if (r1 == 0 && r2 == 0) {
-		goto out_ena;
+
+	r1 &= sc->sc_intmask;
+
+	if (r1 == 0) {
+		IWM_DPRINTF(sc, IWM_DEBUG_INTR, "Ignore interrupt, r1 == 0\n");
+		if (sc->sc_int_enabled)
+			iwm_enable_interrupts(sc);
+		goto out;
 	}
 
 	IWM_WRITE(sc, IWM_CSR_INT, r1 | ~sc->sc_intmask);
@@ -5602,7 +5606,6 @@ iwm_intr(void *arg)
 		handled |= IWM_CSR_INT_BIT_HW_ERR;
 		device_printf(sc->sc_dev, "hardware error, stopping device\n");
 		iwm_stop(sc);
-		rv = 1;
 		goto out;
 	}
 
@@ -5677,10 +5680,17 @@ iwm_intr(void *arg)
 	if (__predict_false(r1 & ~handled))
 		IWM_DPRINTF(sc, IWM_DEBUG_INTR,
 		    "%s: unhandled interrupts: %x\n", __func__, r1);
-	rv = 1;
 
  out_ena:
-	iwm_restore_interrupts(sc);
+	if (sc->sc_int_enabled)
+		iwm_enable_interrupts(sc);
+	/* we are loading the firmware, enable FH_TX interrupt only */
+	else if (handled & IWM_CSR_INT_BIT_FH_TX)
+		iwm_enable_fw_load_int(sc);
+	/* Re-enable RF_KILL if it occurred */
+	else if (handled & IWM_CSR_INT_BIT_RF_KILL)
+		iwm_enable_rfkill_int(sc);
+
  out:
 	IWM_UNLOCK(sc);
 	return;
