@@ -128,8 +128,13 @@ extern	void iwm_apm_stop(struct iwm_softc *sc);
 extern	int iwm_start_hw(struct iwm_softc *sc);
 extern	void iwm_set_pwr(struct iwm_softc *sc);
 extern	int iwm_pcie_rx_stop(struct iwm_softc *sc);
-
 extern	int iwm_pcie_set_cmd_in_flight(struct iwm_softc *sc);
 extern	void iwm_pcie_clear_cmd_in_flight(struct iwm_softc *sc);
+
+/* XXX Instead the start_fw function should be in this header */
+extern	int iwm_pcie_load_given_ucode_8000(struct iwm_softc *,
+					   const struct iwm_fw_sects *);
+extern	int iwm_pcie_load_given_ucode(struct iwm_softc *,
+				      const struct iwm_fw_sects *);
 
 #endif

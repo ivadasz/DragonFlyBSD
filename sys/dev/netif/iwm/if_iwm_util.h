@@ -160,6 +160,28 @@ iwm_mvm_get_phy_config(struct iwm_softc *sc)
 	return sc->sc_fw.phy_config & phy_config;
 }
 
+static inline void
+iwm_enable_interrupts(struct iwm_softc *sc)
+{
+	sc->sc_int_enabled = 1;
+	sc->sc_intmask = IWM_CSR_INI_SET_MASK;
+	IWM_WRITE(sc, IWM_CSR_INT_MASK, sc->sc_intmask);
+}
+
+static inline void
+iwm_disable_interrupts(struct iwm_softc *sc)
+{
+	sc->sc_int_enabled = 0;
+
+	/* disable interrupts */
+	IWM_WRITE(sc, IWM_CSR_INT_MASK, 0);
+
+	/* acknowledge all interrupts */
+	IWM_WRITE(sc, IWM_CSR_INT, ~0);
+	IWM_WRITE(sc, IWM_CSR_FH_INT_STATUS, ~0);
+}
+
+
 static inline void *
 kmemdup(void *src, unsigned long size, struct malloc_type *type, int flags)
 {
