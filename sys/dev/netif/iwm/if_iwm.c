@@ -191,6 +191,7 @@ __FBSDID("$FreeBSD$");
 #include "if_iwm_pcie_trans.h"
 #include "if_iwm_led.h"
 #include "if_iwm_fw.h"
+#include "if_iwm_tt.h"
 
 const uint8_t iwm_nvm_channels[] = {
 	/* 2.4 GHz */
@@ -5013,17 +5014,7 @@ iwm_handle_rxb(struct iwm_softc *sc, struct mbuf *m)
 		case IWM_DTS_MEASUREMENT_NOTIFICATION:
 		case IWM_WIDE_ID(IWM_PHY_OPS_GROUP,
 				 IWM_DTS_MEASUREMENT_NOTIF_WIDE): {
-			struct iwm_dts_measurement_notif_v1 *notif;
-
-			if (iwm_rx_packet_payload_len(pkt) < sizeof(*notif)) {
-				device_printf(sc->sc_dev,
-				    "Invalid DTS_MEASUREMENT_NOTIFICATION\n");
-				break;
-			}
-			notif = (void *)pkt->data;
-			IWM_DPRINTF(sc, IWM_DEBUG_TEMP,
-			    "IWM_DTS_MEASUREMENT_NOTIFICATION - %d\n",
-			    notif->temp);
+			iwm_mvm_temp_notif(sc, pkt);
 			break;
 		}
 
