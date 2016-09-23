@@ -3984,25 +3984,23 @@ iwm_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	    "switching state %s -> %s\n",
 	    ieee80211_state_name[vap->iv_state],
 	    ieee80211_state_name[nstate]);
-	IEEE80211_UNLOCK(ic);
-	IWM_LOCK(sc);
 
-	if (vap->iv_state == IEEE80211_S_SCAN && nstate != vap->iv_state)
+	if (vap->iv_state == IEEE80211_S_SCAN && nstate != vap->iv_state) {
+		IEEE80211_UNLOCK(ic);
+		IWM_LOCK(sc);
 		iwm_led_blink_stop(sc);
-
+	}
 	/* disable beacon filtering if we're hopping out of RUN */
-	if (vap->iv_state == IEEE80211_S_RUN && nstate != vap->iv_state) {
-		iwm_mvm_disable_beacon_filter(sc);
-
-		if (((in = IWM_NODE(vap->iv_bss)) != NULL))
-			in->in_assoc = 0;
-
+	else if (vap->iv_state == IEEE80211_S_RUN && nstate != vap->iv_state) {
 		if (nstate == IEEE80211_S_INIT) {
-			IWM_UNLOCK(sc);
-			IEEE80211_LOCK(ic);
+			/*
+			 * XXX If arg == -1, we might get away with moving
+			 *     the ivp->iv_newstate() call to the end.
+			 */
 			error = ivp->iv_newstate(vap, nstate, arg);
 			IEEE80211_UNLOCK(ic);
 			IWM_LOCK(sc);
+			iwm_mvm_disable_beacon_filter(sc);
 			iwm_release(sc, NULL);
 			IWM_UNLOCK(sc);
 			IEEE80211_LOCK(ic);
@@ -4027,8 +4025,6 @@ iwm_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		    nstate == IEEE80211_S_ASSOC) {
 			IWM_DPRINTF(sc, IWM_DEBUG_STATE,
 			    "Force transition to INIT; MGT=%d\n", arg);
-			IWM_UNLOCK(sc);
-			IEEE80211_LOCK(ic);
 			/* Always pass arg as -1 since we can't Tx right now. */
 			/*
 			 * XXX arg is just ignored anyway when transitioning
@@ -4038,9 +4034,12 @@ iwm_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 			IWM_DPRINTF(sc, IWM_DEBUG_STATE,
 			    "Going INIT->SCAN\n");
 			nstate = IEEE80211_S_SCAN;
-			IEEE80211_UNLOCK(ic);
-			IWM_LOCK(sc);
 		}
+		IEEE80211_UNLOCK(ic);
+		IWM_LOCK(sc);
+	} else {
+		IEEE80211_UNLOCK(ic);
+		IWM_LOCK(sc);
 	}
 
 	switch (nstate) {
