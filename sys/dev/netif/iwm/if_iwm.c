@@ -176,6 +176,7 @@ __FBSDID("$FreeBSD$");
 #include "if_iwmvar.h"
 #include "if_iwm_config.h"
 #include "if_iwm_debug.h"
+#include "if_iwm_constants.h"
 #include "if_iwm_notif_wait.h"
 #include "if_iwm_util.h"
 #include "if_iwm_binding.h"
@@ -412,7 +413,10 @@ TUNABLE_INT("hw.iwm.msi.enable", &iwm_msi_enable);
 #endif
 
 static int	iwm_lar_disable = 0;
+static int	iwm_bt_coex_active = 1;
+
 TUNABLE_INT("hw.iwm.lar.disable", &iwm_lar_disable);
+TUNABLE_INT("hw.iwm.bt_coex_active", &iwm_bt_coex_active);
 
 /*
  * Firmware parser.
@@ -4197,10 +4201,24 @@ iwm_endscan_cb(void *arg, int pending)
 static int
 iwm_send_bt_init_conf(struct iwm_softc *sc)
 {
-	struct iwm_bt_coex_cmd bt_cmd;
+	struct iwm_bt_coex_cmd bt_cmd = {};
+	uint32_t mode;
 
-	bt_cmd.mode = htole32(IWM_BT_COEX_WIFI);
-	bt_cmd.enabled_modules = htole32(IWM_BT_COEX_HIGH_BAND_RET);
+	mode = iwm_bt_coex_active ? IWM_BT_COEX_NW : IWM_BT_COEX_DISABLE;
+	bt_cmd.mode = htole32(mode);
+
+	if (IWM_MVM_BT_COEX_SYNC2SCO)
+		bt_cmd.enabled_modules |= htole32(IWM_BT_COEX_SYNC2SCO_ENABLED);
+
+	if (fw_has_capa(&sc->ucode_capa, IWM_UCODE_TLV_CAPA_BT_COEX_PLCR) &&
+	    IWM_MVM_BT_COEX_CORUNNING)
+		bt_cmd.enabled_modules |= htole32(IWM_BT_COEX_CORUN_ENABLED);
+
+	if (fw_has_capa(&sc->ucode_capa, IWM_UCODE_TLV_CAPA_BT_MPLUT_SUPPORT) &&
+	    IWM_MVM_BT_COEX_MPLUT)
+		bt_cmd.enabled_modules |= htole32(IWM_BT_COEX_MPLUT_ENABLED);
+
+	bt_cmd.enabled_modules |= htole32(IWM_BT_COEX_HIGH_BAND_RET);
 
 	return iwm_mvm_send_cmd_pdu(sc, IWM_BT_CONFIG, 0, sizeof(bt_cmd),
 	    &bt_cmd);
@@ -4363,14 +4381,14 @@ iwm_init_hw(struct iwm_softc *sc)
 	if (error)
 		device_printf(sc->sc_dev, "Failed to initialize Smart Fifo\n");
 
-	if ((error = iwm_send_bt_init_conf(sc)) != 0) {
-		device_printf(sc->sc_dev, "bt init conf failed\n");
-		goto error;
-	}
-
 	error = iwm_send_tx_ant_cfg(sc, iwm_mvm_get_valid_tx_ant(sc));
 	if (error != 0) {
 		device_printf(sc->sc_dev, "antenna config failed\n");
+		goto error;
+	}
+
+	if ((error = iwm_send_bt_init_conf(sc)) != 0) {
+		device_printf(sc->sc_dev, "bt init conf failed\n");
 		goto error;
 	}
 
