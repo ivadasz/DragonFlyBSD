@@ -2281,6 +2281,9 @@ enum iwm_time_event_type {
 	/* WiDi Sync Events */
 	IWM_TE_WIDI_TX_SYNC,
 
+	/* Channel Switch NoA */
+	IWM_TE_CHANNEL_SWITCH_PERIOD,
+
 	IWM_TE_MAX
 }; /* IWM_MAC_EVENT_TYPE_API_E_VER_1 */
 
@@ -2350,7 +2353,6 @@ enum {
 	IWM_TE_V1_NOTIF_HOST_FRAG_END = (1 << 5),
 	IWM_TE_V1_NOTIF_INTERNAL_FRAG_START = (1 << 6),
 	IWM_TE_V1_NOTIF_INTERNAL_FRAG_END = (1 << 7),
-	IWM_T2_V2_START_IMMEDIATELY = (1 << 11),
 }; /* IWM_MAC_EVENT_ACTION_API_E_VER_2 */
 
 /* Time event - defines for command API */
@@ -2417,6 +2419,7 @@ enum {
 	IWM_TE_V2_NOTIF_HOST_FRAG_END = (1 << 5),
 	IWM_TE_V2_NOTIF_INTERNAL_FRAG_START = (1 << 6),
 	IWM_TE_V2_NOTIF_INTERNAL_FRAG_END = (1 << 7),
+	IWM_T2_V2_START_IMMEDIATELY = (1 << 11),
 
 	IWM_TE_V2_NOTIF_MSK = 0xff,
 
