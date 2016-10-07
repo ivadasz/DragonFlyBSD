@@ -3216,6 +3216,19 @@ iwm_tx_rateidx_lookup(struct iwm_softc *sc, struct iwm_node *in,
 	return (0);
 }
 
+static int
+iwm_rate2ridx(uint8_t rate)
+{
+	int ridx;
+
+	/* Map 802.11 rate to HW rate index. */
+	for (ridx = 0; ridx <= IWM_RIDX_MAX; ridx++)
+		if (iwm_rates[ridx].rate == rate)
+			break;
+
+	return ridx;
+}
+
 /*
  * Fill in the rate related information for a transmit command.
  */
@@ -3233,35 +3246,48 @@ iwm_tx_fill_cmd(struct iwm_softc *sc, struct iwm_node *in,
 	tx->rts_retry_limit = IWM_RTS_DFAULT_RETRY_LIMIT;
 	tx->data_retry_limit = IWM_DEFAULT_TX_RETRY;
 
-	/*
-	 * XXX TODO: everything about the rate selection here is terrible!
-	 */
-
 	tp = &vap->iv_txparms[ieee80211_chan2mode(ni->ni_chan)];
 	if (type == IEEE80211_FC0_TYPE_MGT) {
-		i = iwm_tx_rateidx_lookup(sc, in, tp->mgmtrate);
-		ridx = in->in_ridx[i];
+		ridx = iwm_rate2ridx(tp->mgmtrate);
 	} else if (IEEE80211_IS_MULTICAST(wh->i_addr1)) {
-		i = iwm_tx_rateidx_lookup(sc, in, tp->mcastrate);
-		ridx = in->in_ridx[i];
+		ridx = iwm_rate2ridx(tp->mcastrate);
 	} else if (tp->ucastrate != IEEE80211_FIXED_RATE_NONE) {
-		i = iwm_tx_rateidx_lookup(sc, in, tp->ucastrate);
-		ridx = in->in_ridx[i];
+		ridx = iwm_rate2ridx(tp->ucastrate);
         } else if (m->m_flags & M_EAPOL) {
-		i = iwm_tx_rateidx_lookup(sc, in, tp->mgmtrate);
-		ridx = in->in_ridx[i];
-        } else {
+		ridx = iwm_rate2ridx(tp->mgmtrate);
+        } else if (type == IEEE80211_FC0_TYPE_DATA) {
 		/* for data frames, use RS table */
 		(void) ieee80211_ratectl_rate(ni, NULL, 0);
 		i = iwm_tx_rateidx_lookup(sc, in, ni->ni_txrate);
 		ridx = in->in_ridx[i];
 
+		/*
+		 * XXX Instead we should update the programmed table when
+		 *     needed, and always use index 0 here.
+		 */
 		/* This is the index into the programmed table */
 		tx->initial_rate_index = i;
 		tx->tx_flags |= htole32(IWM_TX_CMD_FLG_STA_RATE);
 		IWM_DPRINTF(sc, IWM_DEBUG_XMIT | IWM_DEBUG_TXRATE,
 		    "%s: start with i=%d, txrate %d\n",
 		    __func__, i, iwm_rates[ridx].rate);
+	} else {
+		ridx = iwm_rate2ridx(tp->mgmtrate);
+	}
+
+	if (ridx > IWM_RIDX_MAX) {
+		IWM_DPRINTF(sc, IWM_DEBUG_TXRATE,
+		    "%s: Failed to find rate via txparam, using minimum\n",
+		    __func__);
+		if (sc->sc_ic.ic_curmode == IEEE80211_MODE_11A) {
+			/*
+			 * XXX this assumes the mode is either 11a or not 11a;
+			 * definitely won't work for 11n.
+			 */
+			ridx = IWM_RIDX_OFDM;
+		} else {
+			ridx = IWM_RIDX_CCK;
+		}
 	}
 
 	rinfo = &iwm_rates[ridx];
@@ -3905,10 +3931,7 @@ iwm_setrates(struct iwm_softc *sc, struct iwm_node *in)
 	for (i = 0; i < min(nrates, IEEE80211_RATE_MAXSIZE); i++) {
 		int rate = ni->ni_rates.rs_rates[(nrates - 1) - i] & IEEE80211_RATE_VAL;
 
-		/* Map 802.11 rate to HW rate index. */
-		for (ridx = 0; ridx <= IWM_RIDX_MAX; ridx++)
-			if (iwm_rates[ridx].rate == rate)
-				break;
+		ridx = iwm_rate2ridx(rate);
 		if (ridx > IWM_RIDX_MAX) {
 			device_printf(sc->sc_dev,
 			    "%s: WARNING: device rate for %d not found!\n",
