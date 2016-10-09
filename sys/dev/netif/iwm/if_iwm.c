@@ -968,16 +968,16 @@ iwm_alloc_rx_ring(struct iwm_softc *sc, struct iwm_rx_ring *ring)
 
         /* Create RX buffer DMA tag. */
 #if defined(__DragonFly__)
-        error = bus_dma_tag_create(sc->sc_dmat, PAGE_SIZE,
+        error = bus_dma_tag_create(sc->sc_dmat, 256,
 				   0,
-				   BUS_SPACE_MAXADDR_32BIT,
+				   0xFFFFFFFFFUL,
 				   BUS_SPACE_MAXADDR,
 				   NULL, NULL,
 				   IWM_RBUF_SIZE, 1, IWM_RBUF_SIZE,
 				   BUS_DMA_NOWAIT, &ring->data_dmat);
 #else
-        error = bus_dma_tag_create(sc->sc_dmat, 1, 0,
-            BUS_SPACE_MAXADDR_32BIT, BUS_SPACE_MAXADDR, NULL, NULL,
+        error = bus_dma_tag_create(sc->sc_dmat, 256, 0,
+            0xFFFFFFFFFUL, BUS_SPACE_MAXADDR, NULL, NULL,
             IWM_RBUF_SIZE, 1, IWM_RBUF_SIZE, 0, NULL, NULL, &ring->data_dmat);
 #endif
         if (error != 0) {
@@ -1114,16 +1114,16 @@ iwm_alloc_tx_ring(struct iwm_softc *sc, struct iwm_tx_ring *ring, int qid)
 	}
 
 #if defined(__DragonFly__)
-	error = bus_dma_tag_create(sc->sc_dmat, PAGE_SIZE,
+	error = bus_dma_tag_create(sc->sc_dmat, 1,
 				   0,
-				   BUS_SPACE_MAXADDR_32BIT,
+				   0xFFFFFFFFFUL,
 				   BUS_SPACE_MAXADDR,
 				   NULL, NULL,
 				   maxsize, nsegments, maxsize,
 				   BUS_DMA_NOWAIT, &ring->data_dmat);
 #else
 	error = bus_dma_tag_create(sc->sc_dmat, 1, 0,
-	    BUS_SPACE_MAXADDR_32BIT, BUS_SPACE_MAXADDR, NULL, NULL, maxsize,
+	    0xFFFFFFFFFUL, BUS_SPACE_MAXADDR, NULL, NULL, maxsize,
             nsegments, maxsize, 0, NULL, NULL, &ring->data_dmat);
 #endif
 	if (error != 0) {
