@@ -194,28 +194,54 @@
  * %iwl_mvm_up.
  */
 
+#if 0
 /**
  * Send the STA info to the FW.
  *
- * @sc: the iwm_softc* to use
+ * @mvm: the iwl_mvm* to use
  * @sta: the STA
  * @update: this is true if the FW is being updated about a STA it already knows
  *	about. Otherwise (if this is a new STA), this should be false.
  * @flags: if update==true, this marks what is being changed via ORs of values
- *	from enum iwm_sta_modify_flag. Otherwise, this is ignored.
+ *	from enum iwl_sta_modify_flag. Otherwise, this is ignored.
  */
-extern	int iwm_mvm_sta_send_to_fw(struct iwm_softc *sc, struct iwm_node *in,
-				   boolean_t update);
-extern	int iwm_mvm_add_sta(struct iwm_softc *sc, struct iwm_node *in);
-extern	int iwm_mvm_update_sta(struct iwm_softc *sc, struct iwm_node *in);
-extern	int iwm_mvm_rm_sta(struct iwm_softc *sc, struct ieee80211vap *vap,
-			   boolean_t is_assoc);
-extern	int iwm_mvm_rm_sta_id(struct iwm_softc *sc, struct ieee80211vap *vap);
+int iwl_mvm_sta_send_to_fw(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
+			   bool update, unsigned int flags);
+int iwl_mvm_add_sta(struct iwl_mvm *mvm,
+		    struct ieee80211_vif *vif,
+		    struct ieee80211_sta *sta);
+int iwl_mvm_update_sta(struct iwl_mvm *mvm,
+		       struct ieee80211_vif *vif,
+		       struct ieee80211_sta *sta);
+int iwl_mvm_rm_sta(struct iwl_mvm *mvm,
+		   struct ieee80211_vif *vif,
+		   struct ieee80211_sta *sta);
+int iwl_mvm_rm_sta_id(struct iwl_mvm *mvm,
+		      struct ieee80211_vif *vif,
+		      u8 sta_id);
+int iwl_mvm_set_sta_key(struct iwl_mvm *mvm,
+			struct ieee80211_vif *vif,
+			struct ieee80211_sta *sta,
+			struct ieee80211_key_conf *keyconf,
+			u8 key_offset);
+int iwl_mvm_remove_sta_key(struct iwl_mvm *mvm,
+			   struct ieee80211_vif *vif,
+			   struct ieee80211_sta *sta,
+			   struct ieee80211_key_conf *keyconf);
+
+void iwl_mvm_update_tkip_key(struct iwl_mvm *mvm,
+			     struct ieee80211_vif *vif,
+			     struct ieee80211_key_conf *keyconf,
+			     struct ieee80211_sta *sta, u32 iv32,
+			     u16 *phase1key);
+#endif
 
 extern	int iwm_mvm_add_aux_sta(struct iwm_softc *sc);
 extern	void iwm_mvm_del_aux_sta(struct iwm_softc *sc);
 
-extern	int iwm_mvm_drain_sta(struct iwm_softc *sc, struct iwm_vap *ivp,
-			      boolean_t drain);
+extern	int iwm_mvm_allocate_int_sta(struct iwm_softc *sc,
+				     struct iwm_int_sta *sta,
+				     uint32_t qmask,
+				     enum ieee80211_opmode iftype);
 
 #endif /* __IF_IWM_STA_H__ */

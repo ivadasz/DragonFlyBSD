@@ -338,6 +338,28 @@ enum iwm_hcmd_dataflag {
 	IWM_HCMD_DFL_DUP        = (1 << 1),
 };
 
+/**
+ * struct iwm_mvm_sta - representation of a station in the driver
+ * @sta_id: the index of the station in the fw (will be replaced by id_n_color)
+ * @mac_id_n_color: the MAC context this station is linked to
+ *
+ * When mac80211 creates a station it reserves some space (hw->sta_data_size)
+ * in the structure for use by driver. This structure is placed in that
+ * space.
+ *
+ */
+struct iwm_sta {
+	uint32_t sta_id;
+	uint32_t tfd_queue_msk;
+	uint32_t mac_id_n_color;
+};
+
+/**
+ * struct iwm_int_sta - representation of an internal station (auxiliary or
+ * broadcast)
+ * @sta_id: the index of the station in the fw (will be replaced by id_n_color)
+ * @tfd_queue_msk: the tfd queues used by the station
+ */
 struct iwm_int_sta {
 	uint32_t sta_id;
 	uint32_t tfd_queue_msk;
@@ -398,7 +420,6 @@ struct iwm_node {
 #define IWM_NODE(_ni)		((struct iwm_node *)(_ni))
 
 #define IWM_STATION_ID 0
-#define IWM_AUX_STA_ID 1
 
 #define	IWM_DEFAULT_MACID	0
 #define	IWM_DEFAULT_COLOR	0
@@ -502,6 +523,8 @@ struct iwm_softc {
 
 	int			sc_staid;
 	int			sc_nodecolor;
+
+	struct iwm_node		*fw_id_to_mac_id[IWM_MVM_STATION_COUNT];
 
 	uint8_t			sc_cmd_resp[IWM_CMD_RESP_MAX];
 	int			sc_wantresp;

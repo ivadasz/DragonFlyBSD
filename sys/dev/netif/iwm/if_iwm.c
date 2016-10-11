@@ -192,6 +192,7 @@ __FBSDID("$FreeBSD$");
 #include "if_iwm_pcie_trans.h"
 #include "if_iwm_led.h"
 #include "if_iwm_fw.h"
+#include "if_iwm_sta.h"
 #include "if_iwm_tt.h"
 
 const uint8_t iwm_nvm_channels[] = {
