@@ -183,6 +183,7 @@ __FBSDID("$FreeBSD$");
 #include "if_iwm_phy_db.h"
 #include "if_iwm_mac_ctxt.h"
 #include "if_iwm_phy_ctxt.h"
+#include "if_iwm_quota.h"
 #include "if_iwm_time_event.h"
 #include "if_iwm_power.h"
 #include "if_iwm_scan.h"
@@ -353,7 +354,6 @@ static int	iwm_tx(struct iwm_softc *, struct mbuf *,
                        struct ieee80211_node *, int);
 static int	iwm_raw_xmit(struct ieee80211_node *, struct mbuf *,
 			     const struct ieee80211_bpf_params *);
-static int	iwm_mvm_update_quotas(struct iwm_softc *, struct iwm_vap *);
 static int	iwm_auth(struct ieee80211vap *, struct iwm_softc *);
 static int	iwm_release(struct iwm_softc *, struct iwm_node *);
 static struct ieee80211_node *
@@ -3553,73 +3553,6 @@ iwm_mvm_flush_tx_path(struct iwm_softc *sc, uint32_t tfd_msk, uint32_t flags)
 	return ret;
 }
 
-static int
-iwm_mvm_update_quotas(struct iwm_softc *sc, struct iwm_vap *ivp)
-{
-	struct iwm_time_quota_cmd cmd;
-	int i, idx, ret, num_active_macs, quota, quota_rem;
-	int colors[IWM_MAX_BINDINGS] = { -1, -1, -1, -1, };
-	int n_ifs[IWM_MAX_BINDINGS] = {0, };
-	uint16_t id;
-
-	memset(&cmd, 0, sizeof(cmd));
-
-	/* currently, PHY ID == binding ID */
-	if (ivp) {
-		id = ivp->phy_ctxt->id;
-		KASSERT(id < IWM_MAX_BINDINGS, ("invalid id"));
-		colors[id] = ivp->phy_ctxt->color;
-
-		if (1)
-			n_ifs[id] = 1;
-	}
-
-	/*
-	 * The FW's scheduling session consists of
-	 * IWM_MVM_MAX_QUOTA fragments. Divide these fragments
-	 * equally between all the bindings that require quota
-	 */
-	num_active_macs = 0;
-	for (i = 0; i < IWM_MAX_BINDINGS; i++) {
-		cmd.quotas[i].id_and_color = htole32(IWM_FW_CTXT_INVALID);
-		num_active_macs += n_ifs[i];
-	}
-
-	quota = 0;
-	quota_rem = 0;
-	if (num_active_macs) {
-		quota = IWM_MVM_MAX_QUOTA / num_active_macs;
-		quota_rem = IWM_MVM_MAX_QUOTA % num_active_macs;
-	}
-
-	for (idx = 0, i = 0; i < IWM_MAX_BINDINGS; i++) {
-		if (colors[i] < 0)
-			continue;
-
-		cmd.quotas[idx].id_and_color =
-			htole32(IWM_FW_CMD_ID_AND_COLOR(i, colors[i]));
-
-		if (n_ifs[i] <= 0) {
-			cmd.quotas[idx].quota = htole32(0);
-			cmd.quotas[idx].max_duration = htole32(0);
-		} else {
-			cmd.quotas[idx].quota = htole32(quota * n_ifs[i]);
-			cmd.quotas[idx].max_duration = htole32(0);
-		}
-		idx++;
-	}
-
-	/* Give the remainder of the session to the first binding */
-	cmd.quotas[0].quota = htole32(le32toh(cmd.quotas[0].quota) + quota_rem);
-
-	ret = iwm_mvm_send_cmd_pdu(sc, IWM_TIME_QUOTA_CMD, IWM_CMD_SYNC,
-	    sizeof(cmd), &cmd);
-	if (ret)
-		device_printf(sc->sc_dev,
-		    "%s: Failed to send quota: %d\n", __func__, ret);
-	return ret;
-}
-
 /*
  * ieee80211 routines
  */
@@ -4127,7 +4060,7 @@ iwm_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		iwm_mvm_sf_update(sc, vap, FALSE);
 		iwm_mvm_enable_beacon_filter(sc, ivp);
 		iwm_mvm_power_update_mac(sc);
-		iwm_mvm_update_quotas(sc, ivp);
+		iwm_mvm_update_quotas(sc, TRUE, NULL);
 		int rix = ieee80211_ratectl_rate(&in->in_ni, NULL, 0);
 		iwm_setrates(sc, in, rix);
 
@@ -4363,6 +4296,9 @@ iwm_init_hw(struct iwm_softc *sc)
 		device_printf(sc->sc_dev, "phy_cfg_cmd failed\n");
 		goto error;
 	}
+
+	/* reset quota debouncing buffer - 0xff will yield invalid data */
+	memset(&sc->last_quota_cmd, 0xff, sizeof(sc->last_quota_cmd));
 
 	/* Add auxiliary station for scanning */
 	if ((error = iwm_mvm_add_aux_sta(sc)) != 0) {
