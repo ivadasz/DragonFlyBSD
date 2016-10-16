@@ -612,6 +612,7 @@ ieee80211_getmgtframe(uint8_t **frm, int headroom, int pktlen)
 	return m;
 }
 
+#ifndef __NO_STRICT_ALIGNMENT
 /*
  * Re-align the payload in the mbuf.  This is mainly used (right now)
  * to handle IP header alignment requirements on certain architectures.
@@ -651,6 +652,7 @@ ieee80211_realign(struct ieee80211vap *vap, struct mbuf *m, size_t align)
 	m_freem(m);
 	return n;
 }
+#endif /* !__NO_STRICT_ALIGNMENT */
 
 int
 ieee80211_add_callback(struct mbuf *m,

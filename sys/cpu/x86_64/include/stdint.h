@@ -43,6 +43,8 @@
 
 #include <sys/cdefs.h>
 
+#define __NO_STRICT_ALIGNMENT
+
 /*
  * Basic types upon which most other types are built.
  */
