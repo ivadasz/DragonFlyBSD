@@ -584,6 +584,8 @@ struct iwm_softc {
 	/* last smart fifo state that was successfully sent to firmware */
 	enum iwm_sf_state	sf_state;
 
+	struct iwm_time_quota_cmd last_quota_cmd;
+
 	/* Indicate if device power save is allowed */
 	boolean_t		sc_ps_disabled;
 

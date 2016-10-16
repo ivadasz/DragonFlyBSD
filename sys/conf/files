@@ -509,6 +509,7 @@ dev/netif/iwm/if_iwm_pcie_trans.c	optional iwm
 dev/netif/iwm/if_iwm_phy_ctxt.c		optional iwm
 dev/netif/iwm/if_iwm_phy_db.c		optional iwm
 dev/netif/iwm/if_iwm_power.c		optional iwm
+dev/netif/iwm/if_iwm_quota.c		optional iwm
 dev/netif/iwm/if_iwm_scan.c		optional iwm
 dev/netif/iwm/if_iwm_scan_fw.c		optional iwm
 dev/netif/iwm/if_iwm_sf.c		optional iwm
