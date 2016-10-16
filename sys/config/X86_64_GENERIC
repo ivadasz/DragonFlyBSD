@@ -171,7 +171,7 @@ options 	SC_PIXEL_MODE		# add support for the raster text mode
 options		SC_DFLT_FONT
 makeoptions	SC_DFLT_FONT=cp437
 
-device		agp		# support several AGP chipsets
+#device		agp		# support several AGP chipsets
 
 # Intel BAYTRAIL PCU PMC
 device		bytpmc
