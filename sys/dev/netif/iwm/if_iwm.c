@@ -3981,6 +3981,14 @@ iwm_auth(struct ieee80211vap *vap, struct iwm_softc *sc)
 
 	in->in_assoc = 0;
 
+	if (ni->ni_chan == IEEE80211_CHAN_ANYC) {
+		error = EBUSY;
+		device_printf(sc->sc_dev,
+		    "%s: aborting auth, ni->ni_chan == IEEE80211_CHAN_ANYC\n",
+		    __func__);
+		goto out;
+	}
+
 	/*
 	 * Firmware bug - it'll crash if the beacon interval is less
 	 * than 16. We can't avoid connecting at all, so refuse the
