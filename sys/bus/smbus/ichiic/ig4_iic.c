@@ -75,7 +75,7 @@ SYSCTL_INT(_debug, OID_AUTO, ig4_dump, CTLTYPE_INT | CTLFLAG_RW,
 
 static
 int
-get_sem(struct device *dev, uint32_t *sem)
+get_sem(device_t dev, uint32_t *sem)
 {
 	uint32_t reg_val;
 	int ret;
