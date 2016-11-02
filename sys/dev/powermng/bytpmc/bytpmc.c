@@ -15,7 +15,7 @@
 #define BYT_PMC_POWER_STATUS		0x98
 
 struct bytpmc_softc {
-	struct device		*sc_dev;
+	device_t		sc_dev;
 	struct resource		*sc_regs;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
@@ -24,9 +24,9 @@ struct bytpmc_softc {
 	uint32_t		lastvals[4];
 };
 
-static int	bytpmc_probe(struct device *);
-static int	bytpmc_attach(struct device *);
-static int	bytpmc_detach(struct device *);
+static int	bytpmc_probe(device_t);
+static int	bytpmc_attach(device_t);
+static int	bytpmc_detach(device_t);
 static void	bytpmc_refresh(void *);
 static void	bytpmc_shutdown_final(void *arg, int howto);
 
@@ -48,7 +48,7 @@ static devclass_t bytpmc_devclass;
 DRIVER_MODULE(bytpmc, nexus, bytpmc_driver, bytpmc_devclass, NULL, NULL);
 
 static int
-bytpmc_probe(struct device *dev)
+bytpmc_probe(device_t dev)
 {
 	if (device_get_unit(dev) != 0)
 		return ENXIO;
@@ -59,7 +59,7 @@ bytpmc_probe(struct device *dev)
 }
 
 static int
-bytpmc_attach(struct device *dev)
+bytpmc_attach(device_t dev)
 {
 	struct bytpmc_softc	*sc;
 	int i, rid;
@@ -114,7 +114,7 @@ bytpmc_attach(struct device *dev)
 }
 
 static int
-bytpmc_detach(struct device *dev)
+bytpmc_detach(device_t dev)
 {
 	struct bytpmc_softc *sc = device_get_softc(dev);
 
