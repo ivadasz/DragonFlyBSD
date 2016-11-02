@@ -1034,7 +1034,7 @@ i915_pci_remove(struct pci_dev *pdev)
 	drm_put_dev(dev);
 }
 
-static int i915_pm_suspend(struct device *dev)
+static int i915_pm_suspend(device_t dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct drm_device *drm_dev = pci_get_drvdata(pdev);
@@ -1050,7 +1050,7 @@ static int i915_pm_suspend(struct device *dev)
 	return i915_drm_suspend(drm_dev);
 }
 
-static int i915_pm_suspend_late(struct device *dev)
+static int i915_pm_suspend_late(device_t dev)
 {
 	struct drm_device *drm_dev = dev_to_i915(dev)->dev;
 
@@ -1069,7 +1069,7 @@ static int i915_pm_suspend_late(struct device *dev)
 	return i915_drm_suspend_late(drm_dev, false);
 }
 
-static int i915_pm_poweroff_late(struct device *dev)
+static int i915_pm_poweroff_late(device_t dev)
 {
 	struct drm_device *drm_dev = dev_to_i915(dev)->dev;
 
@@ -1079,7 +1079,7 @@ static int i915_pm_poweroff_late(struct device *dev)
 	return i915_drm_suspend_late(drm_dev, true);
 }
 
-static int i915_pm_resume_early(struct device *dev)
+static int i915_pm_resume_early(device_t dev)
 {
 	struct drm_device *drm_dev = dev_to_i915(dev)->dev;
 
@@ -1089,7 +1089,7 @@ static int i915_pm_resume_early(struct device *dev)
 	return i915_drm_resume_early(drm_dev);
 }
 
-static int i915_pm_resume(struct device *dev)
+static int i915_pm_resume(device_t dev)
 {
 	struct drm_device *drm_dev = dev_to_i915(dev)->dev;
 
@@ -1514,7 +1514,7 @@ static int vlv_resume_prepare(struct drm_i915_private *dev_priv,
 	return ret;
 }
 
-static int intel_runtime_suspend(struct device *device)
+static int intel_runtime_suspend(device_t device)
 {
 #if defined(__DragonFly__)
 	struct drm_device *dev = device_get_softc(device);
@@ -1603,7 +1603,7 @@ static int intel_runtime_suspend(struct device *device)
 	return 0;
 }
 
-static int intel_runtime_resume(struct device *device)
+static int intel_runtime_resume(device_t device)
 {
 #if defined(__DragonFly__)
 	struct drm_device *dev = device_get_softc(device);

@@ -1880,7 +1880,7 @@ int intel_power_domains_init(struct drm_i915_private *dev_priv)
 static void intel_runtime_pm_disable(struct drm_i915_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
-	struct device *device = dev->pdev->dev;
+	device_t device = dev->pdev->dev.bsddev;
 
 	if (!HAS_RUNTIME_PM(dev))
 		return;
@@ -2088,7 +2088,7 @@ void intel_power_domains_init_hw(struct drm_i915_private *dev_priv)
 void intel_runtime_pm_get(struct drm_i915_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
-	struct device *device = dev->pdev->dev;
+	device_t device = dev->pdev->dev.bsddev;
 
 	if (!HAS_RUNTIME_PM(dev))
 		return;
@@ -2117,7 +2117,7 @@ void intel_runtime_pm_get(struct drm_i915_private *dev_priv)
 void intel_runtime_pm_get_noresume(struct drm_i915_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
-	struct device *device = dev->pdev->dev;
+	device_t device = dev->pdev->dev.bsddev;
 
 	if (!HAS_RUNTIME_PM(dev))
 		return;
@@ -2137,7 +2137,7 @@ void intel_runtime_pm_get_noresume(struct drm_i915_private *dev_priv)
 void intel_runtime_pm_put(struct drm_i915_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
-	struct device *device = dev->pdev->dev;
+	device_t device = dev->pdev->dev.bsddev;
 
 	if (!HAS_RUNTIME_PM(dev))
 		return;
@@ -2159,7 +2159,7 @@ void intel_runtime_pm_put(struct drm_i915_private *dev_priv)
 void intel_runtime_pm_enable(struct drm_i915_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
-	struct device *device = dev->pdev->dev;
+	device_t device = dev->pdev->dev.bsddev;
 
 	if (!HAS_RUNTIME_PM(dev))
 		return;
