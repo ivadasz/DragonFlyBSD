@@ -15,13 +15,13 @@
 #include "iosf_mbi.h"
 
 struct iosf_softc {
-	struct device		*sc_dev;
+	device_t	sc_dev;
 };
 
-static void	iosf_identify(driver_t *, struct device *);
-static int	iosf_probe(struct device *);
-static int	iosf_attach(struct device *);
-static int	iosf_detach(struct device *);
+static void	iosf_identify(driver_t *, device_t);
+static int	iosf_probe(device_t);
+static int	iosf_attach(device_t);
+static int	iosf_detach(device_t);
 
 static device_method_t iosf_methods[] = {
 	DEVMETHOD(device_identify,	iosf_identify),
@@ -194,7 +194,7 @@ done:
 }
 
 static void
-iosf_identify(driver_t *driver, struct device *parent)
+iosf_identify(driver_t *driver, device_t parent)
 {
 	if (iosf_probe(parent) == ENXIO)
 		return;
@@ -204,7 +204,7 @@ iosf_identify(driver_t *driver, struct device *parent)
 }
 
 static int
-iosf_probe(struct device *dev)
+iosf_probe(device_t dev)
 {
 	char *desc;
 
@@ -228,7 +228,7 @@ iosf_probe(struct device *dev)
 }
 
 static int
-iosf_attach(struct device *dev)
+iosf_attach(device_t dev)
 {
 	struct iosf_softc	*sc;
 
@@ -243,7 +243,7 @@ iosf_attach(struct device *dev)
 }
 
 static int
-iosf_detach(struct device *dev)
+iosf_detach(device_t dev)
 {
 	 /* struct iosf_softc *sc = device_get_softc(dev); */
 
