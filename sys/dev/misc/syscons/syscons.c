@@ -362,6 +362,8 @@ register_framebuffer(struct fb_info *info)
 	syscons_unlock();
 	lockmgr(&sc_asynctd_lk, LK_RELEASE);
 
+	kprintf("kms console: xpixels %d ypixels %d\n",
+	    sc->fbi->width, sc->fbi->height);
 	sc_update_render(sc->cur_scp);
 	if (info->fbops.fb_set_par != NULL)
 		info->fbops.fb_set_par(info);

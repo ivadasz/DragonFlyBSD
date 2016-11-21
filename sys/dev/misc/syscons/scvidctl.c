@@ -878,17 +878,13 @@ sc_update_render(scr_stat *scp)
 	scp->model = V_INFO_MM_TEXT;
 	scp->xpixel = scp->sc->fbi->width;
 	scp->ypixel = scp->sc->fbi->height;
-
 	/*
 	 * Assume square pixels for now
 	 */
-	kprintf("kms console: xpixels %d ypixels %d\n",
-		scp->xpixel, scp->ypixel);
-
 	sc_font_scale(scp, 0, 0);
 
-	kprintf("kms console: scale-to %dx%d cols=%d rows=%d\n",
-		scp->blk_width, scp->blk_height, scp->xsize, scp->ysize);
+	DPRINTF(1, ("kms console: scale-to %dx%d cols=%d rows=%d\n",
+		scp->blk_width, scp->blk_height, scp->xsize, scp->ysize));
 
 	/* allocate buffers */
 	sc_alloc_scr_buffer(scp, TRUE, TRUE);
