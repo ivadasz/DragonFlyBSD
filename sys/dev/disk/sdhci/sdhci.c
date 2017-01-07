@@ -1307,6 +1307,12 @@ sdhci_start_data(struct sdhci_slot *slot, struct mmc_data *data)
 		slot->flags &= ~SDHCI_USE_SDMA;
 		slot->flags &= ~SDHCI_USE_ADMA2;
 	}
+	/*
+	 * Apparently ADMA2 only works for transferring multiples of the block
+	 * size. So fall back to PIO if data->len is not a multiple of 512.
+	 */
+	if ((data->len % 512) != 0)
+		slot->flags &= ~SDHCI_USE_ADMA2;
 	/* Load DMA buffer. */
 	if (slot->flags & SDHCI_USE_ADMA2) {
 		bus_dmamem_t *descmem = &slot->adma2_descs;
