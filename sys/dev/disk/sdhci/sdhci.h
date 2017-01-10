@@ -395,6 +395,8 @@ struct sdhci_slot {
 #define PLATFORM_DATA_STARTED	8	/* Data transfer is handled by platform */
 #define SDHCI_USE_ADMA2		16	/* Use ADMA2 for this req. */
 	struct lock	lock;		/* Slot mutex */
+
+	int		cpuid;		/* CPU affinity */
 };
 
 int sdhci_generic_read_ivar(device_t bus, device_t child, int which, uintptr_t *result);

@@ -401,7 +401,7 @@ mmc_wakeup(struct mmc_request *req)
 	MMC_LOCK(sc);
 	req->flags |= MMC_REQ_DONE;
 	MMC_UNLOCK(sc);
-	wakeup(req);
+	wakeup_one(req);
 }
 
 static int
@@ -1951,6 +1951,9 @@ mmc_read_ivar(device_t bus, device_t child, int which, uintptr_t *result)
 		break;
 	case MMC_IVAR_MAX_DATA:
 		*(int *)result = mmcbr_get_max_data(bus);
+		break;
+	case MMC_IVAR_CPU_ID:
+		*(int *)result = mmcbr_get_cpu_id(bus);
 		break;
 	case MMC_IVAR_CARD_ID_STRING:
 		*(char **)result = ivar->card_id_string;

@@ -390,6 +390,7 @@ sdhci_pci_attach(device_t dev)
 		}
 
 		slot->quirks = sc->quirks;
+		slot->cpuid = rman_get_cpuid(sc->irq_res);
 
 		if (sdhci_init_slot(dev, slot, i) != 0) {
 			memset(slot, 0, sizeof(*slot));

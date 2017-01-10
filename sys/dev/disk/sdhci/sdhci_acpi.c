@@ -238,6 +238,7 @@ sdhci_acpi_attach(device_t dev)
 	pci_set_powerstate(dev, PCI_POWERSTATE_D0);
 
 	sc->slot.quirks = quirks;
+	sc->slot.cpuid = rman_get_cpuid(sc->irq_res);
 	if (sdhci_init_slot(dev, &sc->slot, 0) != 0) {
 		device_printf(dev, "sdhci initialization failed\n");
 		pci_set_powerstate(dev, PCI_POWERSTATE_D3);

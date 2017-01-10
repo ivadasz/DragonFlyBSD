@@ -153,7 +153,8 @@ mmcsd_attach(device_t dev)
 	sc->running = 1;
 	sc->suspend = 0;
 	sc->eblock = sc->eend = 0;
-	kthread_create(mmcsd_task, sc, &sc->td, "mmc/sd card task");
+	kthread_create_cpu(mmcsd_task, sc, &sc->td, mmc_get_cpu_id(dev),
+	    "mmc/sd card task");
 
 	/*
 	 * Probe capacity
@@ -276,7 +277,8 @@ mmcsd_resume(device_t dev)
 	if (sc->running <= 0) {
 		sc->running = 1;
 		MMCSD_UNLOCK(sc);
-		kthread_create(mmcsd_task, sc, &sc->td, "mmc/sd card task");
+		kthread_create_cpu(mmcsd_task, sc, &sc->td,
+		    mmc_get_cpu_id(dev), "mmc/sd card task");
 	} else
 		MMCSD_UNLOCK(sc);
 	return (0);
@@ -306,7 +308,7 @@ mmcsd_strategy(struct dev_strategy_args *ap)
 	if (sc->running > 0 || sc->suspend > 0) {
 		bioqdisksort(&sc->bio_queue, bio);
 		MMCSD_UNLOCK(sc);
-		wakeup(sc);
+		wakeup_one(sc);
 	} else {
 		MMCSD_UNLOCK(sc);
 		bp->b_error = ENXIO;

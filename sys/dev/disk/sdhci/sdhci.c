@@ -1872,7 +1872,10 @@ sdhci_generic_read_ivar(device_t bus, device_t child, int which, uintptr_t *resu
 		*(int *)result = slot->host.ios.timing;
 		break;
 	case MMCBR_IVAR_MAX_DATA:
-		*(int *)result = 65535;
+		*(int *)result = MAXPHYS / 512;
+		break;
+	case MMCBR_IVAR_CPU_ID:
+		*(int *)result = slot->cpuid;
 		break;
 	case MMCBR_IVAR_MAX_BUSY_TIMEOUT:
 		/*

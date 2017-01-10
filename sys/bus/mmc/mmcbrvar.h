@@ -75,7 +75,8 @@ enum mmcbr_device_ivars {
     MMCBR_IVAR_CAPS,
     MMCBR_IVAR_TIMING,
     MMCBR_IVAR_MAX_DATA,
-    MMCBR_IVAR_MAX_BUSY_TIMEOUT
+    MMCBR_IVAR_MAX_BUSY_TIMEOUT,
+    MMCBR_IVAR_CPU_ID
 };
 
 /*
@@ -100,6 +101,7 @@ MMCBR_ACCESSOR(caps, CAPS, int)
 MMCBR_ACCESSOR(timing, TIMING, int)
 MMCBR_ACCESSOR(max_data, MAX_DATA, int)
 MMCBR_ACCESSOR(max_busy_timeout, MAX_BUSY_TIMEOUT, u_int)
+MMCBR_ACCESSOR(cpu_id, CPU_ID, int)
 
 static __inline int
 mmcbr_update_ios(device_t dev)
