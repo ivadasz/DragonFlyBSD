@@ -411,6 +411,9 @@ vtblk_open(struct dev_open_args *ap)
 	if (sc == NULL)
 		return (ENXIO);
 
+	if ((ap->a_oflags & FWRITE) && (sc->vtblk_flags & VTBLK_FLAG_READONLY))
+		return (EACCES);
+
 	return (sc->vtblk_flags & VTBLK_FLAG_DETACH ? ENXIO : 0);
 }
 

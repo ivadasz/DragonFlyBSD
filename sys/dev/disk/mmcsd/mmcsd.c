@@ -285,6 +285,12 @@ mmcsd_resume(device_t dev)
 static int
 mmcsd_open(struct dev_open_args *ap __unused)
 {
+	struct mmcsd_softc *sc;
+
+	sc = (struct mmcsd_softc *)ap->a_head.a_dev->si_drv1;
+	if ((ap->a_oflags & FWRITE) && mmc_get_read_only(sc->dev))
+		return (EACCES);
+
 	return (0);
 }
 
