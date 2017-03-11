@@ -66,12 +66,9 @@ struct vtblk_softc {
 	struct lwkt_serialize	 vtblk_slz;
 	uint64_t		 vtblk_features;
 	uint32_t		 vtblk_flags;
-#define VTBLK_FLAG_INDIRECT	0x0001
-#define VTBLK_FLAG_READONLY	0x0002
+#define VTBLK_FLAG_SUSPEND	0x0001
+#define VTBLK_FLAG_DUMPING	0x0002
 #define VTBLK_FLAG_DETACH	0x0004
-#define VTBLK_FLAG_SUSPEND	0x0008
-#define VTBLK_FLAG_DUMPING	0x0010
-#define VTBLK_FLAG_WC_CONFIG	0x0020
 
 	struct virtqueue	*vtblk_vq;
 	struct sglist		*vtblk_sglist;
@@ -242,13 +239,6 @@ vtblk_attach(device_t dev)
 
 	virtio_set_feature_desc(dev, vtblk_feature_desc);
 	vtblk_negotiate_features(sc);
-
-	if (virtio_with_feature(dev, VIRTIO_RING_F_INDIRECT_DESC))
-		sc->vtblk_flags |= VTBLK_FLAG_INDIRECT;
-	if (virtio_with_feature(dev, VIRTIO_BLK_F_RO))
-		sc->vtblk_flags |= VTBLK_FLAG_READONLY;
-	if (virtio_with_feature(dev, VIRTIO_BLK_F_CONFIG_WCE))
-		sc->vtblk_flags |= VTBLK_FLAG_WC_CONFIG;
 
 	/* Get local copy of config. */
 	virtio_read_device_config(dev, 0, &blkcfg,
@@ -465,7 +455,7 @@ vtblk_strategy(struct dev_strategy_args *ap)
 	 * Fail any write if RO. Unfortunately, there does not seem to
 	 * be a better way to report readonly storage.
 	 */
-	if (sc->vtblk_flags & VTBLK_FLAG_READONLY &&
+	if (virtio_with_feature(sc->vtblk_dev, VIRTIO_BLK_F_RO) &&
 	    (bp->b_cmd == BUF_CMD_READ || bp->b_cmd == BUF_CMD_FLUSH)) {
 		vtblk_finish_bio(bio, EROFS);
 		return (EINVAL);
@@ -522,7 +512,7 @@ vtblk_maximum_segments(struct vtblk_softc *sc,
 	} else {
 		nsegs = MAXPHYS / PAGE_SIZE + 1 + nsegs;
 	}
-	if (sc->vtblk_flags & VTBLK_FLAG_INDIRECT)
+	if (virtio_with_feature(sc->vtblk_dev, VIRTIO_RING_F_INDIRECT_DESC))
 		nsegs = MIN(nsegs, VIRTIO_MAX_INDIRECT);
 
 	return (nsegs);
@@ -572,9 +562,14 @@ vtblk_write_cache_enabled(struct vtblk_softc *sc,
 {
 	int wc;
 
-	if (sc->vtblk_flags & VTBLK_FLAG_WC_CONFIG) {
+	if (virtio_with_feature(sc->vtblk_dev, VIRTIO_BLK_F_CONFIG_WCE)) {
 		wc = vtblk_tunable_int(sc, "writecache_mode",
 		    vtblk_writecache_mode);
+		/*
+		 * The device must have offered VIRTIO_BLK_F_WCE, if we
+		 * got the VIRTIO_BLK_F_WCE_CONFIG flag. So either of
+		 * writethrough and writeback modes should be fine.
+		 */
 		if (wc >= 0 && wc < VTBLK_CACHE_MAX)
 			vtblk_set_write_cache(sc, wc);
 		else
@@ -598,7 +593,7 @@ vtblk_write_cache_sysctl(SYSCTL_HANDLER_ARGS)
 	error = sysctl_handle_int(oidp, &wc, 0, req);
 	if (error || req->newptr == NULL)
 		return (error);
-	if ((sc->vtblk_flags & VTBLK_FLAG_WC_CONFIG) == 0)
+	if (!virtio_with_feature(sc->vtblk_dev, VIRTIO_BLK_F_CONFIG_WCE))
 		return (EPERM);
 	if (wc < 0 || wc >= VTBLK_CACHE_MAX)
 		return (EINVAL);
@@ -1023,7 +1018,7 @@ vtblk_alloc_requests(struct vtblk_softc *sc)
 	 * request consumes VTBLK_MIN_SEGMENTS or more descriptors so reduce
 	 * the number allocated when indirect descriptors are not available.
 	 */
-	if ((sc->vtblk_flags & VTBLK_FLAG_INDIRECT) == 0)
+	if (!virtio_with_feature(sc->vtblk_dev, VIRTIO_RING_F_INDIRECT_DESC))
 		nreqs /= VTBLK_MIN_SEGMENTS;
 
 	for (i = 0; i < nreqs; i++) {
