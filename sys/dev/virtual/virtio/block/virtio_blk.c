@@ -229,11 +229,10 @@ vtblk_probe(device_t dev)
 static int
 vtblk_attach(device_t dev)
 {
-	struct vtblk_softc *sc;
+	struct vtblk_softc *sc = device_get_softc(dev);
 	struct virtio_blk_config blkcfg;
 	int error;
 
-	sc = device_get_softc(dev);
 	sc->vtblk_dev = dev;
 
 	lwkt_serialize_init(&sc->vtblk_slz);
@@ -335,9 +334,7 @@ fail:
 static int
 vtblk_detach(device_t dev)
 {
-	struct vtblk_softc *sc;
-
-	sc = device_get_softc(dev);
+	struct vtblk_softc *sc = device_get_softc(dev);
 
 	virtio_teardown_intr(dev, 0);
 
@@ -365,9 +362,7 @@ vtblk_detach(device_t dev)
 static int
 vtblk_suspend(device_t dev)
 {
-	struct vtblk_softc *sc;
-
-	sc = device_get_softc(dev);
+	struct vtblk_softc *sc = device_get_softc(dev);
 
 	lwkt_serialize_enter(&sc->vtblk_slz);
 	sc->vtblk_flags |= VTBLK_FLAG_SUSPEND;
@@ -380,9 +375,7 @@ vtblk_suspend(device_t dev)
 static int
 vtblk_resume(device_t dev)
 {
-	struct vtblk_softc *sc;
-
-	sc = device_get_softc(dev);
+	struct vtblk_softc *sc = device_get_softc(dev);
 
 	lwkt_serialize_enter(&sc->vtblk_slz);
 	/* XXX BMV: virtio_reinit(), etc needed here? */
@@ -405,27 +398,28 @@ vtblk_shutdown(device_t dev)
 static int
 vtblk_open(struct dev_open_args *ap)
 {
-	struct vtblk_softc *sc;
 	cdev_t dev = ap->a_head.a_dev;
-	sc = dev->si_drv1;
+	struct vtblk_softc *sc = dev->si_drv1;
+
 	if (sc == NULL)
 		return (ENXIO);
 
-	if ((ap->a_oflags & FWRITE) && (sc->vtblk_flags & VTBLK_FLAG_READONLY))
+	if ((ap->a_oflags & FWRITE) &&
+	    virtio_with_feature(sc->vtblk_dev, VIRTIO_BLK_F_RO)) {
 		return (EACCES);
+	}
 
-	return (sc->vtblk_flags & VTBLK_FLAG_DETACH ? ENXIO : 0);
+	return (0);
 }
 
 static int
 vtblk_dump(struct dev_dump_args *ap)
 {
-	struct vtblk_softc *sc;
 	cdev_t dev = ap->a_head.a_dev;
+	struct vtblk_softc *sc = dev->si_drv1;
         uint64_t buf_start, buf_len;
         int error;
 
-	sc = dev->si_drv1;
 	if (sc == NULL)
 		return (ENXIO);
 
@@ -439,12 +433,12 @@ vtblk_dump(struct dev_dump_args *ap)
 		sc->vtblk_flags |= VTBLK_FLAG_DUMPING;
 	}
 
-	if (buf_len > 0)
+	if (buf_len > 0) {
 		error = vtblk_write_dump(sc, ap->a_virtual, buf_start,
 		    buf_len);
-	else if (buf_len == 0)
+	} else if (buf_len == 0) {
 		error = vtblk_flush_dump(sc);
-	else {
+	} else {
 		error = EINVAL;
 		sc->vtblk_flags &= ~VTBLK_FLAG_DUMPING;
 	}
@@ -470,9 +464,7 @@ vtblk_strategy(struct dev_strategy_args *ap)
 
 	/*
 	 * Fail any write if RO. Unfortunately, there does not seem to
-	 * be a better way to report our readonly'ness to GEOM above.
-	 *
-	 * XXX: Is that true in DFly?
+	 * be a better way to report readonly storage.
 	 */
 	if (sc->vtblk_flags & VTBLK_FLAG_READONLY &&
 	    (bp->b_cmd == BUF_CMD_READ || bp->b_cmd == BUF_CMD_FLUSH)) {
@@ -588,8 +580,9 @@ vtblk_write_cache_enabled(struct vtblk_softc *sc,
 			vtblk_set_write_cache(sc, wc);
 		else
 			wc = blkcfg->writeback;
-	} else
+	} else {
 		wc = virtio_with_feature(sc->vtblk_dev, VIRTIO_BLK_F_WCE);
+	}
 
 	return (wc);
 }
@@ -681,12 +674,8 @@ vtblk_alloc_disk(struct vtblk_softc *sc, struct virtio_blk_config *blkcfg)
 static void
 vtblk_startio(struct vtblk_softc *sc)
 {
-	struct virtqueue *vq;
-	struct vtblk_request *req;
-	int enq;
-
-	vq = sc->vtblk_vq;
-	enq = 0;
+	struct virtqueue *vq = sc->vtblk_vq;
+	int enq = 0;
 
 	ASSERT_SERIALIZED(&sc->vtblk_slz);
 	
@@ -694,7 +683,7 @@ vtblk_startio(struct vtblk_softc *sc)
 		return;
 
 	while (!virtqueue_full(vq)) {
-		req = vtblk_bio_request(sc);
+		struct vtblk_request *req = vtblk_bio_request(sc);
 		if (req == NULL)
 			break;
 
