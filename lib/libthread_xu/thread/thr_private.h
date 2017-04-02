@@ -294,6 +294,7 @@ struct pthread_rwlock {
 	pthread_mutex_t	lock;	/* monitor lock */
 	pthread_cond_t	read_signal;
 	pthread_cond_t	write_signal;
+	pthread_t	write_owner;
 	int		state;	/* 0 = idle  >0 = # of readers  -1 = writer */
 	int		blocked_writers;
 };
