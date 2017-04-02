@@ -9,6 +9,8 @@ CFLAGS+=	-fno-lto
 LDFLAGS+=	-flto
 .endif
 
+LDFLAGS+=	-z now
+
 CFLAGS+=-DPTHREAD_KERNEL -D_THREAD_SAFE
 CFLAGS+=-I${.CURDIR}/../libc/include -I${.CURDIR}/thread \
 	-I${.CURDIR}/../../include
