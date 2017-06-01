@@ -150,6 +150,23 @@ kstrtouint(const char *s, unsigned int base, unsigned int *res)
 	return 0;
 }
 
+static inline int __must_check
+kstrtou32(const char *s, unsigned int base, uint32_t *res)
+{
+	char *endptr;
+	unsigned long val;
+
+	/* XXX The libkern strtoul returns ULONG_MAX on overflow. */
+	val = strtoul(s, &endptr, base);
+	if (endptr == s)
+		return -EINVAL;
+	if (val > 0xffffffffUL)
+		return -ERANGE;
+
+	*res = val;
+	return 0;
+}
+
 #define kvasprintf drm_vasprintf
 #define kasprintf drm_asprintf
 

@@ -31,8 +31,40 @@
 #include "intel_drv.h"
 #include "i915_drv.h"
 
-#if 0
+#if defined(__DragonFly__)
+struct device_attribute;
+
+struct hack {
+	device_t dev;
+	struct device_attribute *devattr;
+};
+
+struct attribute {
+	const char *name;
+	ssize_t (*show)(struct device *kdev, struct device_attribute *attr, char *buf);
+	ssize_t (*store)(struct device *kdev, struct device_attribute *attr, const char *buf, size_t count);
+};
+
+struct device_attribute {
+	struct attribute attr;
+};
+
+struct attribute_group {
+	const char *name;
+	struct attribute **attrs;
+};
+
+#define DEVICE_ATTR(name, mode, show, store)		\
+	struct device_attribute dev_attr_ ## name = {	\
+		{ # name, (show), (store) }	\
+	}
+
+#define snprintf ksnprintf
+#define power_group_name "pm"
+
+#else
 #define dev_to_drm_minor(d) dev_get_drvdata((d))
+#endif
 
 #ifdef CONFIG_PM
 static u32 calc_residency(struct drm_device *dev,
@@ -70,39 +102,64 @@ static u32 calc_residency(struct drm_device *dev,
 static ssize_t
 show_rc6_mask(struct device *kdev, struct device_attribute *attr, char *buf)
 {
+#if defined(__DragonFly__)
+	struct drm_device *dev = device_get_softc(kdev->bsddev);
+	return snprintf(buf, PAGE_SIZE, "%x\n", intel_enable_rc6(dev));
+#else
 	struct drm_minor *dminor = dev_to_drm_minor(kdev);
 	return snprintf(buf, PAGE_SIZE, "%x\n", intel_enable_rc6(dminor->dev));
+#endif
 }
 
 static ssize_t
 show_rc6_ms(struct device *kdev, struct device_attribute *attr, char *buf)
 {
+#if defined(__DragonFly__)
+	struct drm_device *dev = device_get_softc(kdev->bsddev);
+	u32 rc6_residency = calc_residency(dev, GEN6_GT_GFX_RC6);
+#else
 	struct drm_minor *dminor = dev_get_drvdata(kdev);
 	u32 rc6_residency = calc_residency(dminor->dev, GEN6_GT_GFX_RC6);
+#endif
 	return snprintf(buf, PAGE_SIZE, "%u\n", rc6_residency);
 }
 
 static ssize_t
 show_rc6p_ms(struct device *kdev, struct device_attribute *attr, char *buf)
 {
+#if defined(__DragonFly__)
+	struct drm_device *dev = device_get_softc(kdev->bsddev);
+	u32 rc6p_residency = calc_residency(dev, GEN6_GT_GFX_RC6p);
+#else
 	struct drm_minor *dminor = dev_to_drm_minor(kdev);
 	u32 rc6p_residency = calc_residency(dminor->dev, GEN6_GT_GFX_RC6p);
+#endif
 	return snprintf(buf, PAGE_SIZE, "%u\n", rc6p_residency);
 }
 
 static ssize_t
 show_rc6pp_ms(struct device *kdev, struct device_attribute *attr, char *buf)
 {
+#if defined(__DragonFly__)
+	struct drm_device *dev = device_get_softc(kdev->bsddev);
+	u32 rc6pp_residency = calc_residency(dev, GEN6_GT_GFX_RC6pp);
+#else
 	struct drm_minor *dminor = dev_to_drm_minor(kdev);
 	u32 rc6pp_residency = calc_residency(dminor->dev, GEN6_GT_GFX_RC6pp);
+#endif
 	return snprintf(buf, PAGE_SIZE, "%u\n", rc6pp_residency);
 }
 
 static ssize_t
 show_media_rc6_ms(struct device *kdev, struct device_attribute *attr, char *buf)
 {
+#if defined(__DragonFly__)
+	struct drm_device *dev = device_get_softc(kdev->bsddev);
+	u32 rc6_residency = calc_residency(dev, VLV_GT_MEDIA_RC6);
+#else
 	struct drm_minor *dminor = dev_get_drvdata(kdev);
 	u32 rc6_residency = calc_residency(dminor->dev, VLV_GT_MEDIA_RC6);
+#endif
 	return snprintf(buf, PAGE_SIZE, "%u\n", rc6_residency);
 }
 
@@ -145,6 +202,7 @@ static struct attribute_group media_rc6_attr_group = {
 };
 #endif
 
+#if 0
 static int l3_access_valid(struct drm_device *dev, loff_t offset)
 {
 	if (!HAS_L3_DPF(dev))
@@ -270,16 +328,23 @@ static struct bin_attribute dpf_attrs_1 = {
 	.mmap = NULL,
 	.private = (void *)1
 };
+#endif
 
 static ssize_t gt_act_freq_mhz_show(struct device *kdev,
 				    struct device_attribute *attr, char *buf)
 {
+#if defined(__DragonFly__)
+	struct drm_device *dev = device_get_softc(kdev->bsddev);
+#else
 	struct drm_minor *minor = dev_to_drm_minor(kdev);
 	struct drm_device *dev = minor->dev;
+#endif
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	int ret;
 
+#if !defined(__DragonFly__)
 	flush_delayed_work(&dev_priv->rps.delayed_resume_work);
+#endif
 
 	intel_runtime_pm_get(dev_priv);
 
@@ -308,12 +373,18 @@ static ssize_t gt_act_freq_mhz_show(struct device *kdev,
 static ssize_t gt_cur_freq_mhz_show(struct device *kdev,
 				    struct device_attribute *attr, char *buf)
 {
+#if defined(__DragonFly__)
+	struct drm_device *dev = device_get_softc(kdev->bsddev);
+#else
 	struct drm_minor *minor = dev_to_drm_minor(kdev);
 	struct drm_device *dev = minor->dev;
+#endif
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	int ret;
 
+#if !defined(__DragonFly__)
 	flush_delayed_work(&dev_priv->rps.delayed_resume_work);
+#endif
 
 	intel_runtime_pm_get(dev_priv);
 
@@ -329,8 +400,12 @@ static ssize_t gt_cur_freq_mhz_show(struct device *kdev,
 static ssize_t vlv_rpe_freq_mhz_show(struct device *kdev,
 				     struct device_attribute *attr, char *buf)
 {
+#if defined(__DragonFly__)
+	struct drm_device *dev = device_get_softc(kdev->bsddev);
+#else
 	struct drm_minor *minor = dev_to_drm_minor(kdev);
 	struct drm_device *dev = minor->dev;
+#endif
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	return snprintf(buf, PAGE_SIZE,
@@ -340,12 +415,18 @@ static ssize_t vlv_rpe_freq_mhz_show(struct device *kdev,
 
 static ssize_t gt_max_freq_mhz_show(struct device *kdev, struct device_attribute *attr, char *buf)
 {
+#if defined(__DragonFly__)
+	struct drm_device *dev = device_get_softc(kdev->bsddev);
+#else
 	struct drm_minor *minor = dev_to_drm_minor(kdev);
 	struct drm_device *dev = minor->dev;
+#endif
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	int ret;
 
+#if !defined(__DragonFly__)
 	flush_delayed_work(&dev_priv->rps.delayed_resume_work);
+#endif
 
 	mutex_lock(&dev_priv->rps.hw_lock);
 	ret = intel_gpu_freq(dev_priv, dev_priv->rps.max_freq_softlimit);
@@ -358,8 +439,12 @@ static ssize_t gt_max_freq_mhz_store(struct device *kdev,
 				     struct device_attribute *attr,
 				     const char *buf, size_t count)
 {
+#if defined(__DragonFly__)
+	struct drm_device *dev = device_get_softc(kdev->bsddev);
+#else
 	struct drm_minor *minor = dev_to_drm_minor(kdev);
 	struct drm_device *dev = minor->dev;
+#endif
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 val;
 	ssize_t ret;
@@ -368,7 +453,9 @@ static ssize_t gt_max_freq_mhz_store(struct device *kdev,
 	if (ret)
 		return ret;
 
+#if !defined(__DragonFly__)
 	flush_delayed_work(&dev_priv->rps.delayed_resume_work);
+#endif
 
 	intel_runtime_pm_get(dev_priv);
 
@@ -408,12 +495,18 @@ static ssize_t gt_max_freq_mhz_store(struct device *kdev,
 
 static ssize_t gt_min_freq_mhz_show(struct device *kdev, struct device_attribute *attr, char *buf)
 {
+#if defined(__DragonFly__)
+	struct drm_device *dev = device_get_softc(kdev->bsddev);
+#else
 	struct drm_minor *minor = dev_to_drm_minor(kdev);
 	struct drm_device *dev = minor->dev;
+#endif
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	int ret;
 
+#if !defined(__DragonFly__)
 	flush_delayed_work(&dev_priv->rps.delayed_resume_work);
+#endif
 
 	mutex_lock(&dev_priv->rps.hw_lock);
 	ret = intel_gpu_freq(dev_priv, dev_priv->rps.min_freq_softlimit);
@@ -426,8 +519,12 @@ static ssize_t gt_min_freq_mhz_store(struct device *kdev,
 				     struct device_attribute *attr,
 				     const char *buf, size_t count)
 {
+#if defined(__DragonFly__)
+	struct drm_device *dev = device_get_softc(kdev->bsddev);
+#else
 	struct drm_minor *minor = dev_to_drm_minor(kdev);
 	struct drm_device *dev = minor->dev;
+#endif
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 val;
 	ssize_t ret;
@@ -436,7 +533,9 @@ static ssize_t gt_min_freq_mhz_store(struct device *kdev,
 	if (ret)
 		return ret;
 
+#if !defined(__DragonFly__)
 	flush_delayed_work(&dev_priv->rps.delayed_resume_work);
+#endif
 
 	intel_runtime_pm_get(dev_priv);
 
@@ -486,8 +585,12 @@ static DEVICE_ATTR(gt_RPn_freq_mhz, S_IRUGO, gt_rp_mhz_show, NULL);
 /* For now we have a static number of RP states */
 static ssize_t gt_rp_mhz_show(struct device *kdev, struct device_attribute *attr, char *buf)
 {
+#if defined(__DragonFly__)
+	struct drm_device *dev = device_get_softc(kdev->bsddev);
+#else
 	struct drm_minor *minor = dev_to_drm_minor(kdev);
 	struct drm_device *dev = minor->dev;
+#endif
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 val;
 
@@ -526,6 +629,7 @@ static const struct attribute *vlv_attrs[] = {
 	NULL,
 };
 
+#if 0
 static ssize_t error_state_read(struct file *filp, struct kobject *kobj,
 				struct bin_attribute *attr, char *buf,
 				loff_t off, size_t count)
@@ -592,31 +696,156 @@ static struct bin_attribute error_state_attr = {
 };
 #endif
 
+static int
+i915_sysfs_sysctl(SYSCTL_HANDLER_ARGS)
+{
+	struct hack *h = arg1;
+	device_t dev = h->dev;
+	struct drm_device *ddev = device_get_softc(dev);
+	struct device *kdev = ddev->dev;
+	struct device_attribute *devattr = h->devattr;
+	char buffer[0x1000];
+	ssize_t len = 0;
+	int error;
+
+	memset(buffer, 0, sizeof(buffer));
+	if (devattr->attr.show != NULL) {
+		len = devattr->attr.show(kdev, devattr, buffer);
+		if (len <= 0) {
+			/* XXX More specific error values. */
+			return (EINVAL);
+		}
+		if (len > 0) {
+			/* Strip off terminating newline, for sysctl(1). */
+			if (buffer[strlen(buffer)-1] == '\n')
+				buffer[strlen(buffer)-1] = '\0';
+		}
+	}
+
+	error = sysctl_handle_string(oidp, buffer, sizeof(buffer), req);
+	if (error != 0)
+		return (error);
+	if (req->newptr) {
+		if (devattr->attr.store == NULL) {
+			return (EINVAL);
+		} else {
+			len = devattr->attr.store(kdev, devattr, buffer,
+			    max(sizeof(buffer), strlen(buffer)));
+			if (len <= 0) {
+				/* XXX More specific error values. */
+				return (EINVAL);
+			}
+		}
+	}
+
+	return (0);
+}
+
+static void
+sysfs_populate_node(device_t dev, struct attribute *attr,
+    struct sysctl_oid *tree)
+{
+	struct sysctl_ctx_list *ctx = device_get_sysctl_ctx(dev);
+	struct sysctl_oid_list *child = SYSCTL_CHILDREN(tree);
+	int flags = CTLTYPE_STRING;
+	struct hack *h = kzalloc(sizeof(struct hack), GFP_KERNEL);
+	h->devattr = container_of(attr, struct device_attribute, attr);
+	h->dev = dev;
+
+	if (attr->store != NULL)
+		flags |= CTLFLAG_RW;
+	else
+		flags |= CTLFLAG_RD;
+
+	SYSCTL_ADD_PROC(ctx, child, OID_AUTO, attr->name,
+	    flags, h, 0, i915_sysfs_sysctl,
+	    "A", "Sysfs node from i915_sysfs.c");
+}
+
+static int
+sysfs_create_files(struct device *kdev, struct attribute **attrs)
+{
+	int i;
+
+	for (i = 0; attrs[i] != NULL; i++) {
+		sysfs_populate_node(kdev->bsddev, attrs[i],
+		    device_get_sysctl_tree(kdev->bsddev));
+	}
+
+	return (0);
+}
+
+static void
+sysfs_remove_files(struct device *kdev, const struct attribute **attrs)
+{
+	/* XXX */
+}
+
+static int
+sysfs_merge_group(struct device *kdev, const struct attribute_group *group)
+{
+	device_t dev = kdev->bsddev;
+	struct sysctl_ctx_list *ctx = device_get_sysctl_ctx(dev);
+	struct sysctl_oid *tree = device_get_sysctl_tree(dev);
+	struct sysctl_oid_list *child = SYSCTL_CHILDREN(tree);
+	struct sysctl_oid *node;
+	int i;
+
+	node = SYSCTL_ADD_NODE(ctx, child, OID_AUTO, group->name,
+	    CTLFLAG_RD, NULL, "");
+
+	for (i = 0; group->attrs[i] != NULL; i++)
+		sysfs_populate_node(dev, group->attrs[i], node);
+
+	return (0);
+}
+
+static void
+sysfs_unmerge_group(struct device *kdev, struct attribute_group *group)
+{
+	/* XXX */
+}
+
 void i915_setup_sysfs(struct drm_device *dev)
 {
-#if 0
 	int ret;
 
 #ifdef CONFIG_PM
 	if (HAS_RC6(dev)) {
+#if defined(__DragonFly__)
+		ret = sysfs_merge_group(dev->dev,
+					&rc6_attr_group);
+#else
 		ret = sysfs_merge_group(&dev->primary->kdev->kobj,
 					&rc6_attr_group);
+#endif
 		if (ret)
 			DRM_ERROR("RC6 residency sysfs setup failed\n");
 	}
 	if (HAS_RC6p(dev)) {
+#if defined(__DragonFly__)
+		ret = sysfs_merge_group(dev->dev,
+					&rc6p_attr_group);
+#else
 		ret = sysfs_merge_group(&dev->primary->kdev->kobj,
 					&rc6p_attr_group);
+#endif
 		if (ret)
 			DRM_ERROR("RC6p residency sysfs setup failed\n");
 	}
 	if (IS_VALLEYVIEW(dev) || IS_CHERRYVIEW(dev)) {
+#if defined(__DragonFly__)
+		ret = sysfs_merge_group(dev->dev,
+					&media_rc6_attr_group);
+#else
 		ret = sysfs_merge_group(&dev->primary->kdev->kobj,
 					&media_rc6_attr_group);
+#endif
 		if (ret)
 			DRM_ERROR("Media RC6 residency sysfs setup failed\n");
 	}
 #endif
+#if 0
 	if (HAS_L3_DPF(dev)) {
 		ret = device_create_bin_file(dev->primary->kdev, &dpf_attrs);
 		if (ret)
@@ -629,15 +858,24 @@ void i915_setup_sysfs(struct drm_device *dev)
 				DRM_ERROR("l3 parity slice 1 setup failed\n");
 		}
 	}
+#endif
 
 	ret = 0;
+#if defined(__DragonFly__)
+	if (IS_VALLEYVIEW(dev) || IS_CHERRYVIEW(dev))
+		ret = sysfs_create_files(dev->dev, __DECONST(void *, vlv_attrs));
+	else if (INTEL_INFO(dev)->gen >= 6)
+		ret = sysfs_create_files(dev->dev, __DECONST(void *, gen6_attrs));
+#else
 	if (IS_VALLEYVIEW(dev) || IS_CHERRYVIEW(dev))
 		ret = sysfs_create_files(&dev->primary->kdev->kobj, vlv_attrs);
 	else if (INTEL_INFO(dev)->gen >= 6)
 		ret = sysfs_create_files(&dev->primary->kdev->kobj, gen6_attrs);
+#endif
 	if (ret)
 		DRM_ERROR("RPS sysfs setup failed\n");
 
+#if 0
 	ret = sysfs_create_bin_file(&dev->primary->kdev->kobj,
 				    &error_state_attr);
 	if (ret)
@@ -649,13 +887,29 @@ void i915_teardown_sysfs(struct drm_device *dev)
 {
 #if 0
 	sysfs_remove_bin_file(&dev->primary->kdev->kobj, &error_state_attr);
+#endif
+
+#if defined(__DragonFly__)
+	if (IS_VALLEYVIEW(dev) || IS_CHERRYVIEW(dev))
+		sysfs_remove_files(dev->dev, vlv_attrs);
+	else
+		sysfs_remove_files(dev->dev, gen6_attrs);
+#else
 	if (IS_VALLEYVIEW(dev) || IS_CHERRYVIEW(dev))
 		sysfs_remove_files(&dev->primary->kdev->kobj, vlv_attrs);
 	else
 		sysfs_remove_files(&dev->primary->kdev->kobj, gen6_attrs);
+#endif
+
+#if 0
 	device_remove_bin_file(dev->primary->kdev,  &dpf_attrs_1);
 	device_remove_bin_file(dev->primary->kdev,  &dpf_attrs);
+#endif
 #ifdef CONFIG_PM
+#if defined(__DragonFly__)
+	sysfs_unmerge_group(dev->dev, &rc6_attr_group);
+	sysfs_unmerge_group(dev->dev, &rc6p_attr_group);
+#else
 	sysfs_unmerge_group(&dev->primary->kdev->kobj, &rc6_attr_group);
 	sysfs_unmerge_group(&dev->primary->kdev->kobj, &rc6p_attr_group);
 #endif
