@@ -65,6 +65,7 @@
 #define CONFIG_DRM_I915_KMS			1
 #define CONFIG_DRM_I915_PRELIMINARY_HW_SUPPORT	1
 #define CONFIG_ACPI				1
+#define CONFIG_PM				1
 #define CONFIG_X86				1
 
 /* General customization:
