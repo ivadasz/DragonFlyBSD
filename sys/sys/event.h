@@ -148,6 +148,9 @@ struct kevent {
 #define	NOTE_TRACKERR	0x00000002		/* could not track child */
 #define	NOTE_CHILD	0x00000004		/* am a child process */
 
+/* flags for EVFILT_TIMER */
+#define NOTE_PRECISE	0x00000001		/* exact microsecond timeout */
+
 #if defined(_KERNEL) || defined(_KERNEL_STRUCTURES)
 
 struct knote;

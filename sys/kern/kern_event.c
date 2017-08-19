@@ -49,6 +49,8 @@
 #include <sys/signalvar.h>
 #include <sys/filio.h>
 #include <sys/ktr.h>
+#include <sys/systimer.h>
+#include <sys/taskqueue.h>
 
 #include <sys/thread2.h>
 #include <sys/file2.h>
@@ -119,10 +121,16 @@ static int	filt_procattach(struct knote *kn);
 static void	filt_procdetach(struct knote *kn);
 static int	filt_proc(struct knote *kn, long hint);
 static int	filt_fileattach(struct knote *kn);
+static void	filt_timerexpire_precise(void *knx);
 static void	filt_timerexpire(void *knx);
+static void	filt_timerhandler(systimer_t info, int in_ipi __unused,
+				struct intrframe *frame __unused);
+static void	filt_timertask(void *context, int prio __unused);
 static int	filt_timerattach(struct knote *kn);
 static void	filt_timerdetach(struct knote *kn);
 static int	filt_timer(struct knote *kn, long hint);
+static void	filt_timertouch(struct knote *kn, struct kevent *kev,
+				u_long type);
 static int	filt_userattach(struct knote *kn);
 static void	filt_userdetach(struct knote *kn);
 static int	filt_user(struct knote *kn, long hint);
@@ -413,18 +421,108 @@ filt_proc(struct knote *kn, long hint)
 	return (kn->kn_fflags != 0);
 }
 
+struct timerinfo {
+	struct callout c;
+	struct systimer s;
+	int using_callout;
+	struct timeval target;	/* Only valid if NOTE_PRECISE and in callout */
+	struct task task;
+	int done;
+};
+
 static void
 filt_timerreset(struct knote *kn)
 {
-	struct callout *calloutp;
+	struct timerinfo *infop;
 	struct timeval tv;
 	int tticks;
 
-	tv.tv_sec = kn->kn_sdata / 1000;
-	tv.tv_usec = (kn->kn_sdata % 1000) * 1000;
-	tticks = tvtohz_high(&tv);
-	calloutp = (struct callout *)kn->kn_hook;
-	callout_reset(calloutp, tticks, filt_timerexpire, kn);
+	infop = (struct timerinfo *)kn->kn_hook;
+	if (kn->kn_sfflags & NOTE_PRECISE) {
+		infop->done = 0;
+		/*
+		 * We need to keep track of the expiry target, if we use
+		 * callout initially, or when we have a periodic timeout.
+		 */
+		if (kn->kn_sdata >= ustick || !(kn->kn_flags & EV_ONESHOT)) {
+			/* If NOTE_PRECISE is set, timeout is in microseconds */
+			tv.tv_sec = kn->kn_sdata / (1000*1000);
+			tv.tv_usec = kn->kn_sdata % (1000*1000);
+			microuptime(&infop->target);
+			timevaladd(&infop->target, &tv);
+		}
+		if (kn->kn_sdata >= ustick) {
+			/*
+			 * This case avoids dealing with long running systimer
+			 * oneshot timeouts, which could be running on
+			 * other cpus.
+			 */
+			tticks = tvtohz_low(&tv);
+			infop->using_callout = 1;
+			callout_reset(&infop->c, tticks,
+			    filt_timerexpire_precise, kn);
+		} else {
+			/*
+			 * No need to check current time, just start the
+			 * systimer oneshot timeout.
+			 */
+			infop->using_callout = 0;
+			systimer_init_oneshot(&infop->s, filt_timerhandler,
+			    kn, kn->kn_sdata);
+		}
+	} else {
+		tv.tv_sec = kn->kn_sdata / 1000;
+		tv.tv_usec = (kn->kn_sdata % 1000) * 1000;
+		tticks = tvtohz_high(&tv);
+		callout_reset(&infop->c, tticks, filt_timerexpire, kn);
+	}
+}
+
+static void
+filt_timerexpire_precise(void *knx)
+{
+	struct knote *kn = knx;
+	struct kqueue *kq = kn->kn_kq;
+	struct timerinfo *infop = (struct timerinfo *)kn->kn_hook;
+
+	lwkt_getpooltoken(kq);
+
+	if (infop->using_callout == -1) {
+		/* The filt_timerdetach function tells us to stop. */
+		lwkt_relpooltoken(kq);
+		return;
+	}
+	struct timeval now, tv;
+	microuptime(&now);
+	if (timevalcmp(&now, &infop->target, <)) {
+		tv = infop->target;
+		timevalsub(&tv, &now);
+		infop->using_callout = 0;
+		systimer_init_oneshot(&infop->s,
+		    filt_timerhandler, kn, tv.tv_usec);
+		lwkt_relpooltoken(kq);
+		return;
+	}
+
+	/*
+	 * Open knote_acquire(), since we can't sleep in callout,
+	 * however, we do need to record this expiration.
+	 */
+	kn->kn_data++;
+	if (kn->kn_status & KN_PROCESSING) {
+		kn->kn_status |= KN_REPROCESS;
+		lwkt_relpooltoken(kq);
+		return;
+	}
+	KASSERT((kn->kn_status & KN_DELETING) == 0,
+	    ("acquire a deleting knote %#x", kn->kn_status));
+	kn->kn_status |= KN_PROCESSING;
+
+	KNOTE_ACTIVATE(kn);
+
+	knote_release(kn);
+
+	lwkt_relpooltoken(kq);
 }
 
 /*
@@ -466,14 +564,57 @@ filt_timerexpire(void *knx)
 	lwkt_relpooltoken(kq);
 }
 
+static void
+filt_timerhandler(systimer_t info, int in_ipi __unused,
+    struct intrframe *frame __unused)
+{
+	struct knote *kn = info->data;
+	struct timerinfo *infop;
+
+	infop = (struct timerinfo *)kn->kn_hook;
+	/* XXX Use atomic variable to signal that timer got triggered */
+	taskqueue_enqueue(taskqueue_thread[mycpuid], &infop->task);
+}
+
+static void
+filt_timertask(void *context, int prio __unused)
+{
+	struct knote *kn = context;
+	struct kqueue *kq = kn->kn_kq;
+	struct timerinfo *infop = (struct timerinfo *)kn->kn_hook;
+
+	lwkt_getpooltoken(kq);
+
+	kn->kn_data++;
+	if (kn->kn_status & KN_PROCESSING) {
+		kn->kn_status |= KN_REPROCESS;
+		lwkt_relpooltoken(kq);
+		return;
+	}
+	KASSERT((kn->kn_status & KN_DELETING) == 0,
+	    ("acquire a deleting knote %#x", kn->kn_status));
+	kn->kn_status |= KN_PROCESSING;
+
+	KNOTE_ACTIVATE(kn);
+
+	knote_release(kn);
+
+	infop->done = 1;
+	lwkt_relpooltoken(kq);
+}
+
 /*
  * data contains amount of time to sleep, in milliseconds
  */ 
 static int
 filt_timerattach(struct knote *kn)
 {
-	struct callout *calloutp;
+	struct timerinfo *infop;
 	int prev_ncallouts;
+
+	if (kn->kn_sdata <= 0)
+		return (EINVAL);
+	/* XXX Add upper bound check for kn->kn_sdata. */
 
 	prev_ncallouts = atomic_fetchadd_int(&kq_ncallouts, 1);
 	if (prev_ncallouts >= kq_calloutmax) {
@@ -483,10 +624,13 @@ filt_timerattach(struct knote *kn)
 	}
 
 	kn->kn_flags |= EV_CLEAR;		/* automatically set */
-	calloutp = kmalloc(sizeof(*calloutp), M_KQUEUE, M_WAITOK);
-	callout_init_mp(calloutp);
-	kn->kn_hook = (caddr_t)calloutp;
+	infop = kmalloc(sizeof(*infop), M_KQUEUE, M_WAITOK);
+	callout_init_mp(&infop->c);
+	kn->kn_hook = (caddr_t)infop;
 
+	if (kn->kn_sfflags & NOTE_PRECISE) {
+		TASK_INIT(&infop->task, 0, filt_timertask, kn);
+	}
 	filt_timerreset(kn);
 	return (0);
 }
@@ -500,12 +644,43 @@ filt_timerattach(struct knote *kn)
 static void
 filt_timerdetach(struct knote *kn)
 {
-	struct callout *calloutp;
+	struct timerinfo *infop;
 
-	calloutp = (struct callout *)kn->kn_hook;
-	callout_terminate(calloutp);
+	infop = (struct timerinfo *)kn->kn_hook;
+	if (kn->kn_sfflags & NOTE_PRECISE) {
+		if (infop->using_callout) {
+			infop->using_callout = -1;
+			callout_terminate(&infop->c);
+		}
+		if (infop->using_callout == 0 && infop->done == 0) {
+			/* Delete systimer, and drain task from its taskqueue */
+			struct globaldata *timergd, *mygd = mycpu;
+			timergd = infop->s.gd;
+			int cpu = timergd->gd_cpuid;
+			if (timergd == mygd) {
+				systimer_del(&infop->s);
+			} else {
+				/* XXX heavy handed, use lwkt_ipiq instead */
+				/*
+				 * XXX best solution would be a systimer cache
+				 *     per cpu. Then we can just enqueue the
+				 *     cleanup as a (maybe passive) ipiq.
+				 */
+				lwkt_migratecpu(cpu);
+				systimer_del(&infop->s);
+				lwkt_migratecpu(mygd->gd_cpuid);
+			}
+			while (taskqueue_cancel(taskqueue_thread[cpu],
+			    &infop->task, NULL) != 0) {
+				taskqueue_drain(taskqueue_thread[cpu],
+				    &infop->task);
+			}
+		}
+	} else {
+		callout_terminate(&infop->c);
+	}
 	kn->kn_hook = NULL;
-	kfree(calloutp, M_KQUEUE);
+	kfree(infop, M_KQUEUE);
 	atomic_subtract_int(&kq_ncallouts, 1);
 }
 
@@ -513,6 +688,85 @@ static int
 filt_timer(struct knote *kn, long hint)
 {
 	return (kn->kn_data != 0);
+}
+
+static void
+filt_timertouch(struct knote *kn, struct kevent *kev, u_long type)
+{
+	switch (type) {
+	case EVENT_REGISTER:
+		if (kev->data <= 0)
+			break;
+		/* XXX Add upper bound check for kev->data. */
+		/*
+		 * XXX Can't safely switch between default- and
+		 *     NOTE_PRECISE-mode at the moment.
+		 */
+		/* kn->kn_sfflags = kev->fflags; */
+		kn->kn_sdata = kev->data;
+		kn->kn_kevent.udata = kev->udata;
+		break;
+        case EVENT_PROCESS:
+		if (!(kn->kn_flags & EV_ONESHOT) &&
+		    (kn->kn_sfflags & NOTE_PRECISE) &&
+		    !(kn->kn_status & KN_DELETING)) {
+			struct timeval now, tv;
+			struct timerinfo *infop =
+			    (struct timerinfo *)kn->kn_hook;
+			int tticks;
+
+			tv.tv_sec = kn->kn_sdata / (1000*1000);
+			tv.tv_usec = kn->kn_sdata % (1000*1000);
+			microuptime(&now);
+			if (timevalcmp(&now, &infop->target, >=)) {
+				uint64_t usecs, extra_timeouts;
+				struct timeval tmp;
+				/*
+				 * Compute actual number of timer expirations,
+				 * that we should report in kn_data.
+				 */
+				tmp = now;
+				timevalsub(&tmp, &infop->target);
+				usecs = tmp.tv_sec * 1000 * 1000 + tmp.tv_usec;
+				extra_timeouts = usecs / kn->kn_sdata;
+				kn->kn_data += extra_timeouts;
+				usecs = extra_timeouts * kn->kn_sdata;
+				/* Adjust target timeout value accordingly. */
+				tmp.tv_sec = usecs / (1000*1000);
+				tmp.tv_usec = usecs % (1000*1000);
+				timevaladd(&infop->target, &tmp);
+			}
+			timevaladd(&infop->target, &tv);
+			KKASSERT(timevalcmp(&now, &infop->target, <));
+			tv = infop->target;
+			timevalsub(&tv, &now);
+			/*
+			 * XXX Move this into a separate function, to avoid
+			 *     copy-pasta.
+			 */
+			infop->done = 0;
+			if (kn->kn_sdata >= ustick) {
+				/*
+				 * This case avoids dealing with long running systimer
+				 * oneshot timeouts, which could be running on
+				 * other cpus.
+				 */
+				tticks = tvtohz_low(&tv);
+				infop->using_callout = 1;
+				callout_reset(&infop->c, tticks,
+				    filt_timerexpire_precise, kn);
+			} else {
+				infop->using_callout = 0;
+				systimer_init_oneshot(&infop->s, filt_timerhandler,
+				    kn, kn->kn_sdata);
+			}
+		}
+		*kev = kn->kn_kevent;
+		break;
+	default:
+		panic("filt_timertouch() - invalid type (%lu)", type);
+		break;
+	}
 }
 
 /*
@@ -638,7 +892,7 @@ filt_usertouch(struct knote *kn, struct kevent *kev, u_long type)
 		break;
 
 	default:
-		panic("filt_usertouch() - invalid type (%ld)", type);
+		panic("filt_usertouch() - invalid type (%lu)", type);
 		break;
 	}
 }
@@ -1222,6 +1476,9 @@ again:
 			KKASSERT(kn->kn_status & KN_PROCESSING);
 			if (fops == &user_filtops) {
 				filt_usertouch(kn, kev, EVENT_REGISTER);
+			} else if (fops == &timer_filtops) {
+				/* Mainly needed, to avoid overwriting kn_sfflags */
+				filt_timertouch(kn, kev, EVENT_REGISTER);
 			} else {
 				kn->kn_sfflags = kev->fflags;
 				kn->kn_sdata = kev->data;
@@ -1257,6 +1514,9 @@ again:
 		KKASSERT(kn->kn_status & KN_PROCESSING);
 		if (fops == &user_filtops) {
 			filt_usertouch(kn, kev, EVENT_REGISTER);
+		} else if (fops == &timer_filtops) {
+			/* Mainly needed, to avoid overwriting kn_sfflags */
+			filt_timertouch(kn, kev, EVENT_REGISTER);
 		} else {
 			kn->kn_sfflags = kev->fflags;
 			kn->kn_sdata = kev->data;
@@ -1409,6 +1669,8 @@ kqueue_scan(struct kqueue *kq, struct kevent *kevp, int count,
 			 */
 			if (kn->kn_fop == &user_filtops)
 				filt_usertouch(kn, kevp, EVENT_PROCESS);
+			else if (kn->kn_fop == &timer_filtops)
+				filt_timertouch(kn, kevp, EVENT_PROCESS);
 			else
 				*kevp = kn->kn_kevent;
 			++kevp;
