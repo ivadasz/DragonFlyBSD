@@ -68,6 +68,9 @@
 #include <signal.h>
 #include <stdio.h>
 
+/* XXX Fix pthread_np.h including */
+void pthread_set_name_np(pthread_t, const char *);
+
 static void cothread_thread(void *arg);
 extern int vmm_enabled;
 
@@ -119,6 +122,7 @@ cothread_create(void (*thr_func)(cothread_t cotd),
 	crit_enter();
 	cpu_mask_all_signals();
 	pthread_create(&cotd->pthr, &attr, (void *)cothread_thread, cotd);
+	pthread_set_name_np(cotd->pthr, name);
 	cpu_unmask_all_signals();
 	crit_exit();
 	pthread_attr_destroy(&attr);

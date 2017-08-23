@@ -61,6 +61,9 @@
 #include <signal.h>
 #include <stdio.h>
 
+/* XXX Fix pthread_np.h including */
+void pthread_set_name_np(pthread_t, const char *);
+
 extern pt_entry_t *KPTphys;
 
 extern int vmm_enabled;
@@ -134,7 +137,11 @@ SYSINIT(finishsmp, SI_BOOT2_FINISH_SMP, SI_ORDER_FIRST, ap_finish, NULL);
 void *
 start_ap(void *arg __unused)
 {
+	char name[16];
+
 	init_secondary();
+	snprintf(name, sizeof(name), "vcpu%u", mycpuid);
+	pthread_set_name_np(pthread_self(), name);
 	setrealcpu();
 	bootstrap_idle();
 
@@ -176,6 +183,7 @@ mp_start(void)
 	/* initialize arc4random. */
 	arc4_init_pcpu(0);
 
+	pthread_set_name_np(pthread_self(), "vcpu0");
 	/*
 	 * cpu 1-(n-1)
 	 */
