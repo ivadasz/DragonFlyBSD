@@ -42,6 +42,7 @@
 #include <sys/interrupt.h>
 #include <sys/bus.h>
 #include <sys/time.h>
+#include <sys/kinfo.h>
 #include <machine/cpu.h>
 #include <machine/clock.h>
 #include <machine/globaldata.h>
@@ -77,6 +78,7 @@ static int vktimer_running;
 static sysclock_t vktimer_target;
 static struct timespec vktimer_ts;
 static sysclock_t vktimer_reload[MAXCPU];
+static sysclock_t vktimer_signaled[MAXCPU];
 
 extern int use_precise_timer;
 
@@ -214,12 +216,33 @@ vktimer_gettick_us(void)
 	}
 }
 
+static sysclock_t
+vktimer_get_starttime(void)
+{
+	struct kinfo_proc info;
+	int mib[] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid() };
+	size_t len = sizeof(info);
+	sysclock_t val;
+
+	if (sysctl(mib, NELEM(mib), &info, &len, NULL, 0) != 0 ||
+	    len != sizeof(info)) {
+		/* Current time should usually also be fine here. */
+		return vkernel_timer_get_timecount();
+	} else {
+		val = info.kp_start.tv_usec;
+		val += info.kp_start.tv_sec * 1000000;
+		return val;
+	}
+}
+
 static void
 vktimer_thread(cothread_t cotd)
 {
 	struct sigaction sa;
 	globaldata_t gscan;
 	sysclock_t ticklength_us;
+	sysclock_t curtime;
+	int n;
 
 	bzero(&sa, sizeof(sa));
 	sa.sa_handler = vktimer_sigint;
@@ -228,15 +251,17 @@ vktimer_thread(cothread_t cotd)
 	sigaction(SIGINT, &sa, NULL);
 
 	ticklength_us = vktimer_gettick_us();
+	curtime = vktimer_get_starttime();
 	vktimer_running = 1;
 	while (vktimer_cotd == NULL)
 		usleep(1000000 / 10);
 
+	for (n = 0; n < ncpus; ++n)
+		vktimer_signaled[n] = curtime;
+
 	for (;;) {
-		sysclock_t curtime;
 		sysclock_t reload;
-		ssysclock_t delta;
-		int n;
+		ssysclock_t delta, sigdelta;
 
 		/*
 		 * Sleep
@@ -253,18 +278,20 @@ rescan:
 		for (n = 0; n < ncpus; ++n) {
 			gscan = globaldata_find(n);
 			delta = vktimer_reload[n] - curtime;
-			if (delta <= 0 && TAILQ_FIRST(&gscan->gd_systimerq))
+			sigdelta = vktimer_signaled[n] - curtime;
+			if (delta <= 0 && sigdelta < delta &&
+			    TAILQ_FIRST(&gscan->gd_systimerq)) {
 				pthread_kill(ap_tids[n], SIGURG);
+				vktimer_signaled[n] = curtime;
+			}
 			if (delta > 0 && reload > delta)
 				reload = delta;
 		}
-		reload += curtime;
-		vktimer_target = reload;
+		vktimer_target = reload + curtime;
 
 		/*
 		 * Check for races
 		 */
-		reload -= curtime;
 		for (n = 0; n < ncpus; ++n) {
 			gscan = globaldata_find(n);
 			delta = vktimer_reload[n] - curtime;
