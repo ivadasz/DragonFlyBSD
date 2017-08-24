@@ -87,11 +87,18 @@ cothread_create(void (*thr_func)(cothread_t cotd),
 	cothread_t cotd;
 	void *stack;
 	pthread_attr_t attr;
+	struct kevent kev;
 
 	cotd = kmalloc(sizeof(*cotd), M_DEVBUF, M_WAITOK|M_ZERO);
 	cotd->thr_intr = thr_intr;
 	cotd->thr_func = thr_func;
 	cotd->arg = arg;
+
+	cotd->kq = kqueue();
+	EV_SET(&kev, 0, EVFILT_USER, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, NULL);
+	kevent(cotd->kq, &kev, 1, NULL, 0, NULL);
+	cotd->kq_nchanges = 0;
+
 	crit_enter();
 	pthread_mutex_init(&cotd->mutex, NULL);
 	pthread_cond_init(&cotd->cond, NULL);
@@ -145,6 +152,7 @@ cothread_delete(cothread_t *cotdp)
 		crit_enter();
 		pthread_join(cotd->pthr, NULL);
 		crit_exit();
+		close(cotd->kq);
 		kfree(cotd, M_DEVBUF);
 		*cotdp = NULL;
 	}
@@ -200,15 +208,39 @@ cothread_wait(cothread_t cotd)
 void
 cothread_sleep(cothread_t cotd, struct timespec *ts)
 {
-	nanosleep(ts, NULL);
+	struct timespec maxsleep = {1,0};
+	struct kevent resp[2];
+	int64_t usecs = ts->tv_sec * 1000000 + ts->tv_nsec / 1000;
+	int i, pending, need_del = 1;
+
+	EV_SET(&cotd->kq_changes[cotd->kq_nchanges], 0, EVFILT_TIMER,
+	    EV_ADD | EV_ENABLE | EV_ONESHOT, NOTE_PRECISE, usecs, NULL);
+	cotd->kq_nchanges++;
+	pending = kevent(cotd->kq, cotd->kq_changes, cotd->kq_nchanges,
+	    resp, 2, &maxsleep);
+	if (pending == -1)
+		panic("kevent failed");
+	for (i = 0; i < pending; i++) {
+		if (resp[i].filter == EVFILT_TIMER) {
+			need_del = 0;
+		}
+	}
+	if (need_del != 0) {
+		EV_SET(&cotd->kq_changes[0], 0, EVFILT_TIMER, EV_DELETE, 0, 0,
+		    NULL);
+		cotd->kq_nchanges = 1;
+	} else {
+		cotd->kq_nchanges = 0;
+	}
 }
 
 void
 cothread_wakeup(cothread_t cotd, struct timespec *ts)
 {
-	ts->tv_sec = 0;
-	ts->tv_nsec = 0;
-	pthread_kill(cotd->pthr, SIGINT);
+	struct kevent kev;
+
+	EV_SET(&kev, 0, EVFILT_USER, 0, NOTE_TRIGGER, 0, NULL);
+	kevent(cotd->kq, &kev, 1, NULL, 0, NULL);
 }
 
 /*

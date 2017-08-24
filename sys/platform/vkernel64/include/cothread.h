@@ -37,6 +37,8 @@
 #ifndef _MACHINE_COTHREAD_H_
 #define _MACHINE_COTHREAD_H_
 
+#include <sys/event.h>
+
 #include <pthread.h>
 
 struct cothread {
@@ -48,6 +50,9 @@ struct cothread {
 	void		*intr_id;
 	pthread_mutex_t	mutex;
 	pthread_cond_t	cond;
+	int		kq;
+	struct kevent	kq_changes[2];
+	int		kq_nchanges;
 };
 
 typedef struct cothread *cothread_t;

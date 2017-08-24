@@ -188,15 +188,6 @@ vktimer_intr_initclock(struct cputimer_intr *cti __unused,
 #endif
 }
 
-/*
- *
- */
-static void
-vktimer_sigint(int signo)
-{
-	/* do nothing, just interrupt */
-}
-
 static sysclock_t
 vktimer_gettick_us(void)
 {
@@ -238,17 +229,10 @@ vktimer_get_starttime(void)
 static void
 vktimer_thread(cothread_t cotd)
 {
-	struct sigaction sa;
 	globaldata_t gscan;
 	sysclock_t ticklength_us;
 	sysclock_t curtime;
 	int n;
-
-	bzero(&sa, sizeof(sa));
-	sa.sa_handler = vktimer_sigint;
-	sa.sa_flags |= SA_NODEFER;
-	sigemptyset(&sa.sa_mask);
-	sigaction(SIGINT, &sa, NULL);
 
 	ticklength_us = vktimer_gettick_us();
 	curtime = vktimer_get_starttime();
