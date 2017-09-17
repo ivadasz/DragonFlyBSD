@@ -87,12 +87,14 @@ static void	lapic_msr_timer_intr_reload(struct cputimer_intr *, sysclock_t);
 static void	lapic_timer_intr_enable(struct cputimer_intr *);
 static void	lapic_timer_intr_restart(struct cputimer_intr *);
 static void	lapic_timer_intr_pmfixup(struct cputimer_intr *);
+static void	lapic_timer_intr_config(struct cputimer_intr *,
+		    const struct cputimer *);
 
 static struct cputimer_intr lapic_cputimer_intr = {
 	.freq = 0,
 	.reload = lapic_mem_timer_intr_reload,
 	.enable = lapic_timer_intr_enable,
-	.config = cputimer_intr_default_config,
+	.config = lapic_timer_intr_config,
 	.restart = lapic_timer_intr_restart,
 	.pmfixup = lapic_timer_intr_pmfixup,
 	.initclock = cputimer_intr_default_initclock,
@@ -115,6 +117,8 @@ static const uint32_t	lapic_timer_divisors[] = {
 static int	lapic_use_tscdeadline = 0;
 /* The raw TSC frequency might not fit into a sysclock_t value. */
 static int	lapic_timer_tscfreq_shift;
+
+static uint64_t	systimer_to_tsc_factor;
 
 /*
  * APIC ID <-> CPU ID mapping structures.
@@ -665,20 +669,23 @@ lapic_timer_tscdlt_reload(struct cputimer_intr *cti, sysclock_t reload)
 	struct globaldata *gd = mycpu;
 	uint64_t diff, now, val;
 
-	if (reload > 1000*1000*1000)
-		reload = 1000*1000*1000;
-	diff = (uint64_t)reload * tsc_frequency / sys_cputimer->freq;
+	if (reload > (sys_cputimer->freq << 3))
+		reload = sys_cputimer->freq << 3;
+	diff = ((uint64_t)reload * systimer_to_tsc_factor) >> 28;
 	if (diff < 4)
 		diff = 4;
+#if 0
 	if (cpu_vendor_id == CPU_VENDOR_INTEL)
 		cpu_lfence();
 	else
 		cpu_mfence();
+#endif
 	now = rdtsc();
 	val = now + diff;
 	if (gd->gd_timer_running) {
 		uint64_t deadline = tsc_deadlines[mycpuid].timestamp;
-		if (deadline == 0 || now > deadline || val < deadline) {
+		if (now > deadline || val < deadline ||
+		    val > deadline + (tsc_frequency >> 16)) {
 			wrmsr(MSR_TSC_DEADLINE, val);
 			tsc_deadlines[mycpuid].timestamp = val;
 		}
@@ -739,6 +746,20 @@ lapic_timer_intr_enable(struct cputimer_intr *cti __unused)
 		cpu_mfence();
 
 	lapic_timer_fixup_handler(NULL);
+}
+
+static void
+lapic_timer_intr_config(struct cputimer_intr *cti __unused,
+    const struct cputimer *timer)
+{
+	/* Assumes tsc_frequency < 2^33, ca. 8GHz. */
+	systimer_to_tsc_factor = (tsc_frequency << 28) / timer->freq;
+
+	/*
+	 * XXX Explicitly check, if the new timer is using the TSC. If yes, we
+	 *     don't need fences here before the rdtsc().
+	 *     --> This would be one more variant of intr_reload().
+	 */
 }
 
 static void

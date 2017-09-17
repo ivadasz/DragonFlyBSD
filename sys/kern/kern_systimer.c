@@ -152,7 +152,11 @@ systimer_add(systimer_t info)
 	systimer_t scan2;
 	scan1 = TAILQ_FIRST(&gd->gd_systimerq);
 	if (scan1 == NULL || (int)(scan1->time - info->time) > 0) {
-	    cputimer_intr_reload(info->time - sys_cputimer->count());
+	    sysclock_t val = sys_cputimer->count();
+	    if ((int)(val - info->time) > 0)
+		cputimer_intr_reload(0);
+	    else
+		cputimer_intr_reload(info->time - val);
 	    TAILQ_INSERT_HEAD(&gd->gd_systimerq, info, node);
 	} else {
 	    scan2 = TAILQ_LAST(&gd->gd_systimerq, systimerq);
@@ -216,6 +220,7 @@ void
 systimer_del(systimer_t info)
 {
     struct globaldata *gd = info->gd;
+    systimer_t scan1;
 
     KKASSERT(gd == mycpu && (info->flags & SYSTF_IPIRUNNING) == 0);
 
@@ -234,6 +239,18 @@ systimer_del(systimer_t info)
      */
     if (gd->gd_systimer_inprog == info)
 	gd->gd_systimer_inprog = NULL;
+
+    if (gd->gd_syst_nest == 0) {
+	scan1 = TAILQ_FIRST(&gd->gd_systimerq);
+	if (scan1 != NULL && (int)(scan1->time - info->time) > sys_cputimer->freq >> 15) {
+	    sysclock_t val = sys_cputimer->count();
+	    if ((int)(val - scan1->time) > 0) {
+		/* No need to dispatch here, it's timed out anyway. */
+	    } else {
+		cputimer_intr_reload(scan1->time - val);
+	    }
+	}
+    }
 
     crit_exit();
 }
