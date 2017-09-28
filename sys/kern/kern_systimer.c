@@ -58,6 +58,8 @@
 #include <sys/systimer.h>
 #include <sys/thread2.h>
 
+static sysclock_t _systimer_add(systimer_t info, sysclock_t now);
+
 /*
  * Execute ready systimers.  Called directly from the platform-specific
  * one-shot timer clock interrupt (e.g. clkintr()) or via an IPI.  May
@@ -123,7 +125,9 @@ systimer_intr(sysclock_t *timep, int in_ipi, struct intrframe *frame)
 	    ) {
 		info->time += roundup(time - info->time, info->periodic);
 	    }
-	    systimer_add(info);
+	    sysclock_t val = _systimer_add(info, 0);
+	    if (val != 0)
+		time = val;
 	}
 	gd->gd_systimer_inprog = NULL;
     }
@@ -143,7 +147,15 @@ systimer_intr_enable(void)
 void
 systimer_add(systimer_t info)
 {
+    _systimer_add(info, 0);
+}
+
+static __inline
+sysclock_t
+_systimer_add(systimer_t info, sysclock_t now)
+{
     struct globaldata *gd = mycpu;
+    sysclock_t val = 0;
 
     KKASSERT((info->flags & SYSTF_ONQUEUE) == 0);
     crit_enter();
@@ -152,7 +164,7 @@ systimer_add(systimer_t info)
 	systimer_t scan2;
 	scan1 = TAILQ_FIRST(&gd->gd_systimerq);
 	if (scan1 == NULL || (int)(scan1->time - info->time) > 0) {
-	    sysclock_t val = sys_cputimer->count();
+	    val = now == 0 ? sys_cputimer->count() : now;
 	    if ((int)(val - info->time) > 0)
 		cputimer_intr_reload(0);
 	    else
@@ -207,6 +219,7 @@ systimer_add(systimer_t info)
 	lwkt_send_ipiq(info->gd, (ipifunc1_t)systimer_add, info);
     }
     crit_exit();
+    return val;
 }
 
 /*
@@ -372,11 +385,15 @@ systimer_adjust_periodic(systimer_t info, int freq)
 void
 systimer_init_oneshot(systimer_t info, systimer_func_t func, void *data, int us)
 {
+    sysclock_t now, val;
+
     bzero(info, sizeof(struct systimer));
-    info->time = sys_cputimer->count() + sys_cputimer->fromus(us);
     info->func = func;
     info->data = data;
     info->which = sys_cputimer;
     info->gd = mycpu;
-    systimer_add(info);
+    val = sys_cputimer->fromus(us);
+    now = sys_cputimer->count();
+    info->time = val + now;
+    _systimer_add(info, now);
 }
