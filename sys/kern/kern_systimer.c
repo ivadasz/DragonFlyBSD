@@ -73,6 +73,7 @@ systimer_intr(sysclock_t *timep, int in_ipi, struct intrframe *frame)
     globaldata_t gd = mycpu;
     sysclock_t time = *timep;
     systimer_t info;
+    int first = 1;
 
     if (gd->gd_syst_nest)
 	return;
@@ -85,10 +86,19 @@ systimer_intr(sysclock_t *timep, int in_ipi, struct intrframe *frame)
 	 * how much is left and break out.
 	 */
 	if ((int)(info->time - time) > 0) {
-	    cputimer_intr_reload(info->time - time);
-	    break;
+	    if (first == 0) {
+		time = sys_cputimer->count();
+		if ((int)(info->time - time) > 0) {
+		    cputimer_intr_reload(info->time - time);
+		    break;
+		}
+	    } else {
+		cputimer_intr_reload(info->time - time);
+		break;
+	    }
 	}
 
+	first = 0;
 	/*
 	 * Dequeue and execute, detect a loss of the systimer.  Note
 	 * that the in-progress systimer pointer can only be used to
@@ -125,9 +135,7 @@ systimer_intr(sysclock_t *timep, int in_ipi, struct intrframe *frame)
 	    ) {
 		info->time += roundup(time - info->time, info->periodic);
 	    }
-	    sysclock_t val = _systimer_add(info, 0);
-	    if (val != 0)
-		time = val;
+	    _systimer_add(info, 0);
 	}
 	gd->gd_systimer_inprog = NULL;
     }
@@ -164,11 +172,13 @@ _systimer_add(systimer_t info, sysclock_t now)
 	systimer_t scan2;
 	scan1 = TAILQ_FIRST(&gd->gd_systimerq);
 	if (scan1 == NULL || (int)(scan1->time - info->time) > 0) {
-	    val = now == 0 ? sys_cputimer->count() : now;
-	    if ((int)(val - info->time) > 0)
-		cputimer_intr_reload(0);
-	    else
-		cputimer_intr_reload(info->time - val);
+	    if (gd->gd_syst_nest == 0) {
+		val = now == 0 ? sys_cputimer->count() : now;
+		if ((int)(val - info->time) > 0)
+		    cputimer_intr_reload(0);
+		else
+		    cputimer_intr_reload(info->time - val);
+	    }
 	    TAILQ_INSERT_HEAD(&gd->gd_systimerq, info, node);
 	} else {
 	    scan2 = TAILQ_LAST(&gd->gd_systimerq, systimerq);
@@ -242,6 +252,17 @@ systimer_del(systimer_t info)
     if (info->flags & SYSTF_ONQUEUE) {
 	TAILQ_REMOVE(info->queue, info, node);
 	info->flags &= ~SYSTF_ONQUEUE;
+	if (gd->gd_syst_nest == 0) {
+	    scan1 = TAILQ_FIRST(&gd->gd_systimerq);
+	    if (scan1 != NULL && (int)(scan1->time - info->time) > sys_cputimer->freq >> 15) {
+		sysclock_t val = sys_cputimer->count();
+		if ((int)(val - scan1->time) > 0) {
+		    /* No need to dispatch here, it's timed out anyway. */
+		} else {
+		    cputimer_intr_reload(scan1->time - val);
+		}
+	    }
+	}
     }
 
     /*
@@ -252,18 +273,6 @@ systimer_del(systimer_t info)
      */
     if (gd->gd_systimer_inprog == info)
 	gd->gd_systimer_inprog = NULL;
-
-    if (gd->gd_syst_nest == 0) {
-	scan1 = TAILQ_FIRST(&gd->gd_systimerq);
-	if (scan1 != NULL && (int)(scan1->time - info->time) > sys_cputimer->freq >> 15) {
-	    sysclock_t val = sys_cputimer->count();
-	    if ((int)(val - scan1->time) > 0) {
-		/* No need to dispatch here, it's timed out anyway. */
-	    } else {
-		cputimer_intr_reload(scan1->time - val);
-	    }
-	}
-    }
 
     crit_exit();
 }
