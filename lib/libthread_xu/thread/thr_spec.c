@@ -152,14 +152,18 @@ _thread_cleanupspecific(void)
 		}
 	}
 	THR_LOCK_RELEASE(curthread, &_keytable_lock);
-	free(curthread->specific);
+	if (curthread->specific != (void *)curthread->keydata)
+		free(curthread->specific);
 	curthread->specific = NULL;
-	if (curthread->specific_data_count > 0)
-		stderr_debug("Thread %p has exited with leftover "
+	if (curthread->specific_data_count > 0) {
+		stderr_debug("Thread %p has exited with %d leftover "
 		    "thread-specific data after %d destructor iterations\n",
-		    curthread, PTHREAD_DESTRUCTOR_ITERATIONS);
+		    curthread, curthread->specific_data_count,
+		    PTHREAD_DESTRUCTOR_ITERATIONS);
+	}
 }
 
+/* XXX Allocate without using malloc(), to avoid issues with tcmalloc */
 static inline struct pthread_specific_elem *
 pthread_key_allocate_data(void)
 {
@@ -183,7 +187,7 @@ _pthread_setspecific(pthread_key_t key, const void *value)
 	/* Point to the running thread: */
 	pthread = tls_get_curthread();
 
-	if ((pthread->specific) ||
+	if ((pthread->specific) || (pthread->specific = (void *)pthread->keydata) ||
 	    (pthread->specific = pthread_key_allocate_data())) {
 		if ((unsigned int)key < PTHREAD_KEYS_MAX) {
 			if (_thread_keytable[key].allocated) {

@@ -477,6 +477,7 @@ struct pthread {
 	void				*ret;
 	struct pthread_specific_elem	*specific;
 	int				specific_data_count;
+	char				keydata[sizeof(struct pthread_specific_elem) * PTHREAD_KEYS_MAX];
 
 	/* Number rwlocks rdlocks held. */
 	int			rdlock_count;
