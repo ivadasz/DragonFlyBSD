@@ -1927,6 +1927,222 @@ sysctl_kern_proc_sigtramp(SYSCTL_HANDLER_ARGS)
         return (error);
 }
 
+static int
+sysctl_kern_proc_vmmap(SYSCTL_HANDLER_ARGS)
+{
+	pid_t *pidp = (pid_t *)arg1;
+	unsigned int arglen = arg2;
+	struct proc *p;
+	struct vnode *vp;
+	vm_map_t map;
+	vm_map_entry_t entry;
+	char vmedata[sizeof(struct kinfo_vmentry) + PATH_MAX];
+	struct kinfo_vmentry *vme = (struct kinfo_vmentry *)vmedata;
+	int error = 0;
+	unsigned int last_timestamp;
+	size_t total_size;
+	struct ucred *cr = curproc->p_ucred;
+
+	if (arglen != 1)
+		return (EINVAL);
+	if (*pidp == -1) {	/* -1 means this process */
+		p = curproc;
+		map = &p->p_vmspace->vm_map;
+		vm_map_lock_read(map);
+	} else {
+		p = pfind(*pidp);
+		if (p == NULL)
+			return (ESRCH);
+		lwkt_gettoken_shared(&p->p_token);
+		if (p_trespass(cr, p->p_ucred)) {
+			lwkt_reltoken(&p->p_token);
+			error = EPERM;
+			goto done;
+		}
+		map = &p->p_vmspace->vm_map;
+		vm_map_lock_read(map);
+		lwkt_reltoken(&p->p_token);
+	}
+
+	/* XXX Determine optional start/end virtual addresses. */
+
+	total_size = 0;
+	for (entry = map->header.next; entry != &map->header;
+	    entry = entry->next) {
+		vm_object_t obj, tobj, lobj;
+		int ref_count, shadow_count, flags, type;
+		vm_offset_t e_start, e_end;
+		vm_ooffset_t e_offset;
+		vm_eflags_t e_eflags;
+		vm_prot_t e_prot;
+		int privateresident;
+		char *fullpath, *freepath;
+		size_t pathlen = 0;
+
+		privateresident = 0;
+		switch (entry->maptype) {
+		case VM_MAPTYPE_NORMAL:
+		case VM_MAPTYPE_VPAGETABLE:
+			obj = entry->object.vm_object;
+			if (obj != NULL) {
+				vm_object_hold(obj);
+				if (obj->shadow_count == 1)
+					privateresident = obj->resident_page_count;
+			}
+			break;
+		case VM_MAPTYPE_UKSMAP:
+			obj = NULL;
+			break;
+		default:
+			/* ignore entry */
+			continue;
+		}
+
+		e_eflags = entry->eflags;
+		e_prot = entry->protection;
+		e_start = entry->start;
+		e_end = entry->end;
+
+		if (obj) {
+			lobj = obj;
+			while ((tobj = lobj->backing_object) != NULL) {
+				KKASSERT(tobj != obj);
+				vm_object_hold(tobj);
+				if (tobj == lobj->backing_object) {
+					if (lobj != obj) {
+						vm_object_lock_swap();
+						vm_object_drop(lobj);
+					}
+					lobj = tobj;
+				} else {
+					vm_object_drop(tobj);
+				}
+			}
+		} else {
+			lobj = NULL;
+		}
+
+		last_timestamp = map->timestamp;
+		vm_map_unlock(map);
+
+		freepath = NULL;
+		fullpath = NULL;
+		if (lobj != NULL) {
+			e_offset = obj->backing_object_offset;
+			switch (lobj->type) {
+			default:
+			case OBJT_DEFAULT:
+				type = KVE_ET_DEFAULT;
+				vp = NULL;
+				break;
+			case OBJT_VNODE:
+				type = KVE_ET_VNODE;
+				vp = lobj->handle;
+				vref(vp);
+				break;
+			case OBJT_SWAP:
+				type = KVE_ET_SWAP;
+				vp = NULL;
+				break;
+			case OBJT_DEVICE:
+				type = KVE_ET_DEVICE;
+				vp = NULL;
+				break;
+			case OBJT_MGTDEVICE:
+				type = KVE_ET_MGTDEVICE;
+				vp = NULL;
+				break;
+			}
+			if (lobj != obj)
+				vm_object_drop(lobj);
+
+			flags = obj->flags;
+			ref_count = obj->ref_count;
+			shadow_count = obj->shadow_count;
+			vm_object_drop(obj);
+			if (vp != NULL) {
+				vn_fullpath(p, vp, &fullpath, &freepath, 1);
+				vrele(vp);
+			}
+		} else {
+			e_offset = 0;
+			flags = 0;
+			ref_count = 0;
+			shadow_count = 0;
+			switch (entry->maptype) {
+			case VM_MAPTYPE_UNSPECIFIED:
+				type = KVE_ET_UNSPECIFIED;
+				break;
+			case VM_MAPTYPE_NORMAL:
+				type = KVE_ET_NONE;
+				break;
+			case VM_MAPTYPE_VPAGETABLE:
+				type = KVE_ET_VPAGETABLE;
+				break;
+			case VM_MAPTYPE_SUBMAP:
+				type = KVE_ET_SUBMAP;
+				break;
+			case VM_MAPTYPE_UKSMAP:
+				type = KVE_ET_UKSMAP;
+				break;
+			default:
+				type = KVE_ET_UNKNOWN;
+				break;
+			}
+		}
+
+		if (fullpath != NULL) {
+			pathlen = strlcpy(vme->kve_path, fullpath, PATH_MAX);
+			if (pathlen >= PATH_MAX) {
+				/* Don't confuse userland with broken data. */
+				pathlen = 0;
+			} else {
+				pathlen++;
+			}
+			fullpath = NULL;
+		}
+		if (freepath != NULL) {
+			kfree(freepath, M_TEMP);
+			freepath = NULL;
+		}
+		vme->kve_start = e_start;
+		vme->kve_end = e_end;
+		vme->kve_prot = e_prot;
+		vme->kve_flags = flags;
+		vme->kve_eflags = 0;
+		if (e_eflags & MAP_ENTRY_COW)
+			vme->kve_eflags |= KVE_EFLAGS_COW;
+		if (e_eflags & MAP_ENTRY_NEEDS_COPY)
+			vme->kve_eflags |= KVE_EFLAGS_NC;
+		vme->kve_refcount = ref_count;
+		vme->kve_shadowcount = shadow_count;
+		vme->kve_privateresident = privateresident;
+		vme->kve_etype = type;
+		vme->kve_offset = e_offset;
+		vme->kve_addr = (uintptr_t)obj;
+		vme->kve_timestamp = last_timestamp;
+		vme->kve_size =
+		    offsetof(struct kinfo_vmentry, kve_path) + pathlen;
+		total_size += vme->kve_size;
+		error = SYSCTL_OUT(req, vme, vme->kve_size);
+		vm_map_lock_read(map);
+		if (error != 0)
+			break;
+
+		if (last_timestamp != map->timestamp) {
+			vm_map_entry_t reentry;
+			vm_map_lookup_entry(map, e_start, &reentry);
+			entry = reentry;
+		}
+	}
+	vm_map_unlock(map);
+
+done:
+	if (*pidp != -1)
+		PRELE(p);
+	return (error);
+}
+
 SYSCTL_NODE(_kern, KERN_PROC, proc, CTLFLAG_RD,  0, "Process table");
 
 SYSCTL_PROC(_kern_proc, KERN_PROC_ALL, all,
@@ -1993,3 +2209,6 @@ SYSCTL_PROC(_kern_proc, KERN_PROC_SIGTRAMP, sigtramp,
 	CTLFLAG_RD | CTLTYPE_STRUCT | CTLFLAG_NOLOCK,
         0, 0, sysctl_kern_proc_sigtramp, "S,sigtramp",
         "Return sigtramp address range");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_VMMAP, vmmap, CTLFLAG_RD,
+	sysctl_kern_proc_vmmap, "Process virtual memory mappings");

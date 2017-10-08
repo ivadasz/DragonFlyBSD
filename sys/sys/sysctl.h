@@ -490,6 +490,7 @@ TAILQ_HEAD(sysctl_ctx_list, sysctl_ctx_entry);
 #define	KERN_PROC_CWD		8	/* get cwd */
 #define	KERN_PROC_PATHNAME      9	/* path to executable */
 #define KERN_PROC_SIGTRAMP	10	/* addr[2]: sigtramp addr range */
+#define KERN_PROC_VMMAP		11	/* get virtual memory map of process */
 
 #define KERN_PROC_FLAGMASK	0x10
 #define KERN_PROC_FLAG_LWP	0x10

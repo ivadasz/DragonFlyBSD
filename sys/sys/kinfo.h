@@ -224,6 +224,42 @@ struct kinfo_sigtramp {
 	void		*ksigtramp_spare[4];
 };
 
+/*
+ * KERN_PROC_VMMAP
+ */
+struct kinfo_vmentry {
+	size_t kve_size;
+	uintptr_t kve_addr;	/* address of this vm object */
+	vm_offset_t kve_start;
+	vm_offset_t kve_end;
+#define KVE_PROT_READ	0x1
+#define KVE_PROT_WRITE	0x2
+#define KVE_PROT_EXECUTE	0x4
+	int kve_prot;
+	int kve_flags;
+#define KVE_EFLAGS_COW 0x01
+#define KVE_EFLAGS_NC 0x02
+	int kve_eflags;
+	int kve_refcount;
+	int kve_shadowcount;
+	int kve_privateresident;
+#define KVE_ET_DEFAULT	0
+#define KVE_ET_VNODE	1
+#define KVE_ET_SWAP	2
+#define KVE_ET_DEVICE	3
+#define KVE_ET_MGTDEVICE	4
+#define KVE_ET_UNSPECIFIED	5
+#define KVE_ET_NONE	6
+#define KVE_ET_VPAGETABLE	7
+#define KVE_ET_SUBMAP	8
+#define KVE_ET_UKSMAP	9
+#define KVE_ET_UNKNOWN	10
+	int kve_etype;
+	vm_ooffset_t kve_offset;
+	unsigned int kve_timestamp;
+	char kve_path[];	/* NUL-terminated string */
+};
+
 struct proc;
 struct lwp;
 struct thread;
