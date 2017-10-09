@@ -1940,11 +1940,30 @@ sysctl_kern_proc_vmmap(SYSCTL_HANDLER_ARGS)
 	struct kinfo_vmentry *vme = (struct kinfo_vmentry *)vmedata;
 	int error = 0;
 	unsigned int last_timestamp;
-	size_t total_size;
 	struct ucred *cr = curproc->p_ucred;
+	vm_offset_t iter_start = 0, iter_end = 0;
 
 	if (arglen != 1)
 		return (EINVAL);
+
+	/* Determine optional start/end virtual addresses. */
+	if (req->newlen > sizeof(vmedata))
+		return (EINVAL);
+
+	error = SYSCTL_IN(req, vme, req->newlen);
+	if (error != 0)
+		return (error);
+
+	if (req->newlen >= sizeof(struct kinfo_vmentry)) {
+		if (vme->kve_start > 0)
+			iter_start = vme->kve_start;
+		if (vme->kve_end > 0)
+			iter_end = vme->kve_end;
+		/* This request wouldn't make any sense. */
+		if (iter_end > 0 && iter_start > iter_end)
+			return (EINVAL);
+	}
+
 	if (*pidp == -1) {	/* -1 means this process */
 		p = curproc;
 		map = &p->p_vmspace->vm_map;
@@ -1964,11 +1983,12 @@ sysctl_kern_proc_vmmap(SYSCTL_HANDLER_ARGS)
 		lwkt_reltoken(&p->p_token);
 	}
 
-	/* XXX Determine optional start/end virtual addresses. */
+	if (iter_start > 0)
+		vm_map_lookup_entry(map, iter_start, &entry);
+	else
+		entry = map->header.next;
 
-	total_size = 0;
-	for (entry = map->header.next; entry != &map->header;
-	    entry = entry->next) {
+	for (; entry != &map->header; entry = entry->next) {
 		vm_object_t obj, tobj, lobj;
 		int ref_count, shadow_count, flags, type;
 		vm_offset_t e_start, e_end;
@@ -1978,6 +1998,12 @@ sysctl_kern_proc_vmmap(SYSCTL_HANDLER_ARGS)
 		int privateresident;
 		char *fullpath, *freepath;
 		size_t pathlen = 0;
+
+		if (entry->start < iter_start) {
+			continue;
+		} else if (iter_end > 0 && entry->start > iter_end) {
+			break;
+		}
 
 		privateresident = 0;
 		switch (entry->maptype) {
@@ -2028,7 +2054,6 @@ sysctl_kern_proc_vmmap(SYSCTL_HANDLER_ARGS)
 		freepath = NULL;
 		fullpath = NULL;
 		if (lobj != NULL) {
-			e_offset = obj->backing_object_offset;
 			switch (lobj->type) {
 			default:
 			case OBJT_DEFAULT:
@@ -2059,6 +2084,7 @@ sysctl_kern_proc_vmmap(SYSCTL_HANDLER_ARGS)
 			flags = obj->flags;
 			ref_count = obj->ref_count;
 			shadow_count = obj->shadow_count;
+			e_offset = obj->backing_object_offset;
 			vm_object_drop(obj);
 			if (vp != NULL) {
 				vn_fullpath(p, vp, &fullpath, &freepath, 1);
@@ -2123,7 +2149,6 @@ sysctl_kern_proc_vmmap(SYSCTL_HANDLER_ARGS)
 		vme->kve_timestamp = last_timestamp;
 		vme->kve_size =
 		    offsetof(struct kinfo_vmentry, kve_path) + pathlen;
-		total_size += vme->kve_size;
 		error = SYSCTL_OUT(req, vme, vme->kve_size);
 		vm_map_lock_read(map);
 		if (error != 0)
@@ -2210,5 +2235,5 @@ SYSCTL_PROC(_kern_proc, KERN_PROC_SIGTRAMP, sigtramp,
         0, 0, sysctl_kern_proc_sigtramp, "S,sigtramp",
         "Return sigtramp address range");
 
-static SYSCTL_NODE(_kern_proc, KERN_PROC_VMMAP, vmmap, CTLFLAG_RD,
+static SYSCTL_NODE(_kern_proc, KERN_PROC_VMMAP, vmmap, CTLFLAG_RW,
 	sysctl_kern_proc_vmmap, "Process virtual memory mappings");
