@@ -1927,6 +1927,21 @@ sysctl_kern_proc_sigtramp(SYSCTL_HANDLER_ARGS)
         return (error);
 }
 
+static uint8_t
+kern_prot_to_vmentry(vm_prot_t prot)
+{
+	uint8_t val = 0;
+
+	if (prot & VM_PROT_READ)
+		val |= KVE_PROT_READ;
+	if (prot & VM_PROT_WRITE)
+		val |= KVE_PROT_WRITE;
+	if (prot & VM_PROT_EXECUTE)
+		val |= KVE_PROT_EXEC;
+
+	return val;
+}
+
 static int
 sysctl_kern_proc_vmmap(SYSCTL_HANDLER_ARGS)
 {
@@ -1994,8 +2009,9 @@ sysctl_kern_proc_vmmap(SYSCTL_HANDLER_ARGS)
 		vm_offset_t e_start, e_end;
 		vm_ooffset_t e_offset;
 		vm_eflags_t e_eflags;
-		vm_prot_t e_prot;
-		int privateresident;
+		vm_prot_t e_prot, e_maxprot;
+		vm_inherit_t e_inherit;
+		int privateresident, e_wired;
 		char *fullpath, *freepath;
 		size_t pathlen = 0;
 
@@ -2026,8 +2042,11 @@ sysctl_kern_proc_vmmap(SYSCTL_HANDLER_ARGS)
 
 		e_eflags = entry->eflags;
 		e_prot = entry->protection;
+		e_maxprot = entry->max_protection;
 		e_start = entry->start;
 		e_end = entry->end;
+		e_wired = entry->wired_count;
+		e_inherit = entry->inheritance;
 
 		if (obj) {
 			lobj = obj;
@@ -2133,17 +2152,28 @@ sysctl_kern_proc_vmmap(SYSCTL_HANDLER_ARGS)
 		}
 		vme->kve_start = e_start;
 		vme->kve_end = e_end;
-		vme->kve_prot = e_prot;
+		vme->kve_protection = kern_prot_to_vmentry(e_prot);
+		vme->kve_max_protection = kern_prot_to_vmentry(e_maxprot);
 		vme->kve_flags = flags;
+
 		vme->kve_eflags = 0;
 		if (e_eflags & MAP_ENTRY_COW)
 			vme->kve_eflags |= KVE_EFLAGS_COW;
 		if (e_eflags & MAP_ENTRY_NEEDS_COPY)
 			vme->kve_eflags |= KVE_EFLAGS_NC;
+
+		if (e_inherit == VM_INHERIT_SHARE)
+			vme->kve_inheritance = KVE_INH_SHARE;
+		else if (e_inherit == VM_INHERIT_COPY)
+			vme->kve_inheritance = KVE_INH_COPY;
+		else
+			vme->kve_inheritance = KVE_INH_NONE;
+
 		vme->kve_refcount = ref_count;
 		vme->kve_shadowcount = shadow_count;
 		vme->kve_privateresident = privateresident;
 		vme->kve_etype = type;
+		vme->kve_wired_count = e_wired;
 		vme->kve_offset = e_offset;
 		vme->kve_addr = (uintptr_t)obj;
 		vme->kve_timestamp = last_timestamp;
