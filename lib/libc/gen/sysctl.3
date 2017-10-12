@@ -489,13 +489,46 @@ A process ID of
 implies the current process.
 .El
 .Pp
+For the
+.Dv KERN_PROC_VMMAP
+name, a sequence of
+.Vt struct kinfo_vmentry
+structures is returned.
+The fourth level name specifies a process ID.
+A process ID of
+.Li \-1 implies the current process.
+The length of each
+.Vt struct kinfo_vmentry
+element is specified by the
+.Va kve_size
+variable.
+The
+.Va kve_path
+variable at the end of
+.Vt struct kinfo_vmentry
+is an optional NUL-terminated string.
 The
 .Dv KERN_PROC_VMMAP
-third level name can be used to query the virtual memory mappings of a
-process ID specified by the Fourth level name.
-A process ID of
-.Li \-1
-implies the current process.
+sysctl can be used to query the virtual memory mappings of a process.
+The sysctl optionally accepts one
+.Vt struct kinfo_vmentry
+as input, to allow querying a subrange of the virtual memory, by setting the
+.Va kve_start
+and/or
+.Va kve_end
+values.
+A value of 0 for
+.Va kve_start
+or
+.Va kve_end
+implies iteration from the beginning or until the end respectively.
+This can be used to iterate over the virtual memory address space, by
+setting
+.Va kve_start
+of the input structure to the value of
+.Va kve_end
+in the last returned
+.Vt struct kinfo_vmentry .
 .It Dv KERN_PROF
 Return profiling information about the kernel.
 If the kernel is not compiled for profiling,
