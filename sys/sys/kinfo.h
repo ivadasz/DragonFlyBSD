@@ -240,10 +240,15 @@ struct kinfo_vmentry {
 #define KVE_PROT_READ	0x1
 #define KVE_PROT_WRITE	0x2
 #define KVE_PROT_EXEC	0x4
-	uint8_t kve_flags;
-	uint8_t kve_eflags;
-#define KVE_EFLAGS_COW 0x01
-#define KVE_EFLAGS_NC 0x02
+	uint16_t kve_eflags;
+#define KVE_EFLAGS_COPYONWRITE 0x0001
+#define KVE_EFLAGS_NEEDSCOPY 0x0002
+#define KVE_EFLAGS_NOFAULT 0x0004
+#define KVE_EFLAGS_STACK 0x0008
+#define KVE_EFLAGS_WIRED 0x0010
+#define KVE_EFLAGS_NOSYNC 0x0020
+#define KVE_EFLAGS_ADV_RANDOM 0x0040
+#define KVE_EFLAGS_ADV_SEQUENTIAL 0x0080
 	uint8_t kve_inheritance;
 #define KVE_INH_SHARE	0
 #define KVE_INH_COPY	1

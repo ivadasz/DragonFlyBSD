@@ -2005,7 +2005,7 @@ sysctl_kern_proc_vmmap(SYSCTL_HANDLER_ARGS)
 
 	for (; entry != &map->header; entry = entry->next) {
 		vm_object_t obj, tobj, lobj;
-		int ref_count, shadow_count, flags, type;
+		int ref_count, shadow_count, type;
 		vm_offset_t e_start, e_end;
 		vm_ooffset_t e_offset;
 		vm_eflags_t e_eflags;
@@ -2100,7 +2100,6 @@ sysctl_kern_proc_vmmap(SYSCTL_HANDLER_ARGS)
 			if (lobj != obj)
 				vm_object_drop(lobj);
 
-			flags = obj->flags;
 			ref_count = obj->ref_count;
 			shadow_count = obj->shadow_count;
 			e_offset = obj->backing_object_offset;
@@ -2111,7 +2110,6 @@ sysctl_kern_proc_vmmap(SYSCTL_HANDLER_ARGS)
 			}
 		} else {
 			e_offset = 0;
-			flags = 0;
 			ref_count = 0;
 			shadow_count = 0;
 			switch (entry->maptype) {
@@ -2154,13 +2152,24 @@ sysctl_kern_proc_vmmap(SYSCTL_HANDLER_ARGS)
 		vme->kve_end = e_end;
 		vme->kve_protection = kern_prot_to_vmentry(e_prot);
 		vme->kve_max_protection = kern_prot_to_vmentry(e_maxprot);
-		vme->kve_flags = flags;
 
 		vme->kve_eflags = 0;
 		if (e_eflags & MAP_ENTRY_COW)
-			vme->kve_eflags |= KVE_EFLAGS_COW;
+			vme->kve_eflags |= KVE_EFLAGS_COPYONWRITE;
 		if (e_eflags & MAP_ENTRY_NEEDS_COPY)
-			vme->kve_eflags |= KVE_EFLAGS_NC;
+			vme->kve_eflags |= KVE_EFLAGS_NEEDSCOPY;
+		if (e_eflags & MAP_ENTRY_NOFAULT)
+			vme->kve_eflags |= KVE_EFLAGS_NOFAULT;
+		if (e_eflags & MAP_ENTRY_STACK)
+			vme->kve_eflags |= KVE_EFLAGS_STACK;
+		if (e_eflags & MAP_ENTRY_USER_WIRED)
+			vme->kve_eflags |= KVE_EFLAGS_WIRED;
+		if (e_eflags & MAP_ENTRY_NOSYNC)
+			vme->kve_eflags |= KVE_EFLAGS_NOSYNC;
+		if (e_eflags & MAP_ENTRY_BEHAV_SEQUENTIAL)
+			vme->kve_eflags |= KVE_EFLAGS_ADV_SEQUENTIAL;
+		if (e_eflags & MAP_ENTRY_BEHAV_RANDOM)
+			vme->kve_eflags |= KVE_EFLAGS_ADV_RANDOM;
 
 		if (e_inherit == VM_INHERIT_SHARE)
 			vme->kve_inheritance = KVE_INH_SHARE;
