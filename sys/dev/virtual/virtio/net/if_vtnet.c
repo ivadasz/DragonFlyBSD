@@ -157,11 +157,13 @@ static int	vtnet_set_allmulti(struct vtnet_softc *, int);
 static void	vtnet_rx_filter(struct vtnet_softc *sc);
 static void	vtnet_rx_filter_mac(struct vtnet_softc *);
 
+#if 0
 static int	vtnet_exec_vlan_filter(struct vtnet_softc *, int, uint16_t);
 static void	vtnet_rx_filter_vlan(struct vtnet_softc *);
 static void	vtnet_update_vlan_filter(struct vtnet_softc *, int, uint16_t);
 static void	vtnet_register_vlan(void *, struct ifnet *, uint16_t);
 static void	vtnet_unregister_vlan(void *, struct ifnet *, uint16_t);
+#endif
 
 static int	vtnet_ifmedia_upd(struct ifnet *);
 static void	vtnet_ifmedia_sts(struct ifnet *, struct ifmediareq *);
@@ -801,8 +803,10 @@ vtnet_setup_interface(struct vtnet_softc *sc)
 			ifp->if_capabilities |= IFCAP_TSO4;
 		if (virtio_with_feature(dev, VIRTIO_NET_F_HOST_TSO6))
 			ifp->if_capabilities |= IFCAP_TSO6;
+#if 0	/* IFCAP_VLAN_HWTSO doesn't exist in DragonFly. */
 		if (ifp->if_capabilities & IFCAP_TSO)
 			ifp->if_capabilities |= IFCAP_VLAN_HWTSO;
+#endif
 
 		if (virtio_with_feature(dev, VIRTIO_NET_F_HOST_ECN))
 			sc->vtnet_flags |= VTNET_FLAG_TSO_ECN;
@@ -834,6 +838,7 @@ vtnet_setup_interface(struct vtnet_softc *sc)
 	 * Capabilities after here are not enabled by default.
 	 */
 
+#if 0	/* VLAN filter hardware offload isn't supported by DragonFly, yet. */
 	if (sc->vtnet_flags & VTNET_FLAG_VLAN_FILTER) {
 		ifp->if_capabilities |= IFCAP_VLAN_HWFILTER;
 
@@ -842,6 +847,7 @@ vtnet_setup_interface(struct vtnet_softc *sc)
 		sc->vtnet_vlan_detach = EVENTHANDLER_REGISTER(vlan_unconfig,
 		    vtnet_unregister_vlan, sc, EVENTHANDLER_PRI_FIRST);
 	}
+#endif
 
 	return (0);
 }
@@ -1053,13 +1059,17 @@ vtnet_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data,struct ucred *cr)
 		}
 #endif
 
+#if 0	/* IFCAP_VLAN_HWFILTER doesn't exist in DragonFly. */
 		if (mask & IFCAP_VLAN_HWFILTER) {
 			ifp->if_capenable ^= IFCAP_VLAN_HWFILTER;
 			reinit = 1;
 		}
+#endif
 
+#if 0	/* IFCAP_VLAN_HWTSO doesn't exist in DragonFly. */
 		if (mask & IFCAP_VLAN_HWTSO)
 			ifp->if_capenable ^= IFCAP_VLAN_HWTSO;
+#endif
 
 		if (mask & IFCAP_VLAN_HWTAGGING)
 			ifp->if_capenable ^= IFCAP_VLAN_HWTAGGING;
@@ -2254,10 +2264,12 @@ vtnet_virtio_reinit(struct vtnet_softc *sc)
 	}
 #endif
 
+#if 0	/* IFCAP_VLAN_HWFILTER doesn't exist in DragonFly. */
 	if (ifp->if_capabilities & IFCAP_VLAN_HWFILTER) {
 		if ((ifp->if_capenable & IFCAP_VLAN_HWFILTER) == 0)
 			features &= ~VIRTIO_NET_F_CTRL_VLAN;
 	}
+#endif
 
 	error = virtio_reinit(dev, features);
 	if (error)
@@ -2322,9 +2334,11 @@ vtnet_init(void *xsc)
 			vtnet_rx_filter_mac(sc);
 		}
 
+#if 0	/* IFCAP_VLAN_HWFILTER doesn't exist in DragonFly. */
 		/* Restore VLAN filters. */
 		if (ifp->if_capenable & IFCAP_VLAN_HWFILTER)
 			vtnet_rx_filter_vlan(sc);
+#endif
 	}
 
 #ifdef IFPOLL_ENABLE
@@ -2600,6 +2614,11 @@ out:
 		if_printf(ifp, "cannot enable all-multicast mode\n");
 }
 
+/*
+ * The IFCAP_VLAN_HWFILTER flag and the vlan_config EVENTHANDLER don't exist
+ * in DragonFly.
+ */
+#if 0
 static int
 vtnet_exec_vlan_filter(struct vtnet_softc *sc, int add, uint16_t tag)
 {
@@ -2716,6 +2735,7 @@ vtnet_unregister_vlan(void *arg, struct ifnet *ifp, uint16_t tag)
 
 	vtnet_update_vlan_filter(arg, 0, tag);
 }
+#endif
 
 static int
 vtnet_ifmedia_upd(struct ifnet *ifp)

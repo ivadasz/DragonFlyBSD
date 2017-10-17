@@ -225,17 +225,6 @@ struct vtnet_mac_filter {
 #endif
 
 /*
- * This allows lots of code to at least build, even if it's never executed
- * at the moment.
- */
-#ifndef IFCAP_VLAN_HWFILTER
-#define IFCAP_VLAN_HWFILTER	0
-#endif
-#ifndef IFCAP_VLAN_HWTSO
-#define IFCAP_VLAN_HWTSO	0
-#endif
-
-/*
  * Assert we can receive and transmit the maximum with regular
  * size clusters.
  */
