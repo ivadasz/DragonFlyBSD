@@ -87,6 +87,7 @@ LIBRESSL?=	${DESTDIR}${LIBDIR}/priv/libprivate_ssl.a
 LIBSTAND?=	${DESTDIR}${LIBDIR}/libstand.a
 LIBTACPLUS?=	${DESTDIR}${LIBDIR}/libtacplus.a
 LIBTCPLAY?=	${DESTDIR}${LIBDIR}/libtcplay.a
+LIBTEKEN?=	${DESTDIR}${LIBDIR}/priv/libprivate_teken.a
 LIBUSBHID?=	${DESTDIR}${LIBDIR}/libusbhid.a
 LIBUSB?=	${DESTDIR}${LIBDIR}/libusb.a
 LIBUTIL?=	${DESTDIR}${LIBDIR}/libutil.a

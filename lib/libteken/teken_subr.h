@@ -326,11 +326,11 @@ teken_subr_cursor_position(teken_t *t, unsigned int row, unsigned int col)
 
 	row = row - 1 + t->t_originreg.ts_begin;
 	t->t_cursor.tp_row = row < t->t_originreg.ts_end ?
-	    row : t->t_originreg.ts_end - 1;
+	    row : (unsigned int)t->t_originreg.ts_end - 1;
 
 	col--;
 	t->t_cursor.tp_col = col < t->t_winsize.tp_col ?
-	    col : t->t_winsize.tp_col - 1;
+	    col : (unsigned int)t->t_winsize.tp_col - 1;
 
 	t->t_stateflags &= ~TS_WRAPPED;
 	teken_funcs_cursor(t);
@@ -585,7 +585,7 @@ teken_subr_horizontal_position_absolute(teken_t *t, unsigned int col)
 
 	col--;
 	t->t_cursor.tp_col = col < t->t_winsize.tp_col ?
-	    col : t->t_winsize.tp_col - 1;
+	    col : (unsigned int)t->t_winsize.tp_col - 1;
 
 	t->t_stateflags &= ~TS_WRAPPED;
 	teken_funcs_cursor(t);
@@ -1299,7 +1299,7 @@ teken_subr_vertical_position_absolute(teken_t *t, unsigned int row)
 
 	row = row - 1 + t->t_originreg.ts_begin;
 	t->t_cursor.tp_row = row < t->t_originreg.ts_end ?
-	    row : t->t_originreg.ts_end - 1;
+	    row : (unsigned int)t->t_originreg.ts_end - 1;
 
 	t->t_stateflags &= ~TS_WRAPPED;
 	teken_funcs_cursor(t);
