@@ -39,6 +39,7 @@ LIBFSID?=	${DESTDIR}${LIBDIR}/libfsid.a
 LIBFTPIO?=	${DESTDIR}${LIBDIR}/libftpio.a
 LIBHAMMER?=	${DESTDIR}${LIBDIR}/libhammer.a
 LIBIPSEC?=	${DESTDIR}${LIBDIR}/libipsec.a
+LIBKBDMAP?=	${DESTDIR}${LIBDIR}/priv/libprivate_kbdmap.a
 LIBKCORE?=	${DESTDIR}${LIBDIR}/libkcore.a
 LIBKICONV?=	${DESTDIR}${LIBDIR}/libkiconv.a
 LIBKINFO?=	${DESTDIR}${LIBDIR}/libkinfo.a
