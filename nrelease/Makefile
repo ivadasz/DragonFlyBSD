@@ -8,7 +8,7 @@
 #
 # img is now the default (produces both the .iso and .img)
 #
-gui installer img nopkgs:
+gui installer img nopkgs gce:
 
 #########################################################################
 #				 SETUP					#
@@ -25,7 +25,11 @@ MAKE_JOBS?=	$$(sysctl -n hw.ncpu)
 # XXX makeshift fix to build the right kernel for the (target) architecture
 # We should configure this in the platform files somehow
 .if ${MACHINE_ARCH} == "x86_64"
+.if make(gce)
+KERNCONF ?= VIRTGUEST64
+.else
 KERNCONF ?= X86_64_GENERIC
+.endif
 .endif
 
 CHROOT_CMD?=		/usr/sbin/chroot ${ISOROOT} sh -c
@@ -37,11 +41,17 @@ DPORTS_EXTRA_PACKAGES?=
 
 # dports packages to be built and installed on the release ISO
 #
+# MISSING: csup
+#
+.if make(gce)
+DPORTS_PACKAGES?=	${DPORTS_EXTRA_PACKAGES}
+.else
 DPORTS_PACKAGES?=	devel/git \
 			dns/bind-tools \
 			net/isc-dhcp43-server \
 			sysutils/cdrtools \
 			${DPORTS_EXTRA_PACKAGES}
+.endif
 
 # dports options to use when building packages
 #
@@ -52,6 +62,16 @@ DPORTS_OPTIONS.devel_git+=	-DWITH_GUI
 DPORTS_OPTIONS.devel_git+=	-DWITHOUT_CONTRIB -DWITHOUT_PERL
 .endif
 .endif
+
+
+.if make(gce)
+IMGFILE?=	${ISODIR}/dfly-gce.img
+ROOTSKELS?=	${.CURDIR}/gce_root
+# When using virtio-scsi the image should show up on da0.
+# XXX There should be a better mechanism on gce.
+#
+IMGUSBDEV ?= vbd0
+.else
 
 # Specify which root skeletons are required, and let the user include
 # their own.  They are copied into ISODIR during the `customizeiso'
@@ -103,12 +123,14 @@ ROOTSKELS+=		${.CURDIR}/gui
 ISOFILE ?= ${ISODIR}/dfly.iso
 IMGFILE ?= ${ISODIR}/dfly.img
 
-IMGMNT ?= ${ISODIR}/mnt
-
 # USB umass now probes starting at da8, so the usb stick is
 # probably sitting on da8.
 #
 IMGUSBDEV ?= da8
+
+.endif
+
+IMGMNT ?= ${ISODIR}/mnt
 
 # note: we use the '${NRLOBJDIR}/nrelease' construct, that is we add
 # the additional '/nrelease' manually, as a safety measure.
@@ -119,16 +141,22 @@ NRLOBJDIR?= /usr/obj
 #				BASE ISO TARGETS			#
 #########################################################################
 
+.if make(gce)
+IMGS=mkimg
+.else
+IMGS=mkiso mkimg
+.endif
+
 release:	check clean buildworld1 buildkernel1 \
-		buildiso srcs customizeiso mkiso mkimg
+		buildiso srcs customizeiso ${IMGS}
 
 quickrel:	check clean buildworld2 buildkernel2 \
-		buildiso srcs customizeiso mkiso mkimg
+		buildiso srcs customizeiso ${IMGS}
 
 realquickrel:	check clean \
-		buildiso srcs customizeiso mkiso mkimg
+		buildiso srcs customizeiso ${IMGS}
 
-restartpkgs:	check customizeiso mkiso mkimg
+restartpkgs:	check customizeiso ${IMGS}
 
 quick:		quickrel
 
@@ -139,7 +167,7 @@ realquick:	realquickrel
 #########################################################################
 
 check:
-.if !exists(/usr/local/bin/mkisofs) && !exists(/usr/pkg/bin/mkisofs)
+.if !make(gce) && !exists(/usr/local/bin/mkisofs) && !exists(/usr/pkg/bin/mkisofs)
 	@echo
 	@echo "Your machine does not have cdrtools installed.  You can install it with:"
 	@echo "    pkg install cdrtools"
@@ -152,7 +180,7 @@ check:
 		echo "/usr if you are unfamiliar with dports."; \
 		/usr/bin/false; \
 	fi
-.if !exists(/usr/local/bin/mkisofs) && !exists(/usr/pkg/bin/mkisofs)
+.if !make(gce) && !exists(/usr/local/bin/mkisofs) && !exists(/usr/pkg/bin/mkisofs)
 	@/usr/bin/false
 .endif
 	@echo "Using ${DPORTS_PATH} as the dports tree."
@@ -189,7 +217,9 @@ buildiso:
 	( cd ${.CURDIR}/..; make -DWANT_INSTALLER DESTDIR=${ISOROOT} installworld )
 	( cd ${.CURDIR}/../etc; MAKEOBJDIRPREFIX=${NRLOBJDIR}/nrelease \
 		make -m ${.CURDIR}/../share/mk DESTDIR=${ISOROOT} distribution )
+.if !make(gce)
 	cpdup ${ISOROOT}/etc ${ISOROOT}/etc.hdd
+.endif
 	cd ${.CURDIR}/..; \
 	for kernconf in ${KERNCONF}; do \
 		make DESTDIR=${ISOROOT} reinstallkernel KERNCONF=$${kernconf}; \
@@ -304,11 +334,13 @@ customizeiso:
 	#
 	-${CHROOT_CMD} /etc/periodic/weekly/310.locate
 	umount ${ISOROOT}/dev
+.if !make(gce)
 	#
 	# Recopy files that dports may have updated in /etc into /etc.hdd
 	#
 	cpdup ${ISOROOT}/etc/shells ${ISOROOT}/etc.hdd/shells
 	cpdup ${ISOROOT}/etc/group ${ISOROOT}/etc.hdd/group
+.endif
 
 mkiso:
 	if [ ! -d ${IMGMNT} ]; then mkdir -p ${IMGMNT}; fi
@@ -381,7 +413,12 @@ mkimg:
 	mount /dev/`cat ${ISODIR}/vn.which`s2a ${IMGMNT}
 	cpdup ${ISOROOT} ${IMGMNT}
 	@echo "STEP: fixup ${IMGMNT}/etc/fstab"
+.if make(gce)
+	uuid="$$(disklabel -r $$(cat ${ISODIR}/vn.which)s2 | grep a-stor_uuid | awk '{print $$2}')"; \
+	    echo "/dev/part-by-uuid/$${uuid} / ufs ro,noatime 0 1" > ${IMGMNT}/etc/fstab
+.else
 	echo "/dev/${IMGUSBDEV}s2a / ufs rw,noatime 0 1" > ${IMGMNT}/etc/fstab
+.endif
 	echo "dummy /tmp tmpfs rw 0 0" >> ${IMGMNT}/etc/fstab
 	echo "dummy /var/tmp tmpfs rw 0 0" >> ${IMGMNT}/etc/fstab
 	echo "dummy /var/run tmpfs rw,-C 0 0" >> ${IMGMNT}/etc/fstab
@@ -389,7 +426,12 @@ mkimg:
 	echo "proc /proc procfs rw 0 0" >> ${IMGMNT}/etc/fstab
 	@echo "STEP: fixup ${IMGMNT}/boot/loader.conf"
 	-fgrep -v kernel_options ${IMGMNT}/boot/loader.conf > ${IMGMNT}/boot/loader.conf.new
+.if make(gce)
+	uuid="$$(disklabel -r $$(cat ${ISODIR}/vn.which)s2 | grep a-stor_uuid | awk '{print $$2}')"; \
+	    echo vfs.root.mountfrom="ufs:part-by-uuid/$${uuid}" >> ${IMGMNT}/boot/loader.conf.new
+.else
 	echo 'vfs.root.mountfrom="ufs:${IMGUSBDEV}s2a"' >> ${IMGMNT}/boot/loader.conf.new
+.endif
 	mv ${IMGMNT}/boot/loader.conf.new ${IMGMNT}/boot/loader.conf
 	@echo "STEP: cleanup"
 	df ${IMGMNT}

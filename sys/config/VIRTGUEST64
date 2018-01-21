@@ -1,0 +1,106 @@
+#
+# VIRTGUEST64 -- KVM guest optimized configuration file for DragonFly/x86_64
+#
+# Check the LINT64 configuration file in sys/config, for an
+# exhaustive list of options.
+
+platform	pc64
+machine		x86_64
+machine_arch	x86_64
+cpu		HAMMER_CPU
+ident		X86_64_GENERIC
+maxusers	0
+#options	CPU_DISABLE_AVX
+
+makeoptions	DEBUG=-g		#Build kernel with gdb(1) debug symbols
+
+options 	INET			#InterNETworking
+options 	INET6			#IPv6 communications protocols
+options 	HAMMER			#Hammer Filesystem
+options		HAMMER2			#HAMMER2 filesystem
+options		NULLFS			#NULL filesystem
+options 	FFS			#Berkeley Fast Filesystem
+options 	SOFTUPDATES		#Enable FFS soft updates support
+options 	UFS_DIRHASH		#Improve performance on big directories
+options 	MFS			#Memory Filesystem
+options 	TMPFS			#Temporary Filesystem
+options 	MD_ROOT			#MD is a potential root device
+options 	NFS			#Network Filesystem
+options 	NFS_ROOT		#NFS usable as root device, NFS required
+options 	MSDOSFS			#MSDOS Filesystem
+options 	CD9660			#ISO 9660 Filesystem
+options 	PROCFS			#Process filesystem
+options 	SCSI_DELAY=0		#Delay (in ms) before probing SCSI
+options		IFPOLL_ENABLE		# Support mixed interrupt-polling
+					# handling of network device drivers
+options 	UCONSOLE		#Allow users to grab the console
+options 	KTRACE			#ktrace(1) support
+options 	_KPOSIX_PRIORITY_SCHEDULING
+options 	ICMP_BANDLIM		#Rate limit bad replies
+options 	KBD_INSTALL_CDEV	# install a CDEV entry in /dev
+
+# ALTQ
+options		ALTQ		#alternate queueing
+options		ALTQ_CBQ	#class based queueing
+options		ALTQ_RED	#random early detection
+options		ALTQ_RIO	#triple red for diffserv (needs RED)
+options		ALTQ_HFSC	#hierarchical fair service curve
+options		ALTQ_PRIQ	#priority queue
+options		ALTQ_FAIRQ	#fair queueing
+#options	ALTQ_NOPCC	#don't use processor cycle counter
+#options	ALTQ_DEBUG	#for debugging
+
+# Debugging for Development
+options 	DDB
+options 	DDB_TRACE
+options 	INVARIANTS
+
+device		isa
+device		acpi
+device		pci
+
+# NVME driver, direct PCIe-attached SSD cards
+#
+device		nvme
+
+# SCSI peripherals
+device		scbus		# SCSI bus (required)
+device		da		# Direct Access (disks)
+
+# VirtIO support
+device		virtio		# VirtIO core
+device		virtio_blk	# VirtIO disk driver
+device		virtio_scsi	# VirtIO SCSI driver
+device		vtnet		# VirtIO network driver
+
+# Serial (COM) ports
+device		sio0	at isa? port IO_COM1 flags 0x10 irq 4
+device		sio1	at isa? port IO_COM2 irq 3
+device		sio2	at isa? disable port IO_COM3 irq 5
+device		sio3	at isa? disable port IO_COM4 irq 9
+
+# Pseudo devices - the number indicates how many units to allocate.
+pseudo-device	loop		# Network loopback
+pseudo-device	ether		# Ethernet support
+pseudo-device	tun		# Packet tunnel.
+pseudo-device	pty		# Pseudo-ttys (telnet etc)
+pseudo-device	md		# Memory "disks"
+pseudo-device	vn		# File image "disks"
+pseudo-device	gif		# IPv6 and IPv4 tunneling
+pseudo-device   lagg
+
+# CARP support
+options		CARP
+pseudo-device	carp
+
+# The `bpf' pseudo-device enables the Berkeley Packet Filter.
+# Be aware of the administrative consequences of enabling this!
+pseudo-device	bpf		#Berkeley packet filter
+
+device		crypto		# core crypto support, used by wlan
+device		cryptodev	# /dev/crypto for access to h/w
+
+# RNG
+#
+device		aesni		# hardware crypto/RNG for AES-NI
+device		rdrand		# hardware RNG for RdRand
