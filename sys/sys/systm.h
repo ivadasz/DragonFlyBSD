@@ -156,6 +156,9 @@ int	cpu_sanitize_tls (struct savetls *);
 void	cpu_spinlock_contested(void);
 void	cpu_halt (void) __dead2;
 void	cpu_idle_halt (void);
+#if !defined(_KERNEL_VIRTUAL)
+void	cpu_modern_reset (void);
+#endif
 void	cpu_reset (void);
 void	cpu_boot (int);
 void	cpu_rootconf (void);

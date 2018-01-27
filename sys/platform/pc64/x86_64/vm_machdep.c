@@ -79,6 +79,8 @@
 
 #include <bus/isa/isa.h>
 
+#include "../acpica/acpi_fixed_var.h"
+
 static void	cpu_reset_real (void);
 
 static int spectre_mitigation = -1;
@@ -350,6 +352,19 @@ cpu_thread_exit(void)
 void
 cpu_reset(void)
 {
+	cpu_reset_real();
+}
+
+void
+cpu_modern_reset(void)
+{
+	/* Attempt an ACPI reset first. */
+	if (acpi_cpu_reset() == 0) {
+		DELAY(500000);	/* wait 0.5 sec to see if this worked */
+		kprintf("Acpi reset did not work, attempting Keyboard reset\n");
+		DELAY(1000000);	/* wait 1 sec for kprintf to complete */
+	}
+
 	cpu_reset_real();
 }
 

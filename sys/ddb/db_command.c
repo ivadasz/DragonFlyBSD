@@ -621,5 +621,10 @@ db_gdb(db_expr_t dummy1, boolean_t dummy2, db_expr_t dummy3, char *dummy4)
 static void
 db_reset(db_expr_t dummy1, boolean_t dummy2, db_expr_t dummy3, char * dummy4)
 {
+#if defined(_KERNEL_VIRTUAL)
 	cpu_reset();
+#else
+	/* Allows for ACPI Reset */
+	cpu_modern_reset();
+#endif
 }

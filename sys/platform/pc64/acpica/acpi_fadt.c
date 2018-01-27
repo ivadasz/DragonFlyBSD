@@ -40,10 +40,13 @@
 #include <sys/systm.h>
 #include <sys/thread2.h>
 
+#include <machine/pmap.h>
+
 #include <contrib/dev/acpica/source/include/acpi.h>
 
 #include "acpi_sdt_var.h"
 #include "acpi_sci_var.h"
+#include "acpi_fixed_var.h"
 
 #define FADT_VPRINTF(fmt, arg...) \
 do { \
@@ -73,6 +76,86 @@ static const struct acpi_sci_mode acpi_sci_modes[] = {
 	/* Required last entry */
 	{ INTR_TRIGGER_CONFORM,	INTR_POLARITY_CONFORM }
 };
+
+static caddr_t acpi_reset_mmio;
+static int use_acpi_cpu_reset = 0;
+static ACPI_GENERIC_ADDRESS acpi_reset_register;
+static uint8_t acpi_reset_value;
+
+int
+acpi_cpu_reset(void)
+{
+	if (use_acpi_cpu_reset == 0)
+		return 1;
+
+	if (acpi_reset_register.Address == 0)
+		return 1;
+
+	if (acpi_reset_register.SpaceId == ACPI_ADR_SPACE_SYSTEM_MEMORY) {
+		switch (acpi_reset_register.AccessWidth) {
+		case 1:
+			writeb(acpi_reset_mmio, acpi_reset_value);
+		case 2:
+			writew(acpi_reset_mmio, acpi_reset_value);
+		case 3:
+			writel(acpi_reset_mmio, acpi_reset_value);
+		case 4:
+			writeq(acpi_reset_mmio, acpi_reset_value);
+		default:
+			return 1;
+		}
+		return 0;
+	} else if (acpi_reset_register.SpaceId == ACPI_ADR_SPACE_SYSTEM_IO) {
+		outb(acpi_reset_register.Address, acpi_reset_value);
+		return 0;
+	}
+
+	return 1;
+}
+
+static void
+acpi_reset_probe(ACPI_TABLE_FADT *fadt)
+{
+	u_int length;
+
+	if (fadt->Flags & ACPI_FADT_RESET_REGISTER) {
+		acpi_reset_register = fadt->ResetRegister;
+		acpi_reset_value = fadt->ResetValue;
+		if (acpi_reset_register.Address == 0)
+			return;
+		if (acpi_reset_register.SpaceId ==
+		    ACPI_ADR_SPACE_SYSTEM_MEMORY) {
+			/* Bit width must be 8, and Bit Offset must be 0. */
+			if (acpi_reset_register.BitOffset != 0 ||
+			    acpi_reset_register.BitWidth != 8) {
+				return;
+			}
+			switch (acpi_reset_register.AccessWidth) {
+			case 1:
+				length = 1;
+			case 2:
+				length = 2;
+			case 3:
+				length = 4;
+			case 4:
+				length = 8;
+			default:
+				return;
+			}
+			acpi_reset_mmio =
+			    pmap_mapdev(acpi_reset_register.Address, length);
+			if (acpi_reset_mmio != NULL)
+				use_acpi_cpu_reset = 1;
+		} else if (acpi_reset_register.SpaceId ==
+		    ACPI_ADR_SPACE_SYSTEM_IO) {
+			/*
+			 * We shouldn't be strict about the register address
+			 * here.
+			 */
+			use_acpi_cpu_reset = 1;
+		}
+	}
+}
 
 /* Defaulting to 1, to stop atkbdc from being configured early, via cninit() */
 int acpi_fadt_8042_nolegacy = 1;
@@ -119,6 +202,8 @@ fadt_probe(void)
 	} else {
 		acpi_fadt_8042_nolegacy = 0;
 	}
+
+	acpi_reset_probe(fadt);
 
 	kgetenv_int("hw.acpi.sci.enabled", &enabled);
 	if (!enabled)
