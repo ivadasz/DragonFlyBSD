@@ -533,27 +533,33 @@ cnpoll(int on)
 void
 cnputc(int c)
 {
+	cnputc_buf(c, 1);
+}
+
+void
+cnputc_buf(int c, int flush)
+{
 	char *cp;
 
 	if ((cn_tab == NULL) || cn_mute)
 		return;
 	if (c) {
 		if (c == '\n')
-			(*cn_tab->cn_putc)(cn_tab->cn_private, '\r');
-		(*cn_tab->cn_putc)(cn_tab->cn_private, c);
+			(*cn_tab->cn_putc)(cn_tab->cn_private, '\r', flush);
+		(*cn_tab->cn_putc)(cn_tab->cn_private, c, flush);
 #ifdef DDB
 		if (console_pausing && !db_active && (c == '\n')) {
 #else
 		if (console_pausing && (c == '\n')) {
 #endif
 			for(cp=console_pausestr; *cp != '\0'; cp++)
-			    (*cn_tab->cn_putc)(cn_tab->cn_private, *cp);
+			    (*cn_tab->cn_putc)(cn_tab->cn_private, *cp, flush);
 			if (cngetc() == '.')
 				console_pausing = 0;
-			(*cn_tab->cn_putc)(cn_tab->cn_private, '\r');
+			(*cn_tab->cn_putc)(cn_tab->cn_private, '\r', flush);
 			for(cp=console_pausestr; *cp != '\0'; cp++)
-			    (*cn_tab->cn_putc)(cn_tab->cn_private, ' ');
-			(*cn_tab->cn_putc)(cn_tab->cn_private, '\r');
+			    (*cn_tab->cn_putc)(cn_tab->cn_private, ' ', flush);
+			(*cn_tab->cn_putc)(cn_tab->cn_private, '\r', flush);
 		}
 	}
 }

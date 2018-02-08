@@ -459,7 +459,7 @@ dcons_cncheckc(struct consdev *cp)
 	return (dcons_os_checkc(dc));
 }
 static void
-dcons_cnputc(struct consdev *cp, int c)
+dcons_cnputc(struct consdev *cp, int c, int flush)
 {
 	struct dcons_softc *dc = (struct dcons_softc *)cp->cn_arg;
 	dcons_os_putc(dc, c);
@@ -478,7 +478,7 @@ dcons_cncheckc(void *private)
 	return (dcons_os_checkc(dc));
 }
 static void
-dcons_cnputc(void *private, int c)
+dcons_cnputc(void *private, int c, int flush)
 {
 	struct dcons_softc *dc = (struct dcons_softc *)private;
 	dcons_os_putc(dc, c);

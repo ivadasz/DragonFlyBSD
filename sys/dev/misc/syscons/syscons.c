@@ -1851,7 +1851,7 @@ sccnterm(struct consdev *cp)
  * Console path - cannot block!
  */
 static void
-sccnputc(void *private, int c)
+sccnputc(void *private, int c, int flush)
 {
     u_char buf[1];
     scr_stat *scp = sc_console;
@@ -1867,6 +1867,7 @@ sccnputc(void *private, int c)
     syscons_lock();
 #ifndef SC_NO_HISTORY
     if (scp == scp->sc->cur_scp && scp->status & SLKED) {
+	flush = 1;
 	scp->status &= ~SLKED;
 #if 0
 	/* This can block, illegal in the console path */
@@ -1904,7 +1905,8 @@ sccnputc(void *private, int c)
     sc_puts(scp, buf, 1);
     scp->ts = save;
 
-    sccnupdate(scp);
+    if (flush || scp->sc->fbi == NULL)
+	sccnupdate(scp);
     syscons_unlock();
 }
 

@@ -3225,7 +3225,7 @@ siocngetc(void *private)
 }
 
 static void
-siocnputc(void *private, int c)
+siocnputc(void *private, int c, int flush)
 {
 	int	unit = (int)(intptr_t)private;
 #if 0

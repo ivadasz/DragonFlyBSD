@@ -2215,7 +2215,7 @@ ucom_cngetc(struct consdev *cd)
 }
 
 static void
-ucom_cnputc(void *cd, int c)
+ucom_cnputc(void *cd, int c, int flush)
 	/*
 ucom_cnputc(struct consdev *cd, int c)
 	*/

@@ -50,7 +50,7 @@ typedef	void	cn_init_fini_t (struct consdev *);
 typedef	void	cn_term_t (struct consdev *);
 typedef	int	cn_getc_t (void *);
 typedef	int	cn_checkc_t (void *);
-typedef	void	cn_putc_t (void *, int);
+typedef	void	cn_putc_t (void *, int, int);
 typedef	void	cn_dbctl_t (void *, int);
 typedef void	cn_poll_t (void *, int);
 
@@ -107,6 +107,7 @@ void	cninit (void);
 void	cninit_finish (void);
 void	cndbctl (int);
 void	cnputc (int);
+void	cnputc_buf (int, int);
 void	cnpoll (int);
 
 #endif /* _KERNEL */

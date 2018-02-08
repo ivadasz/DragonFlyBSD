@@ -149,7 +149,7 @@ putDebugChar (int c)		/* write a single character      */
 {
   if (gdb_tab == NULL)
 	return 0;
-  gdb_tab->cn_putc(gdb_tab->cn_gdbprivate, c);
+  gdb_tab->cn_putc(gdb_tab->cn_gdbprivate, c, 1);
   return 1;
 }
 
