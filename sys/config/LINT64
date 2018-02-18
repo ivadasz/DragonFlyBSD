@@ -2110,6 +2110,11 @@ device		ena
 device		vmbus
 
 #
+# KVM guest support
+#
+device		kvmguest
+
+#
 # Virtio support
 #
 device		virtio		# Generic VirtIO bus/PCI interface (required)
