@@ -83,6 +83,7 @@ static int	lapic_calibrate_fast = 1;
 TUNABLE_INT("hw.lapic_calibrate_fast", &lapic_calibrate_fast);
 
 static void	lapic_timer_tscdlt_reload(struct cputimer_intr *, sysclock_t);
+static void	lapic_timer_tscdlt_nofence(struct cputimer_intr *, sysclock_t);
 static void	lapic_mem_timer_intr_reload(struct cputimer_intr *, sysclock_t);
 static void	lapic_msr_timer_intr_reload(struct cputimer_intr *, sysclock_t);
 static void	lapic_timer_intr_enable(struct cputimer_intr *);
@@ -423,10 +424,6 @@ lapic_init(boolean_t bsp)
 				lapic_cputimer_intr.caps |=
 				    CPUTIMER_INTR_CAP_PS;
 			}
-			if (lapic_use_tscdeadline) {
-				lapic_cputimer_intr.reload =
-				    lapic_timer_tscdlt_reload;
-			}
 			cputimer_intr_register(&lapic_cputimer_intr);
 			cputimer_intr_select(&lapic_cputimer_intr, 0);
 		}
@@ -678,6 +675,17 @@ lapic_timer_calibrate(void)
 static void
 lapic_timer_tscdlt_reload(struct cputimer_intr *cti, sysclock_t reload)
 {
+	if (cpu_vendor_id == CPU_VENDOR_INTEL)
+		cpu_lfence();
+	else
+		cpu_mfence();
+
+	lapic_timer_tscdlt_nofence(cti, reload);
+}
+
+static inline void
+lapic_timer_tscdlt_nofence(struct cputimer_intr *cti, sysclock_t reload)
+{
 	struct globaldata *gd = mycpu;
 	uint64_t diff, now, val;
 
@@ -686,12 +694,6 @@ lapic_timer_tscdlt_reload(struct cputimer_intr *cti, sysclock_t reload)
 	diff = ((uint64_t)reload * systimer_to_tsc_factor) >> 28;
 	if (diff < 4)
 		diff = 4;
-#if 0
-	if (cpu_vendor_id == CPU_VENDOR_INTEL)
-		cpu_lfence();
-	else
-		cpu_mfence();
-#endif
 	now = rdtsc();
 	val = now + diff;
 	if (gd->gd_timer_running) {
@@ -767,11 +769,15 @@ lapic_timer_intr_config(struct cputimer_intr *cti __unused,
 	/* Assumes tsc_frequency < 2^33, ca. 8GHz. */
 	systimer_to_tsc_factor = (tsc_frequency << 28) / timer->freq;
 
-	/*
-	 * XXX Explicitly check, if the new timer is using the TSC. If yes, we
-	 *     don't need fences here before the rdtsc().
-	 *     --> This would be one more variant of intr_reload().
-	 */
+	if (lapic_use_tscdeadline) {
+		if (sys_cputimer->type == CPUTIMER_TSC ||
+		    sys_cputimer->type == CPUTIMER_VMM) {
+			lapic_cputimer_intr.reload =
+			    lapic_timer_tscdlt_nofence;
+		} else {
+			lapic_cputimer_intr.reload = lapic_timer_tscdlt_reload;
+		}
+	}
 }
 
 static void
