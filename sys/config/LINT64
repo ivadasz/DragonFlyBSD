@@ -2122,6 +2122,11 @@ device		ena
 device		vmbus
 
 #
+# KVM guest support
+#
+device		kvmguest
+
+#
 # Virtio support
 #
 device		virtio

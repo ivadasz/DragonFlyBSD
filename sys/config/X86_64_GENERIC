@@ -136,6 +136,9 @@ device		mfi		# LSI MegaRAID SAS
 device		mfip		# LSI MegaRAID SAS passthrough, requires CAM
 device		twe		# 3ware Escalade 7000/8000's
 
+# KVM guest support
+device		kvmguest
+
 # VirtIO support
 device		virtio		# VirtIO core
 device		virtio_blk	# VirtIO disk driver

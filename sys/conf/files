@@ -2925,6 +2925,11 @@ dev/virtual/amazon/ena/ena-com/ena_eth_com.c optional ena
 dev/virtual/hyperv/vmbus/vmbus.c	optional vmbus
 
 #
+# KVM guest support
+#
+dev/virtual/kvmguest/kvm_pvclock.c	optional kvmguest
+
+#
 # virtio support
 #
 dev/virtual/virtio/block/virtio_blk.c	optional virtio_blk virtio

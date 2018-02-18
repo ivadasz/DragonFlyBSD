@@ -1,6 +1,6 @@
 .include "${.CURDIR}/../../platform/${MACHINE_PLATFORM}/Makefile.inc"
 
-SUBDIR=	amazon hyperv virtio vkernel vmware
+SUBDIR=	amazon hyperv kvmguest virtio vkernel vmware
 
 .for dir in ${SUBDIR}
 .if empty(DEV_SUPPORT:Mvirtual) && \
