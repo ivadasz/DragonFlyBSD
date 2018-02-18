@@ -3042,6 +3042,10 @@ dev/virtual/nvmm/x86/nvmm_x86_svmfunc.S	optional nvmm
 dev/virtual/nvmm/x86/nvmm_x86_vmx.c	optional nvmm
 dev/virtual/nvmm/x86/nvmm_x86_vmxfunc.S	optional nvmm
 
+# KVM guest support
+#
+dev/virtual/kvmguest/kvm_pvclock.c	optional kvmguest
+
 #
 # virtio support
 #
