@@ -45,6 +45,7 @@
 #include <sys/thread2.h>
 #include <sys/signalvar.h>
 #include <sys/filio.h>
+#include <sys/flexfifo.h>
 
 #include <machine/console.h>
 #include <sys/mouse.h>
@@ -55,15 +56,8 @@
 
 #define FIFO_SIZE	256
 
-struct event_fifo {
-	mouse_info_t buf[FIFO_SIZE];
-	int start;
-	int fill;
-	unsigned int dropped;
-};
-
 struct sysmouse_state {
-	struct event_fifo *fifo;
+	struct flexfifo *fifo;
 	int level;	/* sysmouse protocol level */
 	mousestatus_t syncstatus;
 	mousestatus_t readstatus;	/* Only needed for button status */
@@ -92,18 +86,14 @@ static struct dev_ops sm_ops = {
 /* local variables */
 static struct sysmouse_state mouse_state;
 
-static int	sysmouse_evtopkt(struct sysmouse_state *sc, mouse_info_t *info,
-		    u_char *buf);
-static void	smqueue(struct sysmouse_state *sc, mouse_info_t *info);
-static int	pktlen(struct sysmouse_state *sc);
-static void	smfilter_detach(struct knote *);
-static int	smfilter(struct knote *, long);
-static void	smget(struct sysmouse_state *sc, mouse_info_t *info);
-static void	smpop(struct sysmouse_state *sc);
+static u_int	sysmouse_evtopkt(void *arg, uint8_t *ev, uint8_t *pkt);
+static u_int	pktlen(void *arg);
 
-static int
-pktlen(struct sysmouse_state *sc)
+static u_int
+pktlen(void *arg)
 {
+	struct sysmouse_state *sc = arg;
+
 	if (sc->level == 0)
 		return 5;
 	else
@@ -121,17 +111,17 @@ smopen(struct dev_open_args *ap)
 		major(dev), minor(dev)));
 
 	lockmgr(&sc->sm_lock, LK_EXCLUSIVE);
-	if (!sc->opened) {
-		sc->fifo = kmalloc(sizeof(struct event_fifo),
-		    M_SYSCONS, M_WAITOK | M_ZERO);
+	if (sc->opened) {
+		ret = EBUSY;
+	} else {
+		sc->fifo = flexfifo_alloc(sizeof(mouse_info_t), FIFO_SIZE,
+		    M_SYSCONS, M_WAITOK, &sc->sm_lock);
 		sc->opened = 1;
 		sc->asyncio = 0;
 		sc->sm_sigio = NULL;
 		bzero(&sc->readstatus, sizeof(sc->readstatus));
 		bzero(&sc->syncstatus, sizeof(sc->syncstatus));
 		ret = 0;
-	} else {
-		ret = EBUSY;
 	}
 	lockmgr(&sc->sm_lock, LK_RELEASE);
 
@@ -148,65 +138,24 @@ smclose(struct dev_close_args *ap)
 	sc->opened = 0;
 	sc->asyncio = 0;
 	sc->level = 0;
-	kfree(sc->fifo, M_SYSCONS);
+	flexfifo_free(sc->fifo, M_SYSCONS);
 	sc->fifo = NULL;
 	lockmgr(&sc->sm_lock, LK_RELEASE);
 
 	return 0;
 }
 
+static struct flexfifo_readops readops = {
+	.pktlen = pktlen,
+	.evtopkt = sysmouse_evtopkt,
+};
+
 static int
 smread(struct dev_read_args *ap)
 {
 	struct sysmouse_state *sc = &mouse_state;
-	mousestatus_t backupstatus;
-	mouse_info_t info;
-	u_char buf[8];
-	struct uio *uio = ap->a_uio;
-	int error = 0, val, cnt = 0;
 
-	lockmgr(&sc->sm_lock, LK_EXCLUSIVE);
-	while (sc->fifo->fill <= 0) {
-		/* Buffer too small to fit a complete mouse packet */
-		if (uio->uio_resid < pktlen(sc)) {
-			error = EIO;
-			goto done;
-		}
-		if (ap->a_ioflag & IO_NDELAY) {
-			error = EAGAIN;
-			goto done;
-		}
-		error = lksleep(sc, &sc->sm_lock, PCATCH, "smread", 0);
-		if (error == EINTR || error == ERESTART) {
-			goto done;
-		}
-	}
-
-	do {
-		/* Buffer too small to fit a complete mouse packet */
-		if (uio->uio_resid < pktlen(sc)) {
-			error = EIO;
-			goto done;
-		}
-		smget(sc, &info);
-		backupstatus = sc->readstatus;
-		val = sysmouse_evtopkt(sc, &info, buf);
-		if (val > 0) {
-			error = uiomove(buf, val, uio);
-			if (error != 0) {
-				sc->readstatus = backupstatus;
-				goto done;
-			}
-			cnt++;
-		}
-		smpop(sc);
-	} while (sc->fifo->fill > 0);
-
-done:
-	lockmgr(&sc->sm_lock, LK_RELEASE);
-	if (cnt > 0 && error != EFAULT)
-		return 0;
-	return error;
+	return flexfifo_read(sc->fifo, ap, &readops, sc);
 }
 
 static int
@@ -326,95 +275,24 @@ smioctl(struct dev_ioctl_args *ap)
 	return ENOTTY;
 }
 
-static struct filterops smfiltops =
-        { FILTEROP_MPSAFE | FILTEROP_ISFD, NULL, smfilter_detach, smfilter };
-
 static int
 smkqfilter(struct dev_kqfilter_args *ap)
 {
 	struct sysmouse_state *sc = &mouse_state;
 	struct knote *kn = ap->a_kn;
-	struct klist *klist;
 
 	ap->a_result = 0;
 
 	switch (kn->kn_filter) {
 	case EVFILT_READ:
-		kn->kn_fop = &smfiltops;
-		kn->kn_hook = (caddr_t)sc;
+		flexfifo_kqfilter(sc->fifo, kn);
 		break;
 	default:
 		ap->a_result = EOPNOTSUPP;
 		return (0);
 	}
 
-	klist = &sc->rkq.ki_note;
-	knote_insert(klist, kn);
-
 	return (0);
-}
-
-static void
-smfilter_detach(struct knote *kn)
-{
-	struct sysmouse_state *sc = &mouse_state;
-	struct klist *klist;
-
-	klist = &sc->rkq.ki_note;
-	knote_remove(klist, kn);
-}
-
-static int
-smfilter(struct knote *kn, long hint)
-{
-	struct sysmouse_state *sc = &mouse_state;
-	int ready = 0;
-
-	lockmgr(&sc->sm_lock, LK_EXCLUSIVE);
-	if (sc->fifo->fill > 0) {
-		ready = 1;
-		kn->kn_data = 0;
-	}
-	lockmgr(&sc->sm_lock, LK_RELEASE);
-
-	return ready;
-}
-
-static void
-smqueue(struct sysmouse_state *sc, mouse_info_t *info)
-{
-	struct event_fifo *f = sc->fifo;
-
-	if (f->fill >= FIFO_SIZE) {
-		f->fill = FIFO_SIZE;
-		f->buf[f->start] = *info;
-		f->start = (f->start + 1) % FIFO_SIZE;
-		f->dropped++;
-	} else {
-		f->buf[(f->start + f->fill) % FIFO_SIZE] = *info;
-		f->fill++;
-	}
-
-}
-
-static void
-smget(struct sysmouse_state *sc, mouse_info_t *info)
-{
-	struct event_fifo *f = sc->fifo;
-
-	if (f->fill > 0)
-		*info = f->buf[f->start];
-}
-
-static void
-smpop(struct sysmouse_state *sc)
-{
-	struct event_fifo *f = sc->fifo;
-
-	if (f->fill > 0) {
-		f->fill--;
-		f->start = (f->start + 1) % FIFO_SIZE;
-	}
 }
 
 static void
@@ -468,9 +346,12 @@ sysmouse_updatestatus(mousestatus_t *status, mouse_info_t *info)
 }
 
 /* Requires buf to hold at least 8 bytes, returns number of bytes written */
-static int
-sysmouse_evtopkt(struct sysmouse_state *sc, mouse_info_t *info, u_char *buf)
+static u_int
+sysmouse_evtopkt(void *arg, uint8_t *ev, uint8_t *pkt)
 {
+	struct sysmouse_state *sc = arg;
+	mouse_info_t *info = (mouse_info_t *)ev;
+
 	/* MOUSE_BUTTON?DOWN -> MOUSE_MSC_BUTTON?UP */
 	static int butmap[8] = {
 	    MOUSE_MSC_BUTTON1UP | MOUSE_MSC_BUTTON2UP | MOUSE_MSC_BUTTON3UP,
@@ -501,21 +382,21 @@ sysmouse_evtopkt(struct sysmouse_state *sc, mouse_info_t *info, u_char *buf)
 	z = (info->operation == MOUSE_BUTTON_EVENT ? 0 : info->u.data.z);
 
 	/* the first five bytes are compatible with MouseSystems' */
-	buf[0] = MOUSE_MSC_SYNC
+	pkt[0] = MOUSE_MSC_SYNC
 		 | butmap[sc->readstatus.button & MOUSE_STDBUTTONS];
 	x = imax(imin(x, 255), -256);
-	buf[1] = x >> 1;
-	buf[3] = x - buf[1];
+	pkt[1] = x >> 1;
+	pkt[3] = x - pkt[1];
 	y = -imax(imin(y, 255), -256);
-	buf[2] = y >> 1;
-	buf[4] = y - buf[2];
+	pkt[2] = y >> 1;
+	pkt[4] = y - pkt[2];
 	if (sc->level >= 1) {
 		/* extended part */
 		z = imax(imin(z, 127), -128);
-        	buf[5] = (z >> 1) & 0x7f;
-        	buf[6] = (z - (z >> 1)) & 0x7f;
+		pkt[5] = (z >> 1) & 0x7f;
+		pkt[6] = (z - (z >> 1)) & 0x7f;
 		/* buttons 4-10 */
-		buf[7] = (~sc->readstatus.button >> 3) & 0x7f;
+		pkt[7] = (~sc->readstatus.button >> 3) & 0x7f;
 	}
 
 	if (sc->level >= 1)
@@ -543,12 +424,11 @@ sysmouse_event(mouse_info_t *info)
 	case MOUSE_ACTION:
 	case MOUSE_MOTION_EVENT:
 	case MOUSE_BUTTON_EVENT:
-		smqueue(sc, info);
+		flexfifo_enqueue_ring(sc->fifo, (void *)info);
 		if (sc->asyncio)
 	                pgsigio(sc->sm_sigio, SIGIO, 0);
 		lockmgr(&sc->sm_lock, LK_RELEASE);
-		wakeup(sc);
-		KNOTE(&sc->rkq.ki_note, 0);
+		flexfifo_wakeup(sc->fifo);
 		break;
 	default:
 		lockmgr(&sc->sm_lock, LK_RELEASE);
