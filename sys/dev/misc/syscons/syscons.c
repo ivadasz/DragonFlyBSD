@@ -340,11 +340,6 @@ register_framebuffer(struct fb_info *info)
 		return 0;
 	}
 
-	if (sc->fb_set_par_task == NULL) {
-		sc->fb_set_par_task = kmalloc(sizeof(struct task),
-		    M_SYSCONS, M_WAITOK | M_ZERO);
-	}
-	TASK_INIT(sc->fb_set_par_task, 0, sc_fb_set_par, sc);
 #if NSPLASH > 0
 	if (sc->fb_blank_task == NULL) {
 		sc->fb_blank_task = kmalloc(sizeof(struct task),
@@ -568,6 +563,10 @@ sc_attach_unit(int unit, int flags)
     }
 
     sc = sc_get_softc(unit, flags & SC_KERNEL_CONSOLE);
+
+    sc->fb_set_par_task = kmalloc(sizeof(struct task),
+	M_SYSCONS, M_WAITOK | M_ZERO);
+    TASK_INIT(sc->fb_set_par_task, 0, sc_fb_set_par, sc);
 
     /*
      * If this is the console we couldn't setup sc->dev before because
@@ -2402,6 +2401,8 @@ sc_fb_set_par(void *context, int pending)
 	if (sc->fbi != NULL && sc->fbi->fbops.fb_set_par != NULL)
 	    sc->fbi->fbops.fb_set_par(sc->fbi);
 	lwkt_reltoken(&tty_token);
+	/* XXX Maybe add a flag to track whether we are idling. */
+	callout_reset(&sc->scrn_timer_ch, hz / 25, sc_scrn_timer, sc);
 }
 
 #if NSPLASH > 0
@@ -3223,6 +3224,7 @@ scinit(int unit, int flags)
 	adp = sc->adp;
     }
     sc->adp = NULL;
+    sc->fb_set_par_task = NULL;
     if (sc->keyboard >= 0) {
 	DPRINTF(5, ("sc%d: releasing kbd%d\n", unit, sc->keyboard));
 	i = kbd_release(sc->kbd, (void *)&sc->keyboard);
