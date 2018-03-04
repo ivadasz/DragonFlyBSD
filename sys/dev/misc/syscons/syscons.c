@@ -185,8 +185,10 @@ static void sccnupdate(scr_stat *scp);
 static scr_stat *alloc_scp(sc_softc_t *sc, int vty);
 static void init_scp(sc_softc_t *sc, int vty, scr_stat *scp);
 static timeout_t scrn_timer;
+static void ipi_scrn_timer(void *arg);
+static void scrn_kick_timer(sc_softc_t *sc);
 static int and_region(int *s1, int *e1, int s2, int e2);
-static void scrn_update(scr_stat *scp, int show_cursor, int flags);
+static int scrn_update(scr_stat *scp, int show_cursor, int flags);
 static void scrn_update_thread(void *arg);
 
 static void sc_fb_set_par(void *context, int pending);
@@ -386,7 +388,13 @@ register_framebuffer(struct fb_info *info)
 #endif /* NSPLASH */
 
 	lockmgr(&sc_asynctd_lk, LK_RELEASE);
+	if (sc->scrn_timer_slow) {
+		sc->scrn_timer_slow = FALSE;
+		if (sc->scrn_timer_gd != NULL)
+			scrn_kick_timer(sc);
+	}
 	lwkt_reltoken(&tty_token);
+
 	return 0;
 }
 
@@ -592,6 +600,8 @@ sc_attach_unit(int unit, int flags)
      */
     sc->config = flags;
     callout_init_mp(&sc->scrn_timer_ch);
+    sc->scrn_timer_slow = FALSE;
+    sc->scrn_timer_gd = mycpu;
     scp = SC_STAT(sc->dev[0]);
     if (sc_console == NULL)	/* sc_console_unit < 0 */
 	sc_console = scp;
@@ -757,6 +767,7 @@ scopen(struct dev_open_args *ap)
 	if (ISGRAPHSC(scp))
 	    sc_set_pixel_mode(scp, NULL, COL, ROW, 16);
 	syscons_unlock();
+	sc_scrn_kick_ifneed(sc);
     }
     if (!tp->t_winsize.ws_col && !tp->t_winsize.ws_row) {
 	tp->t_winsize.ws_col = scp->xsize;
@@ -1039,6 +1050,7 @@ scioctl(struct dev_ioctl_args *ap)
 	    sc_draw_cursor_image(sc->cur_scp);
 	}
 	syscons_unlock();
+	sc_scrn_kick_ifneed(sc);
 	lwkt_reltoken(&tty_token);
 	return 0;
 
@@ -1133,6 +1145,7 @@ scioctl(struct dev_ioctl_args *ap)
 		scp->status &= ~SAVER_RUNNING;
 	    scsplash_stick(TRUE);
 	    syscons_unlock();
+	    sc_scrn_kick_ifneed(sc);
 	    break;
 	case CONS_LKM_SAVER:
 	    syscons_lock();
@@ -1140,6 +1153,7 @@ scioctl(struct dev_ioctl_args *ap)
 		scp->status &= ~SAVER_RUNNING;
 	    saver_mode = *(int *)data;
 	    syscons_unlock();
+	    sc_scrn_kick_ifneed(sc);
 	    break;
 	default:
 	    lwkt_reltoken(&tty_token);
@@ -1158,6 +1172,7 @@ scioctl(struct dev_ioctl_args *ap)
 	if (run_scrn_saver)
 	    sc->scrn_time_stamp -= scrn_blank_time;
 	syscons_unlock();
+	sc_scrn_kick_ifneed(sc);
 	lwkt_reltoken(&tty_token);
 	return 0;
 
@@ -1225,6 +1240,7 @@ scioctl(struct dev_ioctl_args *ap)
 		cons_unavail = TRUE;
 	}
 	syscons_unlock();
+	sc_scrn_kick_ifneed(sc);
 	DPRINTF(5, ("\n"));
 	lwkt_reltoken(&tty_token);
 	return 0;
@@ -1266,6 +1282,7 @@ scioctl(struct dev_ioctl_args *ap)
 	    if ((error = finish_vt_acq(scp)) == 0)
 		DPRINTF(5, ("sc%d: VT_ACKACQ\n", sc->unit));
 	    syscons_unlock();
+	    sc_scrn_kick_ifneed(sc);
 	    /* Wait for drm modesetting callback to finish. */
 	    lwkt_reltoken(&tty_token);
 	    if (sc->fb_set_par_task != NULL)
@@ -1275,6 +1292,7 @@ scioctl(struct dev_ioctl_args *ap)
 	    break;
 	}
 	syscons_unlock();
+	sc_scrn_kick_ifneed(sc);
 	lwkt_reltoken(&tty_token);
 	return error;
 
@@ -1296,6 +1314,7 @@ scioctl(struct dev_ioctl_args *ap)
 	sc_clean_up(sc->cur_scp, TRUE);
 	error = sc_switch_scr(sc, i);
 	syscons_unlock();
+	sc_scrn_kick_ifneed(sc);
 	lwkt_reltoken(&tty_token);
 	return error;
 
@@ -1580,6 +1599,7 @@ scioctl(struct dev_ioctl_args *ap)
 	error = sc_init_emulator(scp, ((term_info_t *)data)->ti_name);
 	/* FIXME: what if scp == sc_console! XXX */
 	syscons_unlock();
+	sc_scrn_kick_ifneed(sc);
 	lwkt_reltoken(&tty_token);
 	return error;
 
@@ -1628,6 +1648,7 @@ scioctl(struct dev_ioctl_args *ap)
 	    sc_load_font(sc->cur_scp, 0, 8, sc->font_8, 0, 256);
 	}
 	syscons_unlock();
+	sc_scrn_kick_ifneed(sc);
 	lwkt_reltoken(&tty_token);
 	return 0;
 
@@ -1666,6 +1687,7 @@ scioctl(struct dev_ioctl_args *ap)
 	    sc_load_font(sc->cur_scp, 0, 14, sc->font_14, 0, 256);
 	}
 	syscons_unlock();
+	sc_scrn_kick_ifneed(sc);
 	lwkt_reltoken(&tty_token);
 	return 0;
 
@@ -1702,6 +1724,7 @@ scioctl(struct dev_ioctl_args *ap)
 	    sc_load_font(sc->cur_scp, 0, 16, sc->font_16, 0, 256);
 	}
 	syscons_unlock();
+	sc_scrn_kick_ifneed(sc);
 	lwkt_reltoken(&tty_token);
 	return 0;
 
@@ -1741,6 +1764,27 @@ scioctl(struct dev_ioctl_args *ap)
 }
 
 static void
+scrn_kick_timer(sc_softc_t *sc)
+{
+    /* Kick the periodic scrn update callout. */
+    if (mycpu == sc->scrn_timer_gd)
+	ipi_scrn_timer(sc);
+    else
+	lwkt_send_ipiq_passive(sc->scrn_timer_gd, ipi_scrn_timer, sc);
+}
+
+/* Requires tty token */
+void
+sc_scrn_kick_ifneed(sc_softc_t *sc)
+{
+    if (sc->scrn_timer_slow) {
+	sc->scrn_timer_slow = FALSE;
+	if (sc->scrn_timer_gd != NULL)
+	    scrn_kick_timer(sc);
+    }
+}
+
+static void
 scstart(struct tty *tp)
 {
     struct clist *rbp;
@@ -1764,6 +1808,11 @@ scstart(struct tty *tp)
 	}
 	tp->t_state &= ~TS_BUSY;
 	syscons_unlock();
+	if (scp->sc->scrn_timer_slow) {
+	    scp->sc->scrn_timer_slow = FALSE;
+	    if (scp->sc->scrn_timer_gd != NULL)
+		scrn_kick_timer(scp->sc);
+	}
 	ttwwakeup(tp);
     } else {
 	syscons_unlock();
@@ -2091,13 +2140,21 @@ sccnupdate(scr_stat *scp)
 }
 
 static void
+ipi_scrn_timer(void *arg)
+{
+    sc_softc_t *sc = arg;
+
+    callout_reset(&sc->scrn_timer_ch, hz / 25, scrn_timer, sc);
+}
+
+static void
 scrn_timer(void *arg)
 {
     static int kbd_interval = 0;
     struct timeval tv;
     sc_softc_t *sc;
     scr_stat *scp;
-    int again;
+    int again, dirty;
 
     /*
      * Setup depending on who called us
@@ -2152,8 +2209,11 @@ scrn_timer(void *arg)
     }
     /* successful lock */
 
-    if (debugger > 0 || panicstr || shutdown_in_progress)
+    dirty = 0;
+    if (debugger > 0 || panicstr || shutdown_in_progress) {
 	sc_touch_scrn_saver();
+	dirty = 1;
+    }
     if (run_scrn_saver) {
 	if (tv.tv_sec > sc->scrn_time_stamp + scrn_blank_time)
 	    sc->flags |= SC_SCRN_IDLE;
@@ -2184,8 +2244,10 @@ scrn_timer(void *arg)
 
     /* Update the screen */
     scp = sc->cur_scp;		/* cur_scp may have changed... */
-    if (!ISGRAPHSC(scp) && !(sc->flags & SC_SCRN_BLANKED))
-	scrn_update(scp, TRUE, SCRN_ASYNCOK);
+    if (!ISGRAPHSC(scp) && !(sc->flags & SC_SCRN_BLANKED)) {
+	if (scrn_update(scp, TRUE, SCRN_ASYNCOK) == 1)
+	    dirty = 1;
+    }
 
 #if NSPLASH > 0
     /* should we activate the screen saver? */
@@ -2194,9 +2256,19 @@ scrn_timer(void *arg)
 	    (*current_saver)(sc, TRUE);
 #endif /* NSPLASH */
 
-    syscons_unlock();
-    if (again)
-	callout_reset(&sc->scrn_timer_ch, hz / 25, scrn_timer, sc);
+    if (again) {
+	if (dirty == 0) {
+	    sc->scrn_timer_slow = TRUE;
+	    syscons_unlock();
+	    callout_reset(&sc->scrn_timer_ch, hz, scrn_timer, sc);
+	} else {
+	    sc->scrn_timer_slow = FALSE;
+	    syscons_unlock();
+	    callout_reset(&sc->scrn_timer_ch, hz / 25, scrn_timer, sc);
+	}
+    } else {
+	syscons_unlock();
+    }
 }
 
 static int
@@ -2216,8 +2288,10 @@ and_region(int *s1, int *e1, int s2, int e2)
  * This function is allowed to run without the syscons_lock,
  * so scp fields can change unexpected.  We cache most values
  * that we care about and silently discard illegal ranges.
+ *
+ * Returns 1 when there was an update, otherwise 0.
  */
-static void 
+static int
 scrn_update(scr_stat *scp, int show_cursor, int flags)
 {
     int start;
@@ -2227,6 +2301,7 @@ scrn_update(scr_stat *scp, int show_cursor, int flags)
     int s;
     int e;
     int ddb_active;
+    int was_dirty = 0;
 
 #ifdef DDB
     ddb_active = db_active;
@@ -2246,7 +2321,7 @@ scrn_update(scr_stat *scp, int show_cursor, int flags)
 	scp->show_cursor = show_cursor;
 	scp->queue_update_td = 1;
 	wakeup(&scp->asynctd);
-	return;
+	return 1;
     }
     if (flags & SCRN_BULKUNLOCK)
 	syscons_lock();
@@ -2275,6 +2350,7 @@ scrn_update(scr_stat *scp, int show_cursor, int flags)
 	    sc_remove_mouse_image(scp);
 	    if (scp->end >= scp->xsize*scp->ysize)
 		scp->end = scp->xsize*scp->ysize - 1;
+	    was_dirty = 1;
 	}
     }
 #endif /* !SC_NO_CUTPASTE */
@@ -2336,6 +2412,7 @@ scrn_update(scr_stat *scp, int show_cursor, int flags)
 		}
 	    }
 	}
+	was_dirty = 1;
     }
 
     /* we are not to show the cursor and the mouse pointer... */
@@ -2352,14 +2429,17 @@ scrn_update(scr_stat *scp, int show_cursor, int flags)
             if (!and_region(&s, &e, copos, copos))
                 sc_remove_cursor_image(scp);
             sc_draw_cursor_image(scp);
+	    was_dirty = 1;
         } else {
             if (s <= e && and_region(&s, &e, cpos, cpos)) {
 		/* cursor didn't move, but has been overwritten */
 		sc_draw_cursor_image(scp);
+		was_dirty = 1;
 	    } else if (scp->sc->flags & SC_BLINK_CURSOR) {
 		/* if it's a blinking cursor, update it */
 		(*scp->rndr->blink_cursor)(scp, cpos,
 					   sc_inside_cutmark(scp, cpos));
+		was_dirty = 1;
 	    }
         }
     }
@@ -2370,6 +2450,7 @@ scrn_update(scr_stat *scp, int show_cursor, int flags)
 	if (!(scp->status & (MOUSE_VISIBLE | MOUSE_HIDDEN))) {
 	    scp->status &= ~MOUSE_MOVED;
 	    sc_draw_mouse_image(scp);
+	    was_dirty = 1;
 	}
     }
 #endif /* SC_NO_CUTPASTE */
@@ -2381,6 +2462,8 @@ cleanup:
     atomic_add_int(&scp->sc->videoio_in_progress, -1);
     if (flags & SCRN_BULKUNLOCK)
 	syscons_unlock();
+
+    return was_dirty;
 }
 
 /*
@@ -3802,6 +3885,8 @@ next_code:
         lwkt_reltoken(&tty_token);
 	return KEYCHAR(c);
     }
+    /* Here we are not kicking the screen update when in X. */
+    sc_scrn_kick_ifneed(sc);
 
     /* if scroll-lock pressed allow history browsing */
     if (!ISGRAPHSC(scp) && scp->history && scp->status & SLKED) {
