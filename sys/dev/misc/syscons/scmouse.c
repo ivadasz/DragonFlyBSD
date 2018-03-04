@@ -618,6 +618,7 @@ sc_mouse_exit1(struct thread *td)
     sc_mouse_exit1_proc(p);
 }
 
+/* Expects tty_token to be held. */
 int
 sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 {
@@ -691,6 +692,7 @@ sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 		if (!ISGRAPHSC(cur_scp))
 		    mark_all(cur_scp);
 		crit_exit();
+		sc_scrn_kick_ifneed(scp->sc);
 		return 0;
 	    } else {
 		crit_exit();
@@ -704,6 +706,7 @@ sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 		scp->sc->flags &= ~SC_MOUSE_ENABLED;
 		sc_remove_all_mouse(scp->sc);
 		crit_exit();
+		sc_scrn_kick_ifneed(scp->sc);
 		return 0;
 	    } else {
 		crit_exit();
@@ -717,6 +720,7 @@ sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    scp->mouse_ypos = mouse->u.data.y;
 	    set_mouse_pos(scp);
 	    crit_exit();
+	    sc_scrn_kick_ifneed(scp->sc);
 	    break;
 
 	case MOUSE_MOVEREL:
@@ -725,6 +729,7 @@ sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    scp->mouse_ypos += mouse->u.data.y;
 	    set_mouse_pos(scp);
 	    crit_exit();
+	    sc_scrn_kick_ifneed(scp->sc);
 	    break;
 
 	case MOUSE_GETINFO:
@@ -754,6 +759,7 @@ sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 		cur_scp->mouse_buttons = mouse->u.data.buttons;
 	    }
 	    crit_exit();
+	    sc_scrn_kick_ifneed(scp->sc);
 
 	    if (sysmouse_event(mouse) == 0)
 		return 0;
@@ -793,6 +799,7 @@ sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 		if (cur_scp->mouse_buttons & MOUSE_BUTTON2DOWN ||
 		    cur_scp->mouse_buttons & MOUSE_BUTTON3DOWN)
 		    mouse_paste(cur_scp);
+		sc_scrn_kick_ifneed(scp->sc);
 	    }
 #endif /* SC_NO_CUTPASTE */
 	    break;
@@ -816,8 +823,10 @@ sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 		return 0;
 
 	    /* if a button is held down, stop the screen saver */
-	    if (mouse->u.event.value > 0)
+	    if (mouse->u.event.value > 0) {
 		sc_touch_scrn_saver();
+		sc_scrn_kick_ifneed(scp->sc);
+	    }
 
 	    cur_scp->status &= ~MOUSE_HIDDEN;
 
@@ -852,6 +861,7 @@ sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 		    mouse_cut_end(cur_scp);
 		    break;
 		}
+		sc_scrn_kick_ifneed(scp->sc);
 		break;
 	    case SC_MOUSE_PASTEBUTTON:
 	        switch (mouse->u.event.value) {
@@ -859,17 +869,21 @@ sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 		    break;
 		default:
 		    mouse_paste(cur_scp);
+		    sc_scrn_kick_ifneed(scp->sc);
 		    break;
 		}
 		break;
 	    case SC_MOUSE_EXTENDBUTTON:
 	        switch (mouse->u.event.value) {
 		case 0:	/* up */
-		    if (!(cur_scp->mouse_buttons & MOUSE_BUTTON1DOWN))
+		    if (!(cur_scp->mouse_buttons & MOUSE_BUTTON1DOWN)) {
 		        mouse_cut_end(cur_scp);
+			sc_scrn_kick_ifneed(scp->sc);
+		    }
 		    break;
 		default:
 		    mouse_cut_extend(cur_scp);
+		    sc_scrn_kick_ifneed(scp->sc);
 		    break;
 		}
 		break;
@@ -894,6 +908,7 @@ sc_mouse_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 		scp->sc->mouse_char = mouse->u.mouse_char;
 		crit_exit();
 	    }
+	    sc_scrn_kick_ifneed(scp->sc);
 	    break;
 
 	default:

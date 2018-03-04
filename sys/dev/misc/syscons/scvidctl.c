@@ -502,6 +502,7 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    lwkt_reltoken(&tty_token);
 	    return error;
 	}
+	sc_scrn_kick_ifneed(scp->sc);
 	if (info.vi_flags & V_INFO_GRAPHICS) {
 	    lwkt_reltoken(&tty_token);
 	    return sc_set_graphics_mode(scp, tp, *(int *)data);
@@ -555,6 +556,7 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    return ENODEV;
 	}
 	ret = fb_ioctl(adp, FBIO_SETWINORG, data);
+	sc_scrn_kick_ifneed(scp->sc);
 	lwkt_reltoken(&tty_token);
 	return ret;
 
@@ -589,6 +591,8 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	} else {
 	    ret = fb_ioctl(adp, cmd, data);
 	}
+	if (cmd == FBIO_SETDISPSTART || cmd == FBIO_SETLINEWIDTH)
+	    sc_scrn_kick_ifneed(scp->sc);
 	lwkt_reltoken(&tty_token);
 	return ret;
 
@@ -606,6 +610,7 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	} else {
 	    ret = ENODEV;
 	}
+	sc_scrn_kick_ifneed(scp->sc);
 	lwkt_reltoken(&tty_token);
 	return ret;
 
@@ -641,6 +646,17 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    }
 	} else {
 	    ret = fb_ioctl(adp, cmd, data);
+	}
+	switch (cmd) {
+	case FBIO_SETPALETTE:
+	case FBIOPUTCMAP:
+	case FBIOSVIDEO:
+	case FBIOSCURSOR:
+	case FBIOSCURPOS:
+	    sc_scrn_kick_ifneed(scp->sc);
+	    break;
+	default:
+	    break;
 	}
 	lwkt_reltoken(&tty_token);
 	return ret;
@@ -705,6 +721,7 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 		set_mode(scp);
 	    sc_clear_screen(scp);
 	    scp->status &= ~UNKNOWN_MODE;
+	    sc_scrn_kick_ifneed(scp->sc);
 	    lwkt_reltoken(&tty_token);
 	    return 0;
 
@@ -719,6 +736,7 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 		return ENODEV;
 	    }
 	    if (scp->status & GRAPHICS_MODE) {
+		sc_scrn_kick_ifneed(scp->sc);
 	        lwkt_reltoken(&tty_token);
 		return sc_set_pixel_mode(scp, tp, scp->xsize, scp->ysize, 
 					 scp->font_height);
@@ -737,6 +755,7 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    }
 	    sc_clear_screen(scp);
 	    scp->status &= ~UNKNOWN_MODE;
+	    sc_scrn_kick_ifneed(scp->sc);
 	    lwkt_reltoken(&tty_token);
 	    return 0;
 #endif /* SC_PIXEL_MODE */
@@ -750,6 +769,7 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    }
 	    scp->status |= UNKNOWN_MODE | MOUSE_HIDDEN;
 	    crit_exit();
+	    sc_scrn_kick_ifneed(scp->sc);
 	    lwkt_reltoken(&tty_token);
 	    return 0;
 
@@ -765,6 +785,7 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    lwkt_reltoken(&tty_token);
 	    return ENODEV;
 	}
+	sc_scrn_kick_ifneed(scp->sc);
 	lwkt_reltoken(&tty_token);
 	return sc_set_pixel_mode(scp, tp, ((int *)data)[0], ((int *)data)[1], 
 				 ((int *)data)[2]);
@@ -788,6 +809,7 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	scp->border = *(int *)data;
 	if (scp == scp->sc->cur_scp)
 	    sc_set_border(scp, scp->border);
+	sc_scrn_kick_ifneed(scp->sc);
 	lwkt_reltoken(&tty_token);
 	return 0;
     }

@@ -223,6 +223,8 @@ typedef struct sc_softc {
 
 	long		scrn_time_stamp;
 	struct callout	scrn_timer_ch;
+	int		scrn_timer_slow;
+	globaldata_t	scrn_timer_gd;
 
 	char		cursor_base;
 	char		cursor_height;
@@ -537,6 +539,7 @@ int		sc_init_emulator(scr_stat *scp, char *name);
 void		sc_paste(scr_stat *scp, u_char *p, int count);
 void		sc_bell(scr_stat *scp, int pitch, int duration);
 void		sc_font_scale(scr_stat *scp, int max_cols, int max_rows);
+void		sc_scrn_kick_ifneed(sc_softc_t *sc);
 
 /* schistory.c */
 #ifndef SC_NO_HISTORY
