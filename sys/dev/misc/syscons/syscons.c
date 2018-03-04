@@ -181,7 +181,6 @@ static int sccngetch(int flags);
 static void sccnupdate(scr_stat *scp);
 static scr_stat *alloc_scp(sc_softc_t *sc, int vty);
 static void init_scp(sc_softc_t *sc, int vty, scr_stat *scp);
-static timeout_t scrn_timer;
 static int and_region(int *s1, int *e1, int s2, int e2);
 static void scrn_update(scr_stat *scp, int show_cursor, int flags);
 static void scrn_update_thread(void *arg);
@@ -598,7 +597,7 @@ sc_attach_unit(int unit, int flags)
     	update_cursor_image(scp);
 
     /* get screen update going */
-    scrn_timer(sc);
+    sc_scrn_timer(sc);
 
     /* set up the keyboard */
     kbd_ioctl(sc->kbd, KDSKBMODE, (caddr_t)&scp->kbd_mode);
@@ -1928,7 +1927,7 @@ sccndbctl(void *private, int on)
 	 * and the screen is updated before switching to 
 	 * the vty0.
 	 */
-	scrn_timer(NULL);
+	sc_scrn_timer(NULL);
 	if (!cold
 	    && sc_console->sc->cur_scp->smode.mode == VT_AUTO
 	    && sc_console->smode.mode == VT_AUTO) {
@@ -2030,7 +2029,7 @@ sccnupdate(scr_stat *scp)
     ddb_active = 0;
 #endif
 
-    /* this is a cut-down version of scrn_timer()... */
+    /* this is a cut-down version of sc_scrn_timer()... */
 
     /*
      * Don't update if videoio is in progress.  However, if we are paniced
@@ -2067,15 +2066,15 @@ sccnupdate(scr_stat *scp)
     }
 
     /*
-     * FIXME: unlike scrn_timer(), we call scrn_update() from here even
+     * FIXME: unlike sc_scrn_timer(), we call scrn_update() from here even
      * when write_in_progress is non-zero.  XXX
      */
     if (!ISGRAPHSC(scp) && !(scp->sc->flags & SC_SCRN_BLANKED))
 	scrn_update(scp, TRUE, SCRN_ASYNCOK);
 }
 
-static void
-scrn_timer(void *arg)
+void
+sc_scrn_timer(void *arg)
 {
     static int kbd_interval = 0;
     struct timeval tv;
@@ -2101,7 +2100,7 @@ scrn_timer(void *arg)
      */
     if (sc->font_loading_in_progress || sc->videoio_in_progress) {
 	if (again)
-	    callout_reset(&sc->scrn_timer_ch, hz / 10, scrn_timer, sc);
+	    callout_reset(&sc->scrn_timer_ch, hz / 10, sc_scrn_timer, sc);
 	return;
     }
 
@@ -2131,7 +2130,7 @@ scrn_timer(void *arg)
     if (syscons_lock_nonblock() != 0) {
 	/* failed to get the lock */
 	if (again)
-	    callout_reset(&sc->scrn_timer_ch, hz / 10, scrn_timer, sc);
+	    callout_reset(&sc->scrn_timer_ch, hz / 10, sc_scrn_timer, sc);
 	return;
     }
     /* successful lock */
@@ -2162,7 +2161,7 @@ scrn_timer(void *arg)
     {
 	syscons_unlock();
 	if (again)
-	    callout_reset(&sc->scrn_timer_ch, hz / 10, scrn_timer, sc);
+	    callout_reset(&sc->scrn_timer_ch, hz / 10, sc_scrn_timer, sc);
 	return;
     }
 
@@ -2179,8 +2178,12 @@ scrn_timer(void *arg)
 #endif /* NSPLASH */
 
     syscons_unlock();
-    if (again)
-	callout_reset(&sc->scrn_timer_ch, hz / 25, scrn_timer, sc);
+    if (again) {
+	if (ISGRAPHSC(scp))
+	    callout_reset(&sc->scrn_timer_ch, hz, sc_scrn_timer, sc);
+	else
+	    callout_reset(&sc->scrn_timer_ch, hz / 25, sc_scrn_timer, sc);
+    }
 }
 
 static int
@@ -2559,7 +2562,7 @@ remove_scrn_saver(void (*this_saver)(sc_softc_t *, int))
 #if 0
     /*
      * In order to prevent `current_saver' from being called by
-     * the timeout routine `scrn_timer()' while we manipulate 
+     * the timeout routine `sc_scrn_timer()' while we manipulate
      * the saver list, we shall set `current_saver' to `none_saver' 
      * before stopping the current saver, rather than blocking by `splXX()'.
      */
@@ -2784,7 +2787,7 @@ sc_switch_scr(sc_softc_t *sc, u_int next_scr)
 	    } else {
 		/* 
 	 	 * We are in between screen release and acquisition, and
-		 * reached here via scgetc() or scrn_timer() which has 
+		 * reached here via scgetc() or sc_scrn_timer() which has
 		 * interrupted exchange_scr(). Don't do anything stupid.
 		 */
 		DPRINTF(5, ("waiting nothing, "));

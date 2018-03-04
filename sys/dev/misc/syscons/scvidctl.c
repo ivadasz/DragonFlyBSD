@@ -708,6 +708,8 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    sc_clear_screen(scp);
 	    scp->status &= ~UNKNOWN_MODE;
 	    lwkt_reltoken(&tty_token);
+	    callout_reset(&scp->sc->scrn_timer_ch, hz / 25, sc_scrn_timer,
+			  scp->sc);
 	    return 0;
 
 #ifdef SC_PIXEL_MODE

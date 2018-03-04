@@ -639,4 +639,6 @@ int		sc_get_cons_priority(int *unit, int *flags);
 void		sc_get_bios_values(bios_values_t *values);
 int		sc_tone(int hertz);
 
+void		sc_scrn_timer(void *arg);
+
 #endif /* !_DEV_SYSCONS_SYSCONS_H_ */
