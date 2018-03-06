@@ -52,6 +52,7 @@
 #include <sys/conf.h>
 #include <sys/fcntl.h>
 #include <sys/sbuf.h>
+#include <sys/flexfifo.h>
 
 #include <bus/u4b/usb.h>
 #include <bus/u4b/usbdi.h>
@@ -95,6 +96,14 @@ enum {
 	UMS_N_TRANSFER,
 };
 
+struct ums_status {
+	uint32_t buttons;
+	int32_t dx;
+	int32_t dy;
+	int32_t dz;
+	int32_t dt;
+};
+
 struct ums_info {
 	struct hid_location sc_loc_w;
 	struct hid_location sc_loc_x;
@@ -122,7 +131,7 @@ struct ums_info {
 };
 
 struct ums_softc {
-	struct usb_fifo_sc sc_fifo;
+	struct flexfifo *sc_fifo;
 	struct lock sc_lock;
 	struct usb_callout sc_callout;
 	struct ums_info sc_info[UMS_INFO_MAX];
@@ -134,8 +143,9 @@ struct ums_softc {
 	struct usb_xfer *sc_xfer[UMS_N_TRANSFER];
 
 	int sc_pollrate;
-	int sc_fflags;
 	int sc_read_running;
+
+	int sc_opened;
 #ifdef EVDEV_SUPPORT
 	int sc_evflags;
 #define	UMS_EVDEV_OPENED	1
@@ -158,12 +168,6 @@ static device_probe_t ums_probe;
 static device_attach_t ums_attach;
 static device_detach_t ums_detach;
 
-static usb_fifo_cmd_t ums_fifo_start_read;
-static usb_fifo_cmd_t ums_fifo_stop_read;
-static usb_fifo_open_t ums_fifo_open;
-static usb_fifo_close_t ums_fifo_close;
-static usb_fifo_ioctl_t ums_fifo_ioctl;
-
 #ifdef EVDEV_SUPPORT
 static evdev_open_t ums_ev_open;
 static evdev_close_t ums_ev_close;
@@ -179,13 +183,18 @@ static void	ums_put_queue(struct ums_softc *, int32_t, int32_t,
 static int	ums_sysctl_handler_parseinfo(SYSCTL_HANDLER_ARGS);
 #endif
 
-static struct usb_fifo_methods ums_fifo_methods = {
-	.f_open = &ums_fifo_open,
-	.f_close = &ums_fifo_close,
-	.f_ioctl = &ums_fifo_ioctl,
-	.f_start_read = &ums_fifo_start_read,
-	.f_stop_read = &ums_fifo_stop_read,
-	.basename[0] = "ums",
+static u_int ums_pktlen(void *arg);
+static u_int ums_evtopkt(void *arg, uint8_t *ev, uint8_t *pkt);
+static int ums_ioctl(void *arg, caddr_t data, u_long cmd);
+static void ums_open(void *arg);
+static void ums_close(void *arg);
+
+static struct flexfifo_ops ums_fifo_ops = {
+	.pktlen = ums_pktlen,
+	.evtopkt = ums_evtopkt,
+	.ioctl = ums_ioctl,
+	.open = ums_open,
+	.close = ums_close,
 };
 
 #ifdef EVDEV_SUPPORT
@@ -366,24 +375,6 @@ ums_intr_callback(struct usb_xfer *xfer, usb_error_t error)
 		}
 	case USB_ST_SETUP:
 tr_setup:
-		/* check if we can put more data into the FIFO */
-		if (usb_fifo_put_bytes_max(sc->sc_fifo.fp[USB_FIFO_RX]) == 0) {
-			/*
-			 * When the FIFO becomes full we stop cycling the
-			 * poll and must clear sc_read_running.  The next
-			 * userland read/select/kqueue request will call
-			 * f_start_read to get it going again.
-			 */
-			sc->sc_read_running = 0;
-#ifdef EVDEV_SUPPORT
-			/* XXX check logic. */
-			if (sc->sc_evflags == 0)
-				break;
-#else
-			break;
-#endif
-		}
-
 		usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
 		usbd_transfer_submit(xfer);
 		break;
@@ -702,12 +693,10 @@ ums_attach(device_t dev)
 	DPRINTF("size=%d, id=%d\n", isize, sc->sc_iid);
 #endif
 
-	err = usb_fifo_attach(uaa->device, sc, &sc->sc_lock,
-	    &ums_fifo_methods, &sc->sc_fifo,
-	    device_get_unit(dev), -1, uaa->info.bIfaceIndex,
-  	    UID_ROOT, GID_OPERATOR, 0644);
-	if (err)
-		goto detach;
+	char buf[16];
+	ksnprintf(buf, sizeof(buf), "ums%d", device_get_unit(dev));
+	sc->sc_fifo = flexfifo_create(sizeof(struct ums_status), 256,
+	    &ums_fifo_ops, device_get_unit(dev), buf, sc, 8);
 
 #ifdef EVDEV_SUPPORT
 	sc->sc_evdev = evdev_alloc();
@@ -769,7 +758,8 @@ ums_detach(device_t self)
 
 	DPRINTF("sc=%p\n", sc);
 
-	usb_fifo_detach(&sc->sc_fifo);
+	if (sc->sc_fifo != NULL)
+		flexfifo_destroy(sc->sc_fifo);
 
 #ifdef EVDEV_SUPPORT
 	evdev_free(sc->sc_evdev);
@@ -859,22 +849,6 @@ ums_stop_rx(struct ums_softc *sc)
 	}
 }
 
-static void
-ums_fifo_start_read(struct usb_fifo *fifo)
-{
-	struct ums_softc *sc = usb_fifo_softc(fifo);
-
-	ums_start_rx(sc);
-}
-
-static void
-ums_fifo_stop_read(struct usb_fifo *fifo)
-{
-	struct ums_softc *sc = usb_fifo_softc(fifo);
-
-	ums_stop_rx(sc);
-}
-
 #if ((MOUSE_SYS_PACKETSIZE != 8) || \
      (MOUSE_MSC_PACKETSIZE != 5))
 #error "Software assumptions are not met. Please update code."
@@ -884,45 +858,66 @@ static void
 ums_put_queue(struct ums_softc *sc, int32_t dx, int32_t dy,
     int32_t dz, int32_t dt, int32_t buttons)
 {
-	uint8_t buf[8];
+	struct ums_status status;
 
-	if (1) {
+	status = (struct ums_status){ buttons, dx, dy, dz, dt };
+	if (sc->sc_fifo != NULL)
+		flexfifo_enqueue_ring(sc->sc_fifo, (void *)&status);
+}
 
-		if (dx > 254)
-			dx = 254;
-		if (dx < -256)
-			dx = -256;
-		if (dy > 254)
-			dy = 254;
-		if (dy < -256)
-			dy = -256;
-		if (dz > 126)
-			dz = 126;
-		if (dz < -128)
-			dz = -128;
-		if (dt > 126)
-			dt = 126;
-		if (dt < -128)
-			dt = -128;
+static u_int
+ums_evtopkt(void *arg, uint8_t *ev, uint8_t *pkt)
+{
+	struct ums_softc *sc = arg;
+	struct ums_status *status = (struct ums_status *)ev;
+	uint32_t buttons = status->buttons;
+	int32_t dx = status->dx;
+	int32_t dy = status->dy;
+	int32_t dz = status->dz;
+	int32_t dt = status->dt;
 
-		buf[0] = sc->sc_mode.syncmask[1];
-		buf[0] |= (~buttons) & MOUSE_MSC_BUTTONS;
-		buf[1] = dx >> 1;
-		buf[2] = dy >> 1;
-		buf[3] = dx - (dx >> 1);
-		buf[4] = dy - (dy >> 1);
+	if (dx > 254)
+		dx = 254;
+	if (dx < -256)
+		dx = -256;
+	if (dy > 254)
+		dy = 254;
+	if (dy < -256)
+		dy = -256;
+	if (dz > 126)
+		dz = 126;
+	if (dz < -128)
+		dz = -128;
+	if (dt > 126)
+		dt = 126;
+	if (dt < -128)
+		dt = -128;
 
-		if (sc->sc_mode.level == 1) {
-			buf[5] = dz >> 1;
-			buf[6] = dz - (dz >> 1);
-			buf[7] = (((~buttons) >> 3) & MOUSE_SYS_EXTBUTTONS);
-		}
-		usb_fifo_put_data_linear(sc->sc_fifo.fp[USB_FIFO_RX], buf,
-		    sc->sc_mode.packetsize, 1);
+	pkt[0] = sc->sc_mode.syncmask[1];
+	pkt[0] |= (~buttons) & MOUSE_MSC_BUTTONS;
+	pkt[1] = dx >> 1;
+	pkt[2] = dy >> 1;
+	pkt[3] = dx - (dx >> 1);
+	pkt[4] = dy - (dy >> 1);
 
-	} else {
-		DPRINTF("Buffer full, discarded packet\n");
+	if (sc->sc_mode.level == 1) {
+		pkt[5] = dz >> 1;
+		pkt[6] = dz - (dz >> 1);
+		pkt[7] = (((~buttons) >> 3) & MOUSE_SYS_EXTBUTTONS);
+		return 8;
 	}
+	return 5;
+}
+
+static u_int
+ums_pktlen(void *arg)
+{
+	struct ums_softc *sc = arg;
+
+	if (sc->sc_mode.level == 1)
+		return 8;
+	else
+		return 5;
 }
 
 #ifdef EVDEV_SUPPORT
@@ -946,13 +941,6 @@ ums_evdev_push(struct ums_softc *sc, int32_t dx, int32_t dy,
 }
 #endif
 
-static void
-ums_reset_buf(struct ums_softc *sc)
-{
-	/* reset read queue, must be called locked */
-	usb_fifo_reset(sc->sc_fifo.fp[USB_FIFO_RX]);
-}
-
 #ifdef EVDEV_SUPPORT
 static int
 ums_ev_open(struct evdev_dev *evdev, void *ev_softc)
@@ -963,10 +951,8 @@ ums_ev_open(struct evdev_dev *evdev, void *ev_softc)
 
 	sc->sc_evflags = UMS_EVDEV_OPENED;
 
-	if (sc->sc_fflags == 0) {
-		ums_reset(sc);
+	if (sc->sc_opened == 0)
 		ums_start_rx(sc);
-	}
 
 	return (0);
 }
@@ -980,78 +966,60 @@ ums_ev_close(struct evdev_dev *evdev, void *ev_softc)
 
 	sc->sc_evflags = 0;
 
-	if (sc->sc_fflags == 0)
+	if (sc->sc_opened == 0)
 		ums_stop_rx(sc);
 }
 #endif
 
-static int
-ums_fifo_open(struct usb_fifo *fifo, int fflags)
+static void
+ums_open(void *arg)
 {
-	struct ums_softc *sc = usb_fifo_softc(fifo);
+	struct ums_softc *sc = arg;
 
-	DPRINTFN(2, "\n");
-
-	/* check for duplicate open, should not happen */
-	if (sc->sc_fflags & fflags)
-		return (EBUSY);
-
-	/* check for first open */
+	ums_reset(sc);
+	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
+	sc->sc_opened = 1;
 #ifdef EVDEV_SUPPORT
-	if (sc->sc_fflags == 0 && sc->sc_evflags == 0)
-		ums_reset(sc);
-#else
-	if (sc->sc_fflags == 0)
-		ums_reset(sc);
+	if (sc->sc_evflags == 0)
 #endif
-
-	if (fflags & FREAD) {
-		/* allocate RX buffer */
-		if (usb_fifo_alloc_buffer(fifo,
-		    UMS_BUF_SIZE, UMS_IFQ_MAXLEN)) {
-			return (ENOMEM);
-		}
-	}
-
-	sc->sc_fflags |= fflags & (FREAD | FWRITE);
-	return (0);
+		ums_start_rx(sc);
+	lockmgr(&sc->sc_lock, LK_RELEASE);
 }
 
 static void
-ums_fifo_close(struct usb_fifo *fifo, int fflags)
+ums_close(void *arg)
 {
-	struct ums_softc *sc = usb_fifo_softc(fifo);
+	struct ums_softc *sc = arg;
 
-	DPRINTFN(2, "\n");
-
-	if (fflags & FREAD)
-		usb_fifo_free_buffer(fifo);
-
-	sc->sc_fflags &= ~(fflags & (FREAD | FWRITE));
+	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
+	sc->sc_opened = 0;
+#ifdef EVDEV_SUPPORT
+	if (sc->sc_evflags == 0)
+#endif
+		ums_stop_rx(sc);
+	lockmgr(&sc->sc_lock, LK_RELEASE);
 }
 
 static int
-ums_fifo_ioctl(struct usb_fifo *fifo, u_long cmd, void *addr, int fflags)
+ums_ioctl(void *arg, caddr_t data, u_long cmd)
 {
-	struct ums_softc *sc = usb_fifo_softc(fifo);
+	struct ums_softc *sc = arg;
 	mousemode_t mode;
 	int error = 0;
-
-	DPRINTFN(2, "\n");
 
 	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
 
 	switch (cmd) {
 	case MOUSE_GETHWINFO:
-		*(mousehw_t *)addr = sc->sc_hw;
+		*(mousehw_t *)data = sc->sc_hw;
 		break;
 
 	case MOUSE_GETMODE:
-		*(mousemode_t *)addr = sc->sc_mode;
+		*(mousemode_t *)data = sc->sc_mode;
 		break;
 
 	case MOUSE_SETMODE:
-		mode = *(mousemode_t *)addr;
+		mode = *(mousemode_t *)data;
 
 		if (mode.level == -1) {
 			/* don't change the current setting */
@@ -1084,19 +1052,18 @@ ums_fifo_ioctl(struct usb_fifo *fifo, u_long cmd, void *addr, int fflags)
 			sc->sc_mode.syncmask[0] = MOUSE_SYS_SYNCMASK;
 			sc->sc_mode.syncmask[1] = MOUSE_SYS_SYNC;
 		}
-		ums_reset_buf(sc);
 		break;
 
 	case MOUSE_GETLEVEL:
-		*(int *)addr = sc->sc_mode.level;
+		*(int *)data = sc->sc_mode.level;
 		break;
 
 	case MOUSE_SETLEVEL:
-		if (*(int *)addr < 0 || *(int *)addr > 1) {
+		if (*(int *)data < 0 || *(int *)data > 1) {
 			error = EINVAL;
 			break;
 		}
-		sc->sc_mode.level = *(int *)addr;
+		sc->sc_mode.level = *(int *)data;
 
 		if (sc->sc_mode.level == 0) {
 			if (sc->sc_buttons > MOUSE_MSC_MAXBUTTON)
@@ -1117,11 +1084,10 @@ ums_fifo_ioctl(struct usb_fifo *fifo, u_long cmd, void *addr, int fflags)
 			sc->sc_mode.syncmask[0] = MOUSE_SYS_SYNCMASK;
 			sc->sc_mode.syncmask[1] = MOUSE_SYS_SYNC;
 		}
-		ums_reset_buf(sc);
 		break;
 
 	case MOUSE_GETSTATUS:{
-			mousestatus_t *status = (mousestatus_t *)addr;
+			mousestatus_t *status = (mousestatus_t *)data;
 
 			*status = sc->sc_status;
 			sc->sc_status.obutton = sc->sc_status.button;
