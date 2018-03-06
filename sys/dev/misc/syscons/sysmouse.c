@@ -35,16 +35,9 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/conf.h>
-#include <sys/device.h>
-#include <sys/event.h>
-#include <sys/uio.h>
 #include <sys/priv.h>
-#include <sys/vnode.h>
 #include <sys/kernel.h>
 #include <sys/thread2.h>
-#include <sys/signalvar.h>
-#include <sys/filio.h>
 #include <sys/flexfifo.h>
 
 #include <machine/console.h>
@@ -61,33 +54,10 @@ struct sysmouse_state {
 	int level;	/* sysmouse protocol level */
 	mousestatus_t syncstatus;
 	mousestatus_t readstatus;	/* Only needed for button status */
-	int opened;
-	int asyncio;
-	struct lock sm_lock;
-	struct sigio *sm_sigio;
-	struct kqinfo rkq;
-};
-
-static d_open_t		smopen;
-static d_close_t	smclose;
-static d_read_t		smread;
-static d_ioctl_t	smioctl;
-static d_kqfilter_t	smkqfilter;
-
-static struct dev_ops sm_ops = {
-	{ "sysmouse", 0, D_MPSAFE },
-	.d_open =	smopen,
-	.d_close =	smclose,
-	.d_read =	smread,
-	.d_ioctl =	smioctl,
-	.d_kqfilter =	smkqfilter,
 };
 
 /* local variables */
 static struct sysmouse_state mouse_state;
-
-static u_int	sysmouse_evtopkt(void *arg, uint8_t *ev, uint8_t *pkt);
-static u_int	pktlen(void *arg);
 
 static u_int
 pktlen(void *arg)
@@ -100,93 +70,27 @@ pktlen(void *arg)
 		return 8;
 }
 
-static int
-smopen(struct dev_open_args *ap)
+static void
+smopen(void *arg)
 {
-	cdev_t dev = ap->a_head.a_dev;
-	struct sysmouse_state *sc = &mouse_state;
-	int ret;
+	struct sysmouse_state *sc = arg;
 
-	DPRINTF(5, ("smopen: dev:%d,%d\n",
-		major(dev), minor(dev)));
-
-	lockmgr(&sc->sm_lock, LK_EXCLUSIVE);
-	if (sc->opened) {
-		ret = EBUSY;
-	} else {
-		sc->fifo = flexfifo_alloc(sizeof(mouse_info_t), FIFO_SIZE,
-		    M_SYSCONS, M_WAITOK, &sc->sm_lock);
-		sc->opened = 1;
-		sc->asyncio = 0;
-		sc->sm_sigio = NULL;
-		bzero(&sc->readstatus, sizeof(sc->readstatus));
-		bzero(&sc->syncstatus, sizeof(sc->syncstatus));
-		ret = 0;
-	}
-	lockmgr(&sc->sm_lock, LK_RELEASE);
-
-	return ret;
+	bzero(&sc->readstatus, sizeof(sc->readstatus));
+	lwkt_gettoken(&tty_token);
+	bzero(&sc->syncstatus, sizeof(sc->syncstatus));
+	lwkt_reltoken(&tty_token);
 }
 
 static int
-smclose(struct dev_close_args *ap)
+smioctl(void *arg, caddr_t data, u_long cmd)
 {
-	struct sysmouse_state *sc = &mouse_state;
-
-	lockmgr(&sc->sm_lock, LK_EXCLUSIVE);
-	funsetown(&sc->sm_sigio);
-	sc->opened = 0;
-	sc->asyncio = 0;
-	sc->level = 0;
-	flexfifo_free(sc->fifo, M_SYSCONS);
-	sc->fifo = NULL;
-	lockmgr(&sc->sm_lock, LK_RELEASE);
-
-	return 0;
-}
-
-static struct flexfifo_readops readops = {
-	.pktlen = pktlen,
-	.evtopkt = sysmouse_evtopkt,
-};
-
-static int
-smread(struct dev_read_args *ap)
-{
-	struct sysmouse_state *sc = &mouse_state;
-
-	return flexfifo_read(sc->fifo, ap, &readops, sc);
-}
-
-static int
-smioctl(struct dev_ioctl_args *ap)
-{
-	struct sysmouse_state *sc = &mouse_state;
+	struct sysmouse_state *sc = arg;
 	mousehw_t *hw;
 	mousemode_t *mode;
 
-	switch (ap->a_cmd) {
-	case FIOSETOWN:
-		lockmgr(&sc->sm_lock, LK_EXCLUSIVE);
-		fsetown(*(int *)ap->a_data, &sc->sm_sigio);
-		lockmgr(&sc->sm_lock, LK_RELEASE);
-		return 0;
-	case FIOGETOWN:
-		lockmgr(&sc->sm_lock, LK_EXCLUSIVE);
-		*(int *)ap->a_data = fgetown(&sc->sm_sigio);
-		lockmgr(&sc->sm_lock, LK_RELEASE);
-		return 0;
-	case FIOASYNC:
-		lockmgr(&sc->sm_lock, LK_EXCLUSIVE);
-		if (*(int *)ap->a_data) {
-			sc->asyncio = 1;
-		} else {
-			sc->asyncio = 0;
-		}
-		lockmgr(&sc->sm_lock, LK_RELEASE);
-		return 0;
+	switch (cmd) {
 	case MOUSE_GETHWINFO:	/* get device information */
-		hw = (mousehw_t *)ap->a_data;
+		hw = (mousehw_t *)data;
 		hw->buttons = 10;		/* XXX unknown */
 		hw->iftype = MOUSE_IF_SYSMOUSE;
 		hw->type = MOUSE_MOUSE;
@@ -195,10 +99,8 @@ smioctl(struct dev_ioctl_args *ap)
 		return 0;
 
 	case MOUSE_GETMODE:	/* get protocol/mode */
-		mode = (mousemode_t *)ap->a_data;
-		lockmgr(&sc->sm_lock, LK_EXCLUSIVE);
+		mode = (mousemode_t *)data;
 		mode->level = sc->level;
-		lockmgr(&sc->sm_lock, LK_RELEASE);
 		switch (mode->level) {
 		case 0: /* emulate MouseSystems protocol */
 			mode->protocol = MOUSE_PROTO_MSC;
@@ -223,42 +125,34 @@ smioctl(struct dev_ioctl_args *ap)
 		return 0;
 
 	case MOUSE_SETMODE:	/* set protocol/mode */
-		mode = (mousemode_t *)ap->a_data;
+		mode = (mousemode_t *)data;
 		if (mode->level == -1)
 			; 	/* don't change the current setting */
 		else if ((mode->level < 0) || (mode->level > 1)) {
 			return EINVAL;
 		} else {
-			lockmgr(&sc->sm_lock, LK_EXCLUSIVE);
 			sc->level = mode->level;
-			lockmgr(&sc->sm_lock, LK_RELEASE);
 		}
 		return 0;
 
 	case MOUSE_GETLEVEL:	/* get operation level */
-		lockmgr(&sc->sm_lock, LK_EXCLUSIVE);
-		*(int *)ap->a_data = sc->level;
-		lockmgr(&sc->sm_lock, LK_RELEASE);
+		*(int *)data = sc->level;
 		return 0;
 
 	case MOUSE_SETLEVEL:	/* set operation level */
-		if ((*(int *)ap->a_data  < 0) || (*(int *)ap->a_data > 1)) {
+		if ((*(int *)data  < 0) || (*(int *)data > 1)) {
 			return EINVAL;
 		}
-		lockmgr(&sc->sm_lock, LK_EXCLUSIVE);
-		sc->level = *(int *)ap->a_data;
-		lockmgr(&sc->sm_lock, LK_RELEASE);
+		sc->level = *(int *)data;
 		return 0;
 
 	case MOUSE_GETSTATUS:	/* get accumulated mouse events */
-		lockmgr(&sc->sm_lock, LK_EXCLUSIVE);
-		*(mousestatus_t *)ap->a_data = sc->syncstatus;
+		*(mousestatus_t *)data = sc->syncstatus;
 		sc->syncstatus.flags = 0;
 		sc->syncstatus.obutton = sc->syncstatus.button;
 		sc->syncstatus.dx = 0;
 		sc->syncstatus.dy = 0;
 		sc->syncstatus.dz = 0;
-		lockmgr(&sc->sm_lock, LK_RELEASE);
 		return 0;
 
 #if 0 /* notyet */
@@ -274,40 +168,6 @@ smioctl(struct dev_ioctl_args *ap)
 
 	return ENOTTY;
 }
-
-static int
-smkqfilter(struct dev_kqfilter_args *ap)
-{
-	struct sysmouse_state *sc = &mouse_state;
-	struct knote *kn = ap->a_kn;
-
-	ap->a_result = 0;
-
-	switch (kn->kn_filter) {
-	case EVFILT_READ:
-		flexfifo_kqfilter(sc->fifo, kn);
-		break;
-	default:
-		ap->a_result = EOPNOTSUPP;
-		return (0);
-	}
-
-	return (0);
-}
-
-static void
-sm_attach_mouse(void *unused)
-{
-	struct sysmouse_state *sc = &mouse_state;
-	cdev_t dev;
-
-	lockinit(&mouse_state.sm_lock, "sysmouse", 0, LK_CANRECURSE);
-	sc->fifo = NULL;
-
-	dev = make_dev(&sm_ops, 0, UID_ROOT, GID_WHEEL, 0600, "sysmouse");
-}
-
-SYSINIT(sysmouse, SI_SUB_DRIVERS, SI_ORDER_ANY, sm_attach_mouse, NULL);
 
 static int
 sysmouse_updatestatus(mousestatus_t *status, mouse_info_t *info)
@@ -405,33 +265,43 @@ sysmouse_evtopkt(void *arg, uint8_t *ev, uint8_t *pkt)
 	return 5;
 }
 
+static struct flexfifo_ops ops = {
+	.pktlen = pktlen,
+	.evtopkt = sysmouse_evtopkt,
+	.ioctl = smioctl,
+	.open = smopen,
+	.close = NULL,
+};
+
+static void
+sm_attach_mouse(void *unused)
+{
+	struct sysmouse_state *sc = &mouse_state;
+
+	sc->fifo = flexfifo_create(sizeof(mouse_info_t), FIFO_SIZE, &ops, 0,
+	    "sysmouse", sc, 8);
+}
+
+SYSINIT(sysmouse, SI_SUB_DRIVERS, SI_ORDER_ANY, sm_attach_mouse, NULL);
+
+/* This function is protected by the tty_token, when called from syscons. */
 int
 sysmouse_event(mouse_info_t *info)
 {
 	struct sysmouse_state *sc = &mouse_state;
 	int ret;
 
-	lockmgr(&sc->sm_lock, LK_EXCLUSIVE);
 	ret = sysmouse_updatestatus(&sc->syncstatus, info);
 	if (ret != 0)
 		ret = sc->syncstatus.flags;
-	if (!sc->opened) {
-		lockmgr(&sc->sm_lock, LK_RELEASE);
-		return ret;
-	}
 
 	switch (info->operation) {
 	case MOUSE_ACTION:
 	case MOUSE_MOTION_EVENT:
 	case MOUSE_BUTTON_EVENT:
 		flexfifo_enqueue_ring(sc->fifo, (void *)info);
-		if (sc->asyncio)
-	                pgsigio(sc->sm_sigio, SIGIO, 0);
-		lockmgr(&sc->sm_lock, LK_RELEASE);
-		flexfifo_wakeup(sc->fifo);
 		break;
 	default:
-		lockmgr(&sc->sm_lock, LK_RELEASE);
 		break;
 	}
 
