@@ -53,6 +53,7 @@
 #include <sys/fcntl.h>
 #include <sys/sbuf.h>
 #include <sys/flexfifo.h>
+#include <sys/udev.h>
 
 #include <bus/u4b/usb.h>
 #include <bus/u4b/usbdi.h>
@@ -697,6 +698,8 @@ ums_attach(device_t dev)
 	ksnprintf(buf, sizeof(buf), "ums%d", device_get_unit(dev));
 	sc->sc_fifo = flexfifo_create(sizeof(struct ums_status), 256,
 	    &ums_fifo_ops, device_get_unit(dev), buf, sc, 8);
+	udev_dict_set_cstr(flexfifo_get_cdev(sc->sc_fifo),
+	    "subsystem", "mouse");
 
 #ifdef EVDEV_SUPPORT
 	sc->sc_evdev = evdev_alloc();
