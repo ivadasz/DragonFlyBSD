@@ -39,6 +39,7 @@
 #include <sys/kernel.h>
 #include <sys/thread2.h>
 #include <sys/flexfifo.h>
+#include <sys/udev.h>
 
 #include <machine/console.h>
 #include <sys/mouse.h>
@@ -280,6 +281,8 @@ sm_attach_mouse(void *unused)
 
 	sc->fifo = flexfifo_create(sizeof(mouse_info_t), FIFO_SIZE, &ops, 0,
 	    "sysmouse", sc, 8);
+	udev_dict_set_cstr(flexfifo_get_cdev(sc->fifo),
+	    "subsystem", "sysmouse");
 }
 
 SYSINIT(sysmouse, SI_SUB_DRIVERS, SI_ORDER_ANY, sm_attach_mouse, NULL);

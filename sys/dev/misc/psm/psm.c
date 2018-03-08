@@ -80,6 +80,7 @@
 #include <sys/uio.h>
 #include <sys/machintr.h>
 #include <sys/vnode.h>
+#include <sys/udev.h>
 
 #include <machine/clock.h>
 #include <machine/limits.h>
@@ -1628,6 +1629,7 @@ psmattach(device_t dev)
 	/* Done */
 	sc->dev = make_dev(&psm_ops, unit, 0, 0, 0666, "psm%d", unit);
 	sc->dev->si_drv1 = sc;
+	udev_dict_set_cstr(sc->dev, "subsystem", "mouse");
 
 	/* Some touchpad devices need full reinitialization after suspend. */
 	switch (sc->hw.model) {
