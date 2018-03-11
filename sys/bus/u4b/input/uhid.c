@@ -70,6 +70,7 @@
 #include <bus/u4b/input/usb_rdesc.h>
 #include <bus/u4b/quirk/usb_quirk.h>
 
+#include <bus/u4b/hidvar.h>
 #include "hid_if.h"
 
 #ifdef USB_DEBUG
@@ -91,8 +92,14 @@ enum {
 	UHID_N_TRANSFER,
 };
 
+struct uhid_ivars {
+	uint8_t bootproto;
+};
+
 struct uhid_softc {
 	struct lock sc_lock;
+
+	struct uhid_ivars ivar;
 
 	struct usb_xfer *sc_xfer[UHID_N_TRANSFER];
 	struct usb_device *sc_udev;
@@ -713,13 +720,13 @@ uhid_probe(device_t dev)
 }
 
 static int
-uhid_have_multi_id(void *buf, int len)
+uhid_have_multi_id(void *buf, int len, int kind)
 {
 	struct hid_data *d;
 	struct hid_item h;
 
 	h.report_ID = 0;
-	for (d = hid_start_parse(buf, len, hid_input); hid_get_item(d, &h); ) {
+	for (d = hid_start_parse(buf, len, kind); hid_get_item(d, &h); ) {
 		if (h.report_ID != 0)
 			return (1);
 	}
@@ -759,8 +766,10 @@ uhid_parse_descriptor(device_t dev)
 		sz = hid_report_size(buf, len, hid_input, i);
 		kprintf("uhid: report id=%d size=%d\n", i, sz);
 	}
-	if (sc->child == NULL)
+	if (sc->child == NULL) {
 		sc->child = device_add_child(dev, NULL, -1);
+		device_set_ivars(sc->child, &sc->ivar);
+	}
 }
 
 static void
@@ -882,6 +891,7 @@ uhid_attach(device_t dev)
 			goto detach;
 		}
 	}
+	/* XXX Set idle rate to infinite for all Report IDs. */
 	error = usbd_req_set_idle(uaa->device, NULL,
 	    uaa->info.bIfaceIndex, 0, 0);
 
@@ -897,6 +907,16 @@ uhid_attach(device_t dev)
 
 	sc->sc_fsize = hid_report_size_a
 	    (sc->sc_repdesc_ptr, sc->sc_repdesc_size, hid_feature, &sc->sc_fid);
+
+	sc->sc_have_multi_id = uhid_have_multi_id(sc->sc_repdesc_ptr,
+	    sc->sc_repdesc_size, hid_input);
+
+	if (sc->sc_isize + (sc->sc_have_multi_id ? 1 : 0) >
+	    (int)usbd_xfer_max_framelen(sc->sc_xfer[UHID_INTR_DT_RD])) {
+		DPRINTF("WARNING: input report size, %d bytes, is larger "
+		    "than interrupt size, %d bytes!\n", sc->sc_isize,
+		    usbd_xfer_max_framelen(sc->sc_xfer[UHID_INTR_DT_RD]));
+	}
 
 	if (sc->sc_isize > UHID_BSIZE) {
 		DPRINTF("input size is too large, "
@@ -926,21 +946,22 @@ uhid_attach(device_t dev)
 	    sc->sc_repdesc_size);
 	uhid_dump(sc->sc_repdesc_ptr, sc->sc_repdesc_size);
 
-	sc->sc_have_multi_id = uhid_have_multi_id(sc->sc_repdesc_ptr,
-	    sc->sc_repdesc_size);
-
 	uhid_parse_descriptor(dev);
+	sc->ivar.bootproto = HID_BOOTPROTO_OTHER;
+	if (uaa->info.bInterfaceSubClass == UISUBCLASS_BOOT) {
+		if (uaa->info.bInterfaceProtocol == UIPROTO_BOOT_KEYBOARD &&
+		    usb_test_quirk(uaa, UQ_KBD_BOOTPROTO)) {
+			/* Prefer boot protocol for quirked devices. */
+			usbd_req_set_protocol(uaa->device, NULL,
+			    uaa->info.bIfaceIndex, 0);
+			sc->ivar.bootproto = HID_BOOTPROTO_KEYBOARD;
+		} else {
+			usbd_req_set_protocol(uaa->device, NULL,
+			    uaa->info.bIfaceIndex, 1);
+		}
+	}
 	bus_generic_attach(dev);
 
-#if 0
-	error = usb_fifo_attach(uaa->device, sc, &sc->sc_lock,
-	    &uhid_fifo_methods, &sc->sc_fifo,
-	    unit, -1, uaa->info.bIfaceIndex,
-	    UID_ROOT, GID_OPERATOR, 0644);
-	if (error) {
-		goto detach;
-	}
-#endif
 	return (0);			/* success */
 
 detach:
@@ -956,10 +977,6 @@ uhid_detach(device_t dev)
 	if (bus_generic_detach(dev) != 0)
 		return (EBUSY);
 
-#if 0
-	usb_fifo_detach(&sc->sc_fifo);
-#endif
-
 	usbd_transfer_unsetup(sc->sc_xfer, UHID_N_TRANSFER);
 
 	if (sc->sc_repdesc_ptr) {
@@ -972,12 +989,36 @@ uhid_detach(device_t dev)
 	return (0);
 }
 
+static int
+uhid_read_ivar(device_t bus, device_t child, int which, uintptr_t *result)
+{
+	struct uhid_ivars *ivar = device_get_ivars(child);
+
+	switch (which) {
+	default:
+		return (EINVAL);
+	case HID_IVAR_BOOTPROTO:
+		*(int *)result = ivar->bootproto;
+		break;
+	}
+	return (0);
+}
+
+static int
+uhid_write_ivar(device_t bus, device_t child, int which, uintptr_t value)
+{
+	return (EINVAL);
+}
+
 static devclass_t uhid_devclass;
 
 static device_method_t uhid_methods[] = {
 	DEVMETHOD(device_probe, uhid_probe),
 	DEVMETHOD(device_attach, uhid_attach),
 	DEVMETHOD(device_detach, uhid_detach),
+
+	DEVMETHOD(bus_read_ivar, uhid_read_ivar),
+	DEVMETHOD(bus_write_ivar, uhid_write_ivar),
 
 	DEVMETHOD(hid_get_descriptor, uhid_get_descriptor),
 	DEVMETHOD(hid_set_handler, uhid_set_handler),
