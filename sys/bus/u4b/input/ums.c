@@ -55,33 +55,17 @@
 #include <sys/flexfifo.h>
 #include <sys/udev.h>
 
-#include <bus/u4b/usb.h>
-#include <bus/u4b/usbdi.h>
-#include <bus/u4b/usbdi_util.h>
-#include <bus/u4b/usbhid.h>
-#include "usbdevs.h"
+#include <bus/u4b/hid_common.h>
 
-#define	USB_DEBUG_VAR ums_debug
-#include <bus/u4b/usb_debug.h>
-
-#include <bus/u4b/quirk/usb_quirk.h>
+#include <bus/u4b/hidvar.h>
+#include "hid_if.h"
 
 #ifdef EVDEV_SUPPORT
 #include <dev/misc/evdev/input.h>
 #include <dev/misc/evdev/evdev.h>
 #endif
 
-#include <sys/filio.h>
-#include <sys/tty.h>
 #include <sys/mouse.h>
-
-#ifdef USB_DEBUG
-static int ums_debug = 0;
-
-static SYSCTL_NODE(_hw_usb, OID_AUTO, ums, CTLFLAG_RW, 0, "USB ums");
-SYSCTL_INT(_hw_usb_ums, OID_AUTO, debug, CTLFLAG_RW,
-    &ums_debug, 0, "Debug level");
-#endif
 
 #define	MOUSE_FLAGS_MASK (HIO_CONST|HIO_RELATIVE)
 #define	MOUSE_FLAGS (HIO_RELATIVE)
@@ -91,6 +75,11 @@ SYSCTL_INT(_hw_usb_ums, OID_AUTO, debug, CTLFLAG_RW,
 #define	UMS_BUTTON_MAX   31		/* exclusive, must be less than 32 */
 #define	UMS_BUT(i) ((i) < 3 ? (((i) + 2) % 3) : (i))
 #define	UMS_INFO_MAX	  2		/* maximum number of HID sets */
+
+#define DPRINTFN(l, f, ...)	\
+    do { if (ums_debug >= (l)) { kprintf(f,## __VA_ARGS__); } } while(0)
+
+#define DPRINTF(f, ...) DPRINTFN(1, f,## __VA_ARGS__)
 
 enum {
 	UMS_INTR_DT,
@@ -132,16 +121,15 @@ struct ums_info {
 };
 
 struct ums_softc {
+	device_t dev;
 	struct flexfifo *sc_fifo;
 	struct lock sc_lock;
-	struct usb_callout sc_callout;
+	struct callout sc_callout;
 	struct ums_info sc_info[UMS_INFO_MAX];
 
 	mousehw_t sc_hw;
 	mousemode_t sc_mode;
 	mousestatus_t sc_status;
-
-	struct usb_xfer *sc_xfer[UMS_N_TRANSFER];
 
 	int sc_pollrate;
 	int sc_read_running;
@@ -161,9 +149,10 @@ struct ums_softc {
 #endif
 };
 
-static void ums_put_queue_timeout(void *__sc);
+static int ums_debug = 0;
+TUNABLE_INT("hw.hid.ums_debug", &ums_debug);
 
-static usb_callback_t ums_intr_callback;
+static void ums_put_queue_timeout(void *__sc);
 
 static device_probe_t ums_probe;
 static device_attach_t ums_attach;
@@ -176,8 +165,6 @@ static void ums_evdev_push(struct ums_softc *, int32_t, int32_t,
     int32_t, int32_t, int32_t);
 #endif
 
-static void	ums_start_rx(struct ums_softc *);
-static void	ums_stop_rx(struct ums_softc *);
 static void	ums_put_queue(struct ums_softc *, int32_t, int32_t,
 		    int32_t, int32_t, int32_t);
 #if 0 /* XXX */
@@ -219,12 +206,10 @@ ums_put_queue_timeout(void *__sc)
 }
 
 static void
-ums_intr_callback(struct usb_xfer *xfer, usb_error_t error)
+ums_input_handler(uint8_t id, uint8_t *buf, int len, void *arg)
 {
-	struct ums_softc *sc = usbd_xfer_softc(xfer);
+	struct ums_softc *sc = arg;
 	struct ums_info *info = &sc->sc_info[0];
-	struct usb_page_cache *pc;
-	uint8_t *buf = sc->sc_temp;
 	int32_t buttons = 0;
 	int32_t buttons_found = 0;
 #ifdef EVDEV_SUPPORT
@@ -236,215 +221,149 @@ ums_intr_callback(struct usb_xfer *xfer, usb_error_t error)
 	int32_t dz = 0;
 	int32_t dt = 0;
 	uint8_t i;
-	uint8_t id;
-	int len;
 
-	usbd_xfer_status(xfer, &len, NULL, NULL, NULL);
+	DPRINTFN(6, "sc=%p actlen=%d\n", sc, len);
 
-	switch (USB_GET_STATE(xfer)) {
-	case USB_ST_TRANSFERRED:
-		DPRINTFN(6, "sc=%p actlen=%d\n", sc, len);
+	if (len == 0)
+		return;
 
-		if (len > (int)sizeof(sc->sc_temp)) {
-			DPRINTFN(6, "truncating large packet to %zu bytes\n",
-			    sizeof(sc->sc_temp));
-			len = sizeof(sc->sc_temp);
-		}
-		if (len == 0)
-			goto tr_setup;
+	DPRINTFN(6, "data = %02x %02x %02x %02x "
+	    "%02x %02x %02x %02x\n",
+	    (len > 0) ? buf[0] : 0, (len > 1) ? buf[1] : 0,
+	    (len > 2) ? buf[2] : 0, (len > 3) ? buf[3] : 0,
+	    (len > 4) ? buf[4] : 0, (len > 5) ? buf[5] : 0,
+	    (len > 6) ? buf[6] : 0, (len > 7) ? buf[7] : 0);
 
-		pc = usbd_xfer_get_frame(xfer, 0);
-		usbd_copy_out(pc, 0, buf, len);
+	if (sc->sc_info[0].sc_flags & UMS_FLAG_SBU) {
+		if ((*buf == 0x14) || (*buf == 0x15))
+			return;
+	}
 
-		DPRINTFN(6, "data = %02x %02x %02x %02x "
-		    "%02x %02x %02x %02x\n",
-		    (len > 0) ? buf[0] : 0, (len > 1) ? buf[1] : 0,
-		    (len > 2) ? buf[2] : 0, (len > 3) ? buf[3] : 0,
-		    (len > 4) ? buf[4] : 0, (len > 5) ? buf[5] : 0,
-		    (len > 6) ? buf[6] : 0, (len > 7) ? buf[7] : 0);
+repeat:
+	if ((info->sc_flags & UMS_FLAG_W_AXIS) &&
+	    (id == info->sc_iid_w))
+		dw += hid_get_data(buf, len, &info->sc_loc_w);
 
-		if (sc->sc_iid) {
-			id = *buf;
+	if ((info->sc_flags & UMS_FLAG_X_AXIS) &&
+	    (id == info->sc_iid_x))
+		dx += hid_get_data(buf, len, &info->sc_loc_x);
 
-			len--;
-			buf++;
+	if ((info->sc_flags & UMS_FLAG_Y_AXIS) &&
+	    (id == info->sc_iid_y))
+		dy = -hid_get_data(buf, len, &info->sc_loc_y);
 
+	if ((info->sc_flags & UMS_FLAG_Z_AXIS) &&
+	    (id == info->sc_iid_z)) {
+		int32_t temp;
+		temp = hid_get_data(buf, len, &info->sc_loc_z);
+		if (info->sc_flags & UMS_FLAG_REVZ)
+			temp = -temp;
+		dz -= temp;
+	}
+
+	if ((info->sc_flags & UMS_FLAG_T_AXIS) &&
+	    (id == info->sc_iid_t))
+		dt -= hid_get_data(buf, len, &info->sc_loc_t);
+
+	for (i = 0; i < info->sc_buttons; i++) {
+		uint32_t mask;
+		mask = 1UL << UMS_BUT(i);
+		/* check for correct button ID */
+		if (id != info->sc_iid_btn[i])
+			continue;
+		/* check for button pressed */
+		if (hid_get_data(buf, len, &info->sc_loc_btn[i]))
+			buttons |= mask;
+		/* register button mask */
+		buttons_found |= mask;
+	}
+
+	if (++info != &sc->sc_info[UMS_INFO_MAX])
+		goto repeat;
+
+#ifdef EVDEV_SUPPORT
+	buttons_reported = buttons;
+#endif
+	/* keep old button value(s) for non-detected buttons */
+	buttons |= sc->sc_status.button & ~buttons_found;
+
+	if (dx || dy || dz || dt || dw ||
+	    (buttons != sc->sc_status.button)) {
+
+		DPRINTFN(6, "x:%d y:%d z:%d t:%d w:%d buttons:0x%08x\n",
+		    dx, dy, dz, dt, dw, buttons);
+
+		/* translate T-axis into button presses until further */
+		if (dt > 0)
+			buttons |= 1UL << 3;
+		else if (dt < 0)
+			buttons |= 1UL << 4;
+
+		sc->sc_status.button = buttons;
+		sc->sc_status.dx += dx;
+		sc->sc_status.dy += dy;
+		sc->sc_status.dz += dz;
+		/*
+		 * sc->sc_status.dt += dt;
+		 * no way to export this yet
+		 */
+
+		/*
+		 * The Qtronix keyboard has a built in PS/2
+		 * port for a mouse.  The firmware once in a
+		 * while posts a spurious button up
+		 * event. This event we ignore by doing a
+		 * timeout for 50 msecs.  If we receive
+		 * dx=dy=dz=buttons=0 before we add the event
+		 * to the queue.  In any other case we delete
+		 * the timeout event.
+		 */
+		if ((sc->sc_info[0].sc_flags & UMS_FLAG_SBU) &&
+		    (dx == 0) && (dy == 0) && (dz == 0) && (dt == 0) &&
+		    (dw == 0) && (buttons == 0)) {
+
+			callout_reset(&sc->sc_callout, hz / 20,
+			    &ums_put_queue_timeout, sc);
 		} else {
-			id = 0;
-			if (sc->sc_info[0].sc_flags & UMS_FLAG_SBU) {
-				if ((*buf == 0x14) || (*buf == 0x15)) {
-					goto tr_setup;
-				}
-			}
-		}
 
-	repeat:
-		if ((info->sc_flags & UMS_FLAG_W_AXIS) &&
-		    (id == info->sc_iid_w))
-			dw += hid_get_data(buf, len, &info->sc_loc_w);
+			callout_stop(&sc->sc_callout);
 
-		if ((info->sc_flags & UMS_FLAG_X_AXIS) &&
-		    (id == info->sc_iid_x))
-			dx += hid_get_data(buf, len, &info->sc_loc_x);
-
-		if ((info->sc_flags & UMS_FLAG_Y_AXIS) &&
-		    (id == info->sc_iid_y))
-			dy = -hid_get_data(buf, len, &info->sc_loc_y);
-
-		if ((info->sc_flags & UMS_FLAG_Z_AXIS) &&
-		    (id == info->sc_iid_z)) {
-			int32_t temp;
-			temp = hid_get_data(buf, len, &info->sc_loc_z);
-			if (info->sc_flags & UMS_FLAG_REVZ)
-				temp = -temp;
-			dz -= temp;
-		}
-
-		if ((info->sc_flags & UMS_FLAG_T_AXIS) &&
-		    (id == info->sc_iid_t))
-			dt -= hid_get_data(buf, len, &info->sc_loc_t);
-
-		for (i = 0; i < info->sc_buttons; i++) {
-			uint32_t mask;
-			mask = 1UL << UMS_BUT(i);
-			/* check for correct button ID */
-			if (id != info->sc_iid_btn[i])
-				continue;
-			/* check for button pressed */
-			if (hid_get_data(buf, len, &info->sc_loc_btn[i]))
-				buttons |= mask;
-			/* register button mask */
-			buttons_found |= mask;
-		}
-
-		if (++info != &sc->sc_info[UMS_INFO_MAX])
-			goto repeat;
-
+			ums_put_queue(sc, dx, dy, dz, dt, buttons);
 #ifdef EVDEV_SUPPORT
-		buttons_reported = buttons;
+			ums_evdev_push(sc, dx, dy, dz, dt,
+			    buttons_reported);
 #endif
-		/* keep old button value(s) for non-detected buttons */
-		buttons |= sc->sc_status.button & ~buttons_found;
-
-		if (dx || dy || dz || dt || dw ||
-		    (buttons != sc->sc_status.button)) {
-
-			DPRINTFN(6, "x:%d y:%d z:%d t:%d w:%d buttons:0x%08x\n",
-			    dx, dy, dz, dt, dw, buttons);
-
-			/* translate T-axis into button presses until further */
-			if (dt > 0)
-				buttons |= 1UL << 3;
-			else if (dt < 0)
-				buttons |= 1UL << 4;
-
-			sc->sc_status.button = buttons;
-			sc->sc_status.dx += dx;
-			sc->sc_status.dy += dy;
-			sc->sc_status.dz += dz;
-			/*
-			 * sc->sc_status.dt += dt;
-			 * no way to export this yet
-			 */
-
-			/*
-		         * The Qtronix keyboard has a built in PS/2
-		         * port for a mouse.  The firmware once in a
-		         * while posts a spurious button up
-		         * event. This event we ignore by doing a
-		         * timeout for 50 msecs.  If we receive
-		         * dx=dy=dz=buttons=0 before we add the event
-		         * to the queue.  In any other case we delete
-		         * the timeout event.
-		         */
-			if ((sc->sc_info[0].sc_flags & UMS_FLAG_SBU) &&
-			    (dx == 0) && (dy == 0) && (dz == 0) && (dt == 0) &&
-			    (dw == 0) && (buttons == 0)) {
-
-				usb_callout_reset(&sc->sc_callout, hz / 20,
-				    &ums_put_queue_timeout, sc);
-			} else {
-
-				usb_callout_stop(&sc->sc_callout);
-
-				ums_put_queue(sc, dx, dy, dz, dt, buttons);
-#ifdef EVDEV_SUPPORT
-				ums_evdev_push(sc, dx, dy, dz, dt,
-				    buttons_reported);
-#endif
-			}
 		}
-	case USB_ST_SETUP:
-tr_setup:
-		usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
-		usbd_transfer_submit(xfer);
-		break;
-
-	default:			/* Error */
-		if (error != USB_ERR_CANCELLED) {
-			/* try clear stall first */
-			usbd_xfer_set_stall(xfer);
-			goto tr_setup;
-		}
-		break;
 	}
 }
-
-static const struct usb_config ums_config[UMS_N_TRANSFER] = {
-
-	[UMS_INTR_DT] = {
-		.type = UE_INTERRUPT,
-		.endpoint = UE_ADDR_ANY,
-		.direction = UE_DIR_IN,
-		.flags = {.pipe_bof = 1,.short_xfer_ok = 1,},
-		.bufsize = 0,	/* use wMaxPacketSize */
-		.callback = &ums_intr_callback,
-	},
-};
-
-/* A match on these entries will load ums */
-static const STRUCT_USB_HOST_ID __used ums_devs[] = {
-	{USB_IFACE_CLASS(UICLASS_HID),
-	 USB_IFACE_SUBCLASS(UISUBCLASS_BOOT),
-	 USB_IFACE_PROTOCOL(UIPROTO_MOUSE),},
-};
 
 static int
 ums_probe(device_t dev)
 {
-	struct usb_attach_arg *uaa = device_get_ivars(dev);
-	void *d_ptr;
-	int error;
-	uint16_t d_len;
+	char *buf;
+	uint16_t len;
 
 	DPRINTFN(11, "\n");
 
-	if (uaa->usb_mode != USB_MODE_HOST)
+	if (hid_get_bootproto(dev) == HID_BOOTPROTO_MOUSE) {
+		device_set_desc(dev, "HID Mouse device");
+		return (BUS_PROBE_DEFAULT);
+	}
+
+	HID_GET_DESCRIPTOR(device_get_parent(dev), &buf, &len);
+
+	if (hid_is_mouse(buf, len))
+		device_set_desc(dev, "HID Mouse device");
+	else
 		return (ENXIO);
 
-	if (uaa->info.bInterfaceClass != UICLASS_HID)
-		return (ENXIO);
-
+#if 0
+	/* XXX Do equivalent check in parent uhid driver. */
 	if (usb_test_quirk(uaa, UQ_UMS_IGNORE))
 		return (ENXIO);
+#endif
 
-	if ((uaa->info.bInterfaceSubClass == UISUBCLASS_BOOT) &&
-	    (uaa->info.bInterfaceProtocol == UIPROTO_MOUSE))
-		return (BUS_PROBE_DEFAULT);
-
-	error = usbd_req_get_hid_desc(uaa->device, NULL,
-	    &d_ptr, &d_len, M_TEMP, uaa->info.bIfaceIndex);
-
-	if (error)
-		return (ENXIO);
-
-	if (hid_is_mouse(d_ptr, d_len))
-		error = BUS_PROBE_DEFAULT;
-	else
-		error = ENXIO;
-
-	kfree(d_ptr, M_TEMP);
-	return (error);
+	return (BUS_PROBE_DEFAULT);
 }
 
 static void
@@ -565,12 +484,14 @@ ums_hid_parse(struct ums_softc *sc, device_t dev, const uint8_t *buf,
 static int
 ums_attach(device_t dev)
 {
-	struct usb_attach_arg *uaa = device_get_ivars(dev);
 	struct ums_softc *sc = device_get_softc(dev);
+#if 0
 	struct ums_info *info;
-	void *d_ptr = NULL;
-	int isize;
+#endif
+	char *d_ptr = NULL;
+#ifdef EVDEV_SUPPORT
 	int err;
+#endif
 	uint16_t d_len;
 	uint8_t i;
 #ifdef USB_DEBUG
@@ -579,40 +500,11 @@ ums_attach(device_t dev)
 
 	DPRINTFN(11, "sc=%p\n", sc);
 
-	device_set_usb_desc(dev);
-
+	sc->dev = dev;
 	lockinit(&sc->sc_lock, "ums lock", 0, LK_CANRECURSE);
+	callout_init_lk(&sc->sc_callout, &sc->sc_lock);
 
-	usb_callout_init_mtx(&sc->sc_callout, &sc->sc_lock, 0);
-
-	/*
-         * Force the report (non-boot) protocol.
-         *
-         * Mice without boot protocol support may choose not to implement
-         * Set_Protocol at all; Ignore any error.
-         */
-	err = usbd_req_set_protocol(uaa->device, NULL,
-	    uaa->info.bIfaceIndex, 1);
-
-	err = usbd_transfer_setup(uaa->device,
-	    &uaa->info.bIfaceIndex, sc->sc_xfer, ums_config,
-	    UMS_N_TRANSFER, sc, &sc->sc_lock);
-
-	if (err) {
-		DPRINTF("error=%s\n", usbd_errstr(err));
-		goto detach;
-	}
-
-	/* Get HID descriptor */
-	err = usbd_req_get_hid_desc(uaa->device, NULL, &d_ptr,
-	    &d_len, M_TEMP, uaa->info.bIfaceIndex);
-
-	if (err) {
-		device_printf(dev, "error reading report description\n");
-		goto detach;
-	}
-
-	isize = hid_report_size(d_ptr, d_len, hid_input, &sc->sc_iid);
+	HID_GET_DESCRIPTOR(device_get_parent(dev), &d_ptr, &d_len);
 
 	/*
 	 * The Microsoft Wireless Notebook Optical Mouse seems to be in worse
@@ -620,6 +512,7 @@ ums_attach(device_t dev)
 	 * all of its other button positions are all off. It also reports that
 	 * it has two addional buttons and a tilt wheel.
 	 */
+#if 0
 	if (usb_test_quirk(uaa, UQ_MS_BAD_CLASS)) {
 
 		sc->sc_iid = 0;
@@ -649,24 +542,22 @@ ums_attach(device_t dev)
 		device_printf(dev, "3 buttons and [XYZ] "
 		    "coordinates ID=0\n");
 
-	} else {
+	} else
+#endif
+	{
 		/* Search the HID descriptor and announce device */
 		for (i = 0; i < UMS_INFO_MAX; i++) {
 			ums_hid_parse(sc, dev, d_ptr, d_len, i);
 		}
 	}
 
+#if 0
 	if (usb_test_quirk(uaa, UQ_MS_REVZ)) {
 		info = &sc->sc_info[0];
 		/* Some wheels need the Z axis reversed. */
 		info->sc_flags |= UMS_FLAG_REVZ;
 	}
-	if (isize > (int)usbd_xfer_max_framelen(sc->sc_xfer[UMS_INTR_DT])) {
-		DPRINTF("WARNING: report size, %d bytes, is larger "
-		    "than interrupt size, %d bytes!\n", isize,
-		    usbd_xfer_max_framelen(sc->sc_xfer[UMS_INTR_DT]));
-	}
-	kfree(d_ptr, M_TEMP);
+#endif
 	d_ptr = NULL;
 
 #ifdef USB_DEBUG
@@ -705,9 +596,11 @@ ums_attach(device_t dev)
 	sc->sc_evdev = evdev_alloc();
 	evdev_set_name(sc->sc_evdev, device_get_desc(dev));
 	evdev_set_phys(sc->sc_evdev, device_get_nameunit(dev));
+#if 0
 	evdev_set_id(sc->sc_evdev, BUS_USB, uaa->info.idVendor,
 	    uaa->info.idProduct, 0);
 	evdev_set_serial(sc->sc_evdev, usb_get_serial(uaa->device));
+#endif
 	evdev_set_methods(sc->sc_evdev, sc, &ums_evdev_methods);
 	evdev_support_prop(sc->sc_evdev, INPUT_PROP_POINTER);
 	evdev_support_event(sc->sc_evdev, EV_SYN);
@@ -744,14 +637,15 @@ ums_attach(device_t dev)
 	    "", "Dump of parsed HID report descriptor");
 #endif
 
+	HID_SET_HANDLER(device_get_parent(dev), ums_input_handler, sc);
+
 	return (0);
 
+#ifdef EVDEV_SUPPORT
 detach:
-	if (d_ptr) {
-		kfree(d_ptr, M_TEMP);
-	}
 	ums_detach(dev);
 	return (ENOMEM);
+#endif
 }
 
 static int
@@ -761,16 +655,16 @@ ums_detach(device_t self)
 
 	DPRINTF("sc=%p\n", sc);
 
+	HID_STOP(device_get_parent(self));
+	HID_SET_HANDLER(device_get_parent(self), NULL, NULL);
+	callout_drain(&sc->sc_callout);
+
 	if (sc->sc_fifo != NULL)
 		flexfifo_destroy(sc->sc_fifo);
 
 #ifdef EVDEV_SUPPORT
 	evdev_free(sc->sc_evdev);
 #endif
-
-	usbd_transfer_unsetup(sc->sc_xfer, UMS_N_TRANSFER);
-
-	usb_callout_drain(&sc->sc_callout);
 
 	lockuninit(&sc->sc_lock);
 
@@ -811,45 +705,6 @@ ums_reset(struct ums_softc *sc)
 	sc->sc_status.dy = 0;
 	sc->sc_status.dz = 0;
 	/* sc->sc_status.dt = 0; */
-}
-
-static void
-ums_start_rx(struct ums_softc *sc)
-{
-	int rate;
-
-	/* Check if we should override the default polling interval */
-	rate = sc->sc_pollrate;
-	/* Range check rate */
-	if (rate > 1000)
-		rate = 1000;
-	/* Check for set rate */
-	if ((rate > 0) && (sc->sc_xfer[UMS_INTR_DT] != NULL)) {
-		DPRINTF("Setting pollrate = %d\n", rate);
-		/* Stop current transfer, if any */
-		if (sc->sc_read_running) {
-			usbd_transfer_stop(sc->sc_xfer[UMS_INTR_DT]);
-			sc->sc_read_running = 0;
-		}
-		/* Set new interval */
-		usbd_xfer_set_interval(sc->sc_xfer[UMS_INTR_DT], 1000 / rate);
-		/* Only set pollrate once */
-		sc->sc_pollrate = 0;
-	}
-	if (sc->sc_read_running == 0) {
-		sc->sc_read_running = 1;
-		usbd_transfer_start(sc->sc_xfer[UMS_INTR_DT]);
-	}
-}
-
-static void
-ums_stop_rx(struct ums_softc *sc)
-{
-	if (sc->sc_read_running) {
-		usbd_transfer_stop(sc->sc_xfer[UMS_INTR_DT]);
-		sc->sc_read_running = 0;
-		usb_callout_stop(&sc->sc_callout);
-	}
 }
 
 #if ((MOUSE_SYS_PACKETSIZE != 8) || \
@@ -955,7 +810,7 @@ ums_ev_open(struct evdev_dev *evdev, void *ev_softc)
 	sc->sc_evflags = UMS_EVDEV_OPENED;
 
 	if (sc->sc_opened == 0)
-		ums_start_rx(sc);
+		HID_START(device_get_parent(sc->dev));
 
 	return (0);
 }
@@ -969,8 +824,10 @@ ums_ev_close(struct evdev_dev *evdev, void *ev_softc)
 
 	sc->sc_evflags = 0;
 
-	if (sc->sc_opened == 0)
-		ums_stop_rx(sc);
+	if (sc->sc_opened == 0) {
+		HID_STOP(device_get_parent(sc->dev));
+		callout_stop(&sc->sc_callout);
+	}
 }
 #endif
 
@@ -985,7 +842,7 @@ ums_open(void *arg)
 #ifdef EVDEV_SUPPORT
 	if (sc->sc_evflags == 0)
 #endif
-		ums_start_rx(sc);
+		HID_START(device_get_parent(sc->dev));
 	lockmgr(&sc->sc_lock, LK_RELEASE);
 }
 
@@ -999,7 +856,10 @@ ums_close(void *arg)
 #ifdef EVDEV_SUPPORT
 	if (sc->sc_evflags == 0)
 #endif
-		ums_stop_rx(sc);
+	{
+		HID_STOP(device_get_parent(sc->dev));
+		callout_stop(&sc->sc_callout);
+	}
 	lockmgr(&sc->sc_lock, LK_RELEASE);
 }
 
@@ -1197,8 +1057,7 @@ static driver_t ums_driver = {
 	.size = sizeof(struct ums_softc),
 };
 
-DRIVER_MODULE(ums, uhub, ums_driver, ums_devclass, NULL, NULL);
-MODULE_DEPEND(ums, usb, 1, 1, 1);
+DRIVER_MODULE(ums, uhid, ums_driver, ums_devclass, NULL, NULL);
 #ifdef EVDEV_SUPPORT
 MODULE_DEPEND(ums, evdev, 1, 1, 1);
 #endif
