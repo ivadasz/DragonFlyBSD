@@ -60,15 +60,10 @@ __FBSDID("$FreeBSD: head/sys/dev/usb/input/ukbd.c 262972 2014-03-10 08:52:30Z hs
 #include <sys/sched.h>
 #include <sys/thread2.h>
 
-#include <bus/u4b/usb.h>
-#include <bus/u4b/usbdi.h>
-#include <bus/u4b/usbdi_util.h>
-#include <bus/u4b/usbhid.h>
+#include <bus/u4b/hid_common.h>
 
-#define	USB_DEBUG_VAR ukbd_debug
-#include <bus/u4b/usb_debug.h>
-
-#include <bus/u4b/quirk/usb_quirk.h>
+#include <bus/u4b/hidvar.h>
+#include "hid_if.h"
 
 #ifdef EVDEV_SUPPORT
 #include <dev/misc/evdev/input.h>
@@ -90,8 +85,8 @@ __FBSDID("$FreeBSD: head/sys/dev/usb/input/ukbd.c 262972 2014-03-10 08:52:30Z hs
 /* the following file must be included after "ukbdmap.h" */
 #include <dev/misc/kbd/kbdtables.h>
 
-#ifdef USB_DEBUG
 static int ukbd_debug = 0;
+#ifdef USB_DEBUG
 static int ukbd_no_leds = 0;
 static int ukbd_pollrate = 0;
 
@@ -103,10 +98,15 @@ SYSCTL_INT(_hw_usb_ukbd, OID_AUTO, no_leds, CTLFLAG_RW,
 SYSCTL_INT(_hw_usb_ukbd, OID_AUTO, pollrate, CTLFLAG_RW,
     &ukbd_pollrate, 0, "Force this polling rate, 1-1000Hz");
 
-TUNABLE_INT("hw.usb.ukbd.debug", &ukbd_debug);
 TUNABLE_INT("hw.usb.ukbd.no_leds", &ukbd_no_leds);
 TUNABLE_INT("hw.usb.ukbd.pollrate", &ukbd_pollrate);
 #endif
+TUNABLE_INT("hw.hid.ukbd_debug", &ukbd_debug);
+
+#define DPRINTFN(l, f, ...)	\
+    do { if (ukbd_debug >= (l)) { kprintf(f,## __VA_ARGS__); } } while(0)
+
+#define DPRINTF(f, ...) DPRINTFN(1, f,## __VA_ARGS__)
 
 #define	UKBD_EMULATE_ATSCANCODE	       1
 #define	UKBD_DRIVER_NAME          "ukbd"
@@ -159,14 +159,11 @@ struct ukbd_softc {
 	struct hid_location sc_loc_numlock;
 	struct hid_location sc_loc_capslock;
 	struct hid_location sc_loc_scrolllock;
-	struct usb_callout sc_callout;
+	struct callout sc_callout;
 	struct ukbd_data sc_ndata;
 	struct ukbd_data sc_odata;
 
 	struct thread *sc_poll_thread;
-	struct usb_device *sc_udev;
-	struct usb_interface *sc_iface;
-	struct usb_xfer *sc_xfer[UKBD_N_TRANSFER];
 #ifdef EVDEV_SUPPORT
 	struct evdev_dev *sc_evdev;
 #endif
@@ -234,8 +231,6 @@ struct ukbd_softc {
 	uint8_t sc_id_scrolllock;
 	uint8_t sc_id_events;
 	uint8_t sc_kbd_id;
-
-	uint8_t sc_buffer[UKBD_BUFFER_SIZE];
 };
 
 #define	KEY_ERROR	  0x01
@@ -397,7 +392,7 @@ static void
 ukbd_start_timer(struct ukbd_softc *sc)
 {
 	sc->sc_flags |= UKBD_FLAG_TIMER_RUNNING;
-	usb_callout_reset(&sc->sc_callout, hz / 40, &ukbd_timeout, sc);
+	callout_reset(&sc->sc_callout, hz / 40, &ukbd_timeout, sc);
 }
 
 static void
@@ -461,7 +456,10 @@ ukbd_do_poll(struct ukbd_softc *sc, uint8_t wait)
 
 	while (sc->sc_inputs == 0) {
 
+#if 0
+		/* XXX Needs a HID_POLL method. */
 		usbd_transfer_poll(sc->sc_xfer, UKBD_N_TRANSFER);
+#endif
 
 		/* Delay-optimised support for repetition of keys */
 		if (ukbd_any_key_pressed(sc)) {
@@ -494,7 +492,7 @@ ukbd_get_key(struct ukbd_softc *sc, uint8_t wait)
 	if (sc->sc_inputs == 0 &&
 	    (sc->sc_flags & UKBD_FLAG_GONE) == 0) {
 		/* start transfer, if not already started */
-		usbd_transfer_start(sc->sc_xfer[UKBD_INTR_DT]);
+		HID_START(device_get_parent(sc->sc_dev));
 	}
 
 	if (sc->sc_flags & UKBD_FLAG_POLLING)
@@ -676,193 +674,141 @@ ukbd_apple_swap(uint8_t keycode) {
 }
 
 static void
-ukbd_intr_callback(struct usb_xfer *xfer, usb_error_t error)
+ukbd_input_handler(uint8_t id, uint8_t *buf, int len, void *arg)
 {
-	struct ukbd_softc *sc = usbd_xfer_softc(xfer);
-	struct usb_page_cache *pc;
+	struct ukbd_softc *sc = arg;
 	uint8_t i;
-	uint8_t offset;
-	uint8_t id;
-	int len;
 
 	UKBD_LOCK_ASSERT();
 
-	usbd_xfer_status(xfer, &len, NULL, NULL, NULL);
-	pc = usbd_xfer_get_frame(xfer, 0);
+	DPRINTF("actlen=%d bytes\n", len);
 
-	switch (USB_GET_STATE(xfer)) {
-	case USB_ST_TRANSFERRED:
-		DPRINTF("actlen=%d bytes\n", len);
+	if (len == 0) {
+		DPRINTF("zero length data\n");
+		return;
+	}
 
-		if (len == 0) {
-			DPRINTF("zero length data\n");
-			goto tr_setup;
-		}
+	/* scan through HID data */
+	if ((sc->sc_flags & UKBD_FLAG_APPLE_EJECT) &&
+	    (id == sc->sc_id_apple_eject)) {
+		if (hid_get_data(buf, len, &sc->sc_loc_apple_eject))
+			sc->sc_modifiers |= MOD_EJECT;
+		else
+			sc->sc_modifiers &= ~MOD_EJECT;
+	}
+	if ((sc->sc_flags & UKBD_FLAG_APPLE_FN) &&
+	    (id == sc->sc_id_apple_fn)) {
+		if (hid_get_data(buf, len, &sc->sc_loc_apple_fn))
+			sc->sc_modifiers |= MOD_FN;
+		else
+			sc->sc_modifiers &= ~MOD_FN;
+	}
+	if ((sc->sc_flags & UKBD_FLAG_CTRL_L) &&
+	    (id == sc->sc_id_ctrl_l)) {
+		if (hid_get_data(buf, len, &sc->sc_loc_ctrl_l))
+		  sc->	sc_modifiers |= MOD_CONTROL_L;
+		else
+		  sc->	sc_modifiers &= ~MOD_CONTROL_L;
+	}
+	if ((sc->sc_flags & UKBD_FLAG_CTRL_R) &&
+	    (id == sc->sc_id_ctrl_r)) {
+		if (hid_get_data(buf, len, &sc->sc_loc_ctrl_r))
+			sc->sc_modifiers |= MOD_CONTROL_R;
+		else
+			sc->sc_modifiers &= ~MOD_CONTROL_R;
+	}
+	if ((sc->sc_flags & UKBD_FLAG_SHIFT_L) &&
+	    (id == sc->sc_id_shift_l)) {
+		if (hid_get_data(buf, len, &sc->sc_loc_shift_l))
+			sc->sc_modifiers |= MOD_SHIFT_L;
+		else
+			sc->sc_modifiers &= ~MOD_SHIFT_L;
+	}
+	if ((sc->sc_flags & UKBD_FLAG_SHIFT_R) &&
+	    (id == sc->sc_id_shift_r)) {
+		if (hid_get_data(buf, len, &sc->sc_loc_shift_r))
+			sc->sc_modifiers |= MOD_SHIFT_R;
+		else
+			sc->sc_modifiers &= ~MOD_SHIFT_R;
+	}
+	if ((sc->sc_flags & UKBD_FLAG_ALT_L) &&
+	    (id == sc->sc_id_alt_l)) {
+		if (hid_get_data(buf, len, &sc->sc_loc_alt_l))
+			sc->sc_modifiers |= MOD_ALT_L;
+		else
+			sc->sc_modifiers &= ~MOD_ALT_L;
+	}
+	if ((sc->sc_flags & UKBD_FLAG_ALT_R) &&
+	    (id == sc->sc_id_alt_r)) {
+		if (hid_get_data(buf, len, &sc->sc_loc_alt_r))
+			sc->sc_modifiers |= MOD_ALT_R;
+		else
+			sc->sc_modifiers &= ~MOD_ALT_R;
+	}
+	if ((sc->sc_flags & UKBD_FLAG_WIN_L) &&
+	    (id == sc->sc_id_win_l)) {
+		if (hid_get_data(buf, len, &sc->sc_loc_win_l))
+			sc->sc_modifiers |= MOD_WIN_L;
+		else
+			sc->sc_modifiers &= ~MOD_WIN_L;
+	}
+	if ((sc->sc_flags & UKBD_FLAG_WIN_R) &&
+	    (id == sc->sc_id_win_r)) {
+		if (hid_get_data(buf, len, &sc->sc_loc_win_r))
+			sc->sc_modifiers |= MOD_WIN_R;
+		else
+			sc->sc_modifiers &= ~MOD_WIN_R;
+	}
 
-		if (sc->sc_kbd_id != 0) {
-			/* check and remove HID ID byte */
-			usbd_copy_out(pc, 0, &id, 1);
-			offset = 1;
-			len--;
-			if (len == 0) {
-				DPRINTF("zero length data\n");
-				goto tr_setup;
-			}
-		} else {
-			offset = 0;
-			id = 0;
-		}
+	sc->sc_ndata.modifiers = sc->sc_modifiers;
 
-		if (len > UKBD_BUFFER_SIZE)
-			len = UKBD_BUFFER_SIZE;
-
-		/* get data */
-		usbd_copy_out(pc, offset, sc->sc_buffer, len);
-
-		/* clear temporary storage */
-		memset(&sc->sc_ndata, 0, sizeof(sc->sc_ndata));
-
-		/* scan through HID data */
-		if ((sc->sc_flags & UKBD_FLAG_APPLE_EJECT) &&
-		    (id == sc->sc_id_apple_eject)) {
-			if (hid_get_data(sc->sc_buffer, len, &sc->sc_loc_apple_eject))
-				sc->sc_modifiers |= MOD_EJECT;
-			else
-				sc->sc_modifiers &= ~MOD_EJECT;
+	if ((sc->sc_flags & UKBD_FLAG_EVENTS) &&
+	    (id == sc->sc_id_events)) {
+		i = sc->sc_loc_events.count;
+		if (i > UKBD_NKEYCODE)
+			i = UKBD_NKEYCODE;
+		if (i > len)
+			i = len;
+		while (i--) {
+			sc->sc_ndata.keycode[i] =
+			    hid_get_data(buf, len - i,
+			    &sc->sc_loc_events);
 		}
-		if ((sc->sc_flags & UKBD_FLAG_APPLE_FN) &&
-		    (id == sc->sc_id_apple_fn)) {
-			if (hid_get_data(sc->sc_buffer, len, &sc->sc_loc_apple_fn))
-				sc->sc_modifiers |= MOD_FN;
-			else
-				sc->sc_modifiers &= ~MOD_FN;
-		}
-		if ((sc->sc_flags & UKBD_FLAG_CTRL_L) &&
-		    (id == sc->sc_id_ctrl_l)) {
-			if (hid_get_data(sc->sc_buffer, len, &sc->sc_loc_ctrl_l))
-			  sc->	sc_modifiers |= MOD_CONTROL_L;
-			else
-			  sc->	sc_modifiers &= ~MOD_CONTROL_L;
-		}
-		if ((sc->sc_flags & UKBD_FLAG_CTRL_R) &&
-		    (id == sc->sc_id_ctrl_r)) {
-			if (hid_get_data(sc->sc_buffer, len, &sc->sc_loc_ctrl_r))
-				sc->sc_modifiers |= MOD_CONTROL_R;
-			else
-				sc->sc_modifiers &= ~MOD_CONTROL_R;
-		}
-		if ((sc->sc_flags & UKBD_FLAG_SHIFT_L) &&
-		    (id == sc->sc_id_shift_l)) {
-			if (hid_get_data(sc->sc_buffer, len, &sc->sc_loc_shift_l))
-				sc->sc_modifiers |= MOD_SHIFT_L;
-			else
-				sc->sc_modifiers &= ~MOD_SHIFT_L;
-		}
-		if ((sc->sc_flags & UKBD_FLAG_SHIFT_R) &&
-		    (id == sc->sc_id_shift_r)) {
-			if (hid_get_data(sc->sc_buffer, len, &sc->sc_loc_shift_r))
-				sc->sc_modifiers |= MOD_SHIFT_R;
-			else
-				sc->sc_modifiers &= ~MOD_SHIFT_R;
-		}
-		if ((sc->sc_flags & UKBD_FLAG_ALT_L) &&
-		    (id == sc->sc_id_alt_l)) {
-			if (hid_get_data(sc->sc_buffer, len, &sc->sc_loc_alt_l))
-				sc->sc_modifiers |= MOD_ALT_L;
-			else
-				sc->sc_modifiers &= ~MOD_ALT_L;
-		}
-		if ((sc->sc_flags & UKBD_FLAG_ALT_R) &&
-		    (id == sc->sc_id_alt_r)) {
-			if (hid_get_data(sc->sc_buffer, len, &sc->sc_loc_alt_r))
-				sc->sc_modifiers |= MOD_ALT_R;
-			else
-				sc->sc_modifiers &= ~MOD_ALT_R;
-		}
-		if ((sc->sc_flags & UKBD_FLAG_WIN_L) &&
-		    (id == sc->sc_id_win_l)) {
-			if (hid_get_data(sc->sc_buffer, len, &sc->sc_loc_win_l))
-				sc->sc_modifiers |= MOD_WIN_L;
-			else
-				sc->sc_modifiers &= ~MOD_WIN_L;
-		}
-		if ((sc->sc_flags & UKBD_FLAG_WIN_R) &&
-		    (id == sc->sc_id_win_r)) {
-			if (hid_get_data(sc->sc_buffer, len, &sc->sc_loc_win_r))
-				sc->sc_modifiers |= MOD_WIN_R;
-			else
-				sc->sc_modifiers &= ~MOD_WIN_R;
-		}
-
-		sc->sc_ndata.modifiers = sc->sc_modifiers;
-
-		if ((sc->sc_flags & UKBD_FLAG_EVENTS) &&
-		    (id == sc->sc_id_events)) {
-			i = sc->sc_loc_events.count;
-			if (i > UKBD_NKEYCODE)
-				i = UKBD_NKEYCODE;
-			if (i > len)
-				i = len;
-			while (i--) {
-				sc->sc_ndata.keycode[i] =
-				    hid_get_data(sc->sc_buffer + i, len - i,
-				    &sc->sc_loc_events);
-			}
-		}
+	}
 
 #ifdef USB_DEBUG
-		DPRINTF("modifiers = 0x%04x\n", (int)sc->sc_modifiers);
-		for (i = 0; i < UKBD_NKEYCODE; i++) {
-			if (sc->sc_ndata.keycode[i]) {
-				DPRINTF("[%d] = 0x%02x\n",
-				    (int)i, (int)sc->sc_ndata.keycode[i]);
-			}
+	DPRINTF("modifiers = 0x%04x\n", (int)sc->sc_modifiers);
+	for (i = 0; i < UKBD_NKEYCODE; i++) {
+		if (sc->sc_ndata.keycode[i]) {
+			DPRINTF("[%d] = 0x%02x\n",
+			    (int)i, (int)sc->sc_ndata.keycode[i]);
 		}
+	}
 #endif
-		if (sc->sc_modifiers & MOD_FN) {
-			for (i = 0; i < UKBD_NKEYCODE; i++) {
-				sc->sc_ndata.keycode[i] =
-				    ukbd_apple_fn(sc->sc_ndata.keycode[i]);
-			}
+	if (sc->sc_modifiers & MOD_FN) {
+		for (i = 0; i < UKBD_NKEYCODE; i++) {
+			sc->sc_ndata.keycode[i] =
+			    ukbd_apple_fn(sc->sc_ndata.keycode[i]);
 		}
+	}
 
-		if (sc->sc_flags & UKBD_FLAG_APPLE_SWAP) {
-			for (i = 0; i < UKBD_NKEYCODE; i++) {
-				sc->sc_ndata.keycode[i] =
-				    ukbd_apple_swap(sc->sc_ndata.keycode[i]);
-			}
+	if (sc->sc_flags & UKBD_FLAG_APPLE_SWAP) {
+		for (i = 0; i < UKBD_NKEYCODE; i++) {
+			sc->sc_ndata.keycode[i] =
+			    ukbd_apple_swap(sc->sc_ndata.keycode[i]);
 		}
+	}
 
-		ukbd_interrupt(sc);
+	ukbd_interrupt(sc);
 
-		if (!(sc->sc_flags & UKBD_FLAG_TIMER_RUNNING)) {
-			if (ukbd_any_key_pressed(sc)) {
-				ukbd_start_timer(sc);
-			}
+	if (!(sc->sc_flags & UKBD_FLAG_TIMER_RUNNING)) {
+		if (ukbd_any_key_pressed(sc)) {
+			ukbd_start_timer(sc);
 		}
-
-	case USB_ST_SETUP:
-tr_setup:
-		if (sc->sc_inputs < UKBD_IN_BUF_FULL) {
-			usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
-			usbd_transfer_submit(xfer);
-		} else {
-			DPRINTF("input queue is full!\n");
-		}
-		break;
-
-	default:			/* Error */
-		DPRINTF("error=%s\n", usbd_errstr(error));
-
-		if (error != USB_ERR_CANCELLED) {
-			/* try to clear stall first */
-			usbd_xfer_set_stall(xfer);
-			goto tr_setup;
-		}
-		break;
 	}
 }
 
+#if 0
 static void
 ukbd_set_leds_callback(struct usb_xfer *xfer, usb_error_t error)
 {
@@ -1000,13 +946,13 @@ static const STRUCT_USB_HOST_ID __used ukbd_devs[] = {
 	 USB_IFACE_SUBCLASS(UISUBCLASS_BOOT),
 	 USB_IFACE_PROTOCOL(UIPROTO_BOOT_KEYBOARD),},
 };
+#endif
 
 static int
 ukbd_probe(device_t dev)
 {
 	keyboard_switch_t *sw = kbd_get_switch(UKBD_DRIVER_NAME);
-	struct usb_attach_arg *uaa = device_get_ivars(dev);
-	void *d_ptr;
+	char *d_ptr;
 	int error;
 	uint16_t d_len;
 
@@ -1016,25 +962,18 @@ ukbd_probe(device_t dev)
 	if (sw == NULL) {
 		return (ENXIO);
 	}
-	if (uaa->usb_mode != USB_MODE_HOST) {
-		return (ENXIO);
-	}
 
-	if (uaa->info.bInterfaceClass != UICLASS_HID)
-		return (ENXIO);
-
+#if 0
 	if (usb_test_quirk(uaa, UQ_KBD_IGNORE))
 		return (ENXIO);
+#endif
 
-	if ((uaa->info.bInterfaceSubClass == UISUBCLASS_BOOT) &&
-	    (uaa->info.bInterfaceProtocol == UIPROTO_BOOT_KEYBOARD))
+	if (hid_get_bootproto(dev) == HID_BOOTPROTO_KEYBOARD) {
+		device_set_desc(dev, "HID Keyboard device");
 		return (BUS_PROBE_DEFAULT);
+	}
 
-	error = usbd_req_get_hid_desc(uaa->device, NULL,
-	    &d_ptr, &d_len, M_TEMP, uaa->info.bIfaceIndex);
-
-	if (error)
-		return (ENXIO);
+	HID_GET_DESCRIPTOR(device_get_parent(dev), &d_ptr, &d_len);
 
 	if (hid_is_keyboard(d_ptr, d_len)) {
 		if (hid_is_mouse(d_ptr, d_len)) {
@@ -1045,12 +984,12 @@ ukbd_probe(device_t dev)
 			 */
 			error = ENXIO;
 		} else {
+			device_set_desc(dev, "HID Keyboard device");
 			error = BUS_PROBE_DEFAULT;
 		}
 	} else {
 		error = ENXIO;
 	}
-	kfree(d_ptr, M_TEMP);
 	return (error);
 }
 
@@ -1063,7 +1002,7 @@ ukbd_parse_hid(struct ukbd_softc *sc, const uint8_t *ptr, uint32_t len)
 	sc->sc_flags &= ~UKBD_FLAG_HID_MASK;
 
 	/* check if there is an ID byte */
-	sc->sc_kbd_size = hid_report_size(ptr, len,
+	sc->sc_kbd_size = hid_report_size_a(ptr, len,
 	    hid_input, &sc->sc_kbd_id);
 
 	/* investigate if this is an Apple Keyboard */
@@ -1163,7 +1102,7 @@ ukbd_parse_hid(struct ukbd_softc *sc, const uint8_t *ptr, uint32_t len)
 	}
 
 	/* figure out leds on keyboard */
-	sc->sc_led_size = hid_report_size(ptr, len,
+	sc->sc_led_size = hid_report_size_a(ptr, len,
 	    hid_output, NULL);
 
 	if (hid_locate(ptr, len,
@@ -1196,20 +1135,21 @@ static int
 ukbd_attach(device_t dev)
 {
 	struct ukbd_softc *sc = device_get_softc(dev);
-	struct usb_attach_arg *uaa = device_get_ivars(dev);
 	int32_t unit = device_get_unit(dev);
 	keyboard_t *kbd = &sc->sc_kbd;
-	void *hid_ptr = NULL;
-	usb_error_t err;
+	char *hid_ptr = NULL;
 	uint16_t n;
 	uint16_t hid_len;
 #ifdef EVDEV_SUPPORT
 	struct evdev_dev *evdev;
 	int i;
 #endif
+#if 0
 #ifdef USB_DEBUG
 	int rate;
 #endif
+#endif
+
 	UKBD_LOCK_ASSERT();
 
 	kbd_init_struct(kbd, UKBD_DRIVER_NAME, KB_OTHER,
@@ -1217,16 +1157,17 @@ ukbd_attach(device_t dev)
 
 	kbd->kb_data = (void *)sc;
 
-	device_set_usb_desc(dev);
-
-	sc->sc_udev = uaa->device;
+	sc->sc_dev = dev;
+#if 0
 	sc->sc_iface = uaa->iface;
 	sc->sc_iface_index = uaa->info.bIfaceIndex;
 	sc->sc_iface_no = uaa->info.bIfaceNum;
+#endif
 	sc->sc_mode = K_XLATE;
 
-	usb_callout_init_mtx(&sc->sc_callout, &kbd->kb_lock, 0);
+	callout_init_lk(&sc->sc_callout, &kbd->kb_lock);
 
+#if 0
 	err = usbd_transfer_setup(uaa->device,
 	    &uaa->info.bIfaceIndex, sc->sc_xfer, ukbd_config,
 	    UKBD_N_TRANSFER, sc, &sc->sc_kbd.kb_lock);
@@ -1235,6 +1176,7 @@ ukbd_attach(device_t dev)
 		DPRINTF("error=%s\n", usbd_errstr(err));
 		goto detach;
 	}
+#endif
 	/* setup default keyboard maps */
 
 	sc->sc_keymap = key_map;
@@ -1257,18 +1199,20 @@ ukbd_attach(device_t dev)
 	KBD_PROBE_DONE(kbd);
 
 	/* get HID descriptor */
-	err = usbd_req_get_hid_desc(uaa->device, NULL, &hid_ptr,
-	    &hid_len, M_TEMP, uaa->info.bIfaceIndex);
+	HID_GET_DESCRIPTOR(device_get_parent(dev), &hid_ptr, &hid_len);
 
-	if (err == 0) {
+	if (hid_get_bootproto(dev) == HID_BOOTPROTO_KEYBOARD) {
+		DPRINTF("Using boot protocol\n");
+
+		ukbd_parse_hid(sc, ukbd_boot_desc, sizeof(ukbd_boot_desc));
+	} else {
 		DPRINTF("Parsing HID descriptor of %d bytes\n",
 		    (int)hid_len);
 
 		ukbd_parse_hid(sc, hid_ptr, hid_len);
-
-		kfree(hid_ptr, M_TEMP);
 	}
 
+#if 0
 	/* check if we should use the boot protocol */
 	if (usb_test_quirk(uaa, UQ_KBD_BOOTPROTO) ||
 	    (err != 0) || (!(sc->sc_flags & UKBD_FLAG_EVENTS))) {
@@ -1285,9 +1229,13 @@ ukbd_attach(device_t dev)
 
 		ukbd_parse_hid(sc, ukbd_boot_desc, sizeof(ukbd_boot_desc));
 	}
+#endif
 
+#if 0
+	/* XXX Add a Set_Idle Request method to the hid_if.m interface. */
 	/* ignore if SETIDLE fails, hence it is not crucial */
 	usbd_req_set_idle(sc->sc_udev, NULL, sc->sc_iface_index, 0, 0);
+#endif
 
 	ukbd_ioctl(kbd, KDSETLED, (caddr_t)&sc->sc_state);
 
@@ -1305,6 +1253,8 @@ ukbd_attach(device_t dev)
 		goto detach;
 	}
 #endif
+
+	HID_SET_HANDLER(device_get_parent(dev), ukbd_input_handler, sc);
 
 #ifdef EVDEV_SUPPORT
 	evdev = evdev_alloc();
@@ -1342,6 +1292,7 @@ ukbd_attach(device_t dev)
 		genkbd_diag(kbd, bootverbose);
 	}
 
+#if 0
 #ifdef USB_DEBUG
 	/* check for polling rate override */
 	rate = ukbd_pollrate;
@@ -1360,6 +1311,8 @@ ukbd_attach(device_t dev)
 	UKBD_LOCK(sc);
 	usbd_transfer_start(sc->sc_xfer[UKBD_INTR_DT]);
 	UKBD_UNLOCK(sc);
+#endif
+	HID_START(device_get_parent(dev));
 
 	return (0);			/* success */
 detach:
@@ -1377,16 +1330,16 @@ ukbd_detach(device_t dev)
 
 	DPRINTF("\n");
 
+	HID_STOP(device_get_parent(dev));
+	HID_SET_HANDLER(device_get_parent(dev), NULL, NULL);
+
 	crit_enter();
 	sc->sc_flags |= UKBD_FLAG_GONE;
 
-	usb_callout_stop(&sc->sc_callout);
+	callout_stop(&sc->sc_callout);
 
 	/* kill any stuck keys */
 	if (sc->sc_flags & UKBD_FLAG_ATTACHED) {
-		/* stop receiving events from the USB keyboard */
-		usbd_transfer_stop(sc->sc_xfer[UKBD_INTR_DT]);
-
 		/* release all leftover keys, if any */
 		memset(&sc->sc_ndata, 0, sizeof(sc->sc_ndata));
 
@@ -1396,12 +1349,14 @@ ukbd_detach(device_t dev)
 
 	ukbd_disable(&sc->sc_kbd);
 
+#if 0
 	/*
 	 * XXX make sure this is in the correct place here,
 	 * it was taken from below the second if()
 	 */
 	usbd_transfer_unsetup(sc->sc_xfer, UKBD_N_TRANSFER);
-	usb_callout_drain(&sc->sc_callout);
+#endif
+	callout_drain(&sc->sc_callout);
 
 #ifdef KBD_INSTALL_CDEV
 	if (sc->sc_flags & UKBD_FLAG_ATTACHED) {
@@ -2049,9 +2004,11 @@ ukbd_set_leds(struct ukbd_softc *sc, uint8_t leds)
 	sc->sc_leds = leds;
 	sc->sc_flags |= UKBD_FLAG_SET_LEDS;
 
+#if 0
 	/* start transfer, if not already started */
 
 	usbd_transfer_start(sc->sc_xfer[UKBD_CTRL_LED]);
+#endif
 }
 
 #ifdef UKBD_EMULATE_ATSCANCODE
@@ -2197,8 +2154,7 @@ static driver_t ukbd_driver = {
 	.size = sizeof(struct ukbd_softc),
 };
 
-DRIVER_MODULE(ukbd, uhub, ukbd_driver, ukbd_devclass, ukbd_driver_load, NULL);
-MODULE_DEPEND(ukbd, usb, 1, 1, 1);
+DRIVER_MODULE(ukbd, uhid, ukbd_driver, ukbd_devclass, ukbd_driver_load, NULL);
 #ifdef EVDEV_SUPPORT
 MODULE_DEPEND(ukbd, evdev, 1, 1, 1);
 #endif
