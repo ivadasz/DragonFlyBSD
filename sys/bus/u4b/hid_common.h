@@ -203,6 +203,10 @@ int	hid_report_size_a(const void *buf, uint32_t len, enum hid_kind k,
 int	hid_locate(const void *desc, uint32_t size, int32_t usage,
 	    enum hid_kind kind, uint8_t index, struct hid_location *loc,
 	    uint32_t *flags, uint8_t *id);
+int32_t hid_get_arraydata(const uint8_t *buf, uint32_t len,
+	    struct hid_location *loc, uint32_t idx);
+uint32_t hid_get_arraydata_unsigned(const uint8_t *buf, uint32_t len,
+	    struct hid_location *loc, uint32_t idx);
 int32_t hid_get_data(const uint8_t *buf, uint32_t len,
 	    struct hid_location *loc);
 uint32_t hid_get_data_unsigned(const uint8_t *buf, uint32_t len,
