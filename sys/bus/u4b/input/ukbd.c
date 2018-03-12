@@ -764,15 +764,11 @@ ukbd_input_handler(uint8_t id, uint8_t *buf, int len, void *arg)
 
 	if ((sc->sc_flags & UKBD_FLAG_EVENTS) &&
 	    (id == sc->sc_id_events)) {
-		i = sc->sc_loc_events.count;
-		if (i > UKBD_NKEYCODE)
-			i = UKBD_NKEYCODE;
-		if (i > len)
-			i = len;
-		while (i--) {
-			sc->sc_ndata.keycode[i] =
-			    hid_get_data(buf, len - i,
-			    &sc->sc_loc_events);
+		for (i = 0; i < sc->sc_loc_events.count; i++) {
+			if (i < UKBD_NKEYCODE) {
+				sc->sc_ndata.keycode[i] = hid_get_arraydata(
+				    buf, len, &sc->sc_loc_events, i);
+			}
 		}
 	}
 
@@ -1158,25 +1154,10 @@ ukbd_attach(device_t dev)
 	kbd->kb_data = (void *)sc;
 
 	sc->sc_dev = dev;
-#if 0
-	sc->sc_iface = uaa->iface;
-	sc->sc_iface_index = uaa->info.bIfaceIndex;
-	sc->sc_iface_no = uaa->info.bIfaceNum;
-#endif
 	sc->sc_mode = K_XLATE;
 
 	callout_init_lk(&sc->sc_callout, &kbd->kb_lock);
 
-#if 0
-	err = usbd_transfer_setup(uaa->device,
-	    &uaa->info.bIfaceIndex, sc->sc_xfer, ukbd_config,
-	    UKBD_N_TRANSFER, sc, &sc->sc_kbd.kb_lock);
-
-	if (err) {
-		DPRINTF("error=%s\n", usbd_errstr(err));
-		goto detach;
-	}
-#endif
 	/* setup default keyboard maps */
 
 	sc->sc_keymap = key_map;
