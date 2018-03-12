@@ -718,7 +718,23 @@ hid_get_data(const uint8_t *buf, uint32_t len, struct hid_location *loc)
 uint32_t
 hid_get_data_unsigned(const uint8_t *buf, uint32_t len, struct hid_location *loc)
 {
-        return (hid_get_data_sub(buf, len, loc, 0));
+	return (hid_get_data_sub(buf, len, loc, 0));
+}
+
+int32_t
+hid_get_arraydata(const uint8_t *buf, uint32_t len, struct hid_location *loc, uint32_t idx)
+{
+	struct hid_location l = {loc->size, 1, loc->pos + idx * loc->size};
+
+	return (hid_get_data_sub(buf, len, &l, 1));
+}
+
+uint32_t
+hid_get_arraydata_unsigned(const uint8_t *buf, uint32_t len, struct hid_location *loc, uint32_t idx)
+{
+	struct hid_location l = {loc->size, 1, loc->pos + idx * loc->size};
+
+	return (hid_get_data_sub(buf, len, &l, 0));
 }
 
 /*------------------------------------------------------------------------*
