@@ -63,3 +63,10 @@ METHOD void start {
 METHOD void stop {
 	device_t dev;
 };
+
+# SETIDLE
+METHOD void setidle {
+	device_t dev;
+	uint8_t duration;
+	uint8_t id;
+}

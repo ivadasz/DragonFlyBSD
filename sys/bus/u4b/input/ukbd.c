@@ -1231,11 +1231,8 @@ ukbd_attach(device_t dev)
 	}
 #endif
 
-#if 0
-	/* XXX Add a Set_Idle Request method to the hid_if.m interface. */
 	/* ignore if SETIDLE fails, hence it is not crucial */
-	usbd_req_set_idle(sc->sc_udev, NULL, sc->sc_iface_index, 0, 0);
-#endif
+	HID_SETIDLE(device_get_parent(dev), 0, 0);
 
 	ukbd_ioctl(kbd, KDSETLED, (caddr_t)&sc->sc_state);
 
