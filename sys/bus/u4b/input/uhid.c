@@ -814,6 +814,21 @@ uhid_stop(device_t dev)
 	lockmgr(&sc->sc_lock, LK_RELEASE);
 }
 
+static void
+uhid_setidle(device_t dev, uint8_t duration, uint8_t id)
+{
+	struct uhid_softc *sc = device_get_softc(dev);
+	int error;
+
+	error = usbd_req_set_idle(sc->sc_udev, NULL,
+	    sc->sc_iface_index, duration, id);
+
+	if (error) {
+		DPRINTF("set idle failed, error=%s (ignored)\n",
+		    usbd_errstr(error));
+	}
+}
+
 static int
 uhid_attach(device_t dev)
 {
@@ -1024,6 +1039,7 @@ static device_method_t uhid_methods[] = {
 	DEVMETHOD(hid_set_handler, uhid_set_handler),
 	DEVMETHOD(hid_start, uhid_start),
 	DEVMETHOD(hid_stop, uhid_stop),
+	DEVMETHOD(hid_setidle, uhid_setidle),
 
 	DEVMETHOD_END
 };
