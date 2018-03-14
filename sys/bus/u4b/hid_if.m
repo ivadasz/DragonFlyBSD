@@ -70,3 +70,12 @@ METHOD void setidle {
 	uint8_t duration;
 	uint8_t id;
 }
+
+# SET_REPORT
+# Currently allows exactly one transfer in flight at a time.
+METHOD void set_report {
+	device_t dev;
+	uint8_t id;
+	uint8_t *buf;
+	uint16_t len;
+}
