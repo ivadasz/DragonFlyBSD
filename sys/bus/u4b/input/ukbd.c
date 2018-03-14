@@ -86,8 +86,8 @@ __FBSDID("$FreeBSD: head/sys/dev/usb/input/ukbd.c 262972 2014-03-10 08:52:30Z hs
 #include <dev/misc/kbd/kbdtables.h>
 
 static int ukbd_debug = 0;
-#ifdef USB_DEBUG
 static int ukbd_no_leds = 0;
+#ifdef USB_DEBUG
 static int ukbd_pollrate = 0;
 
 static SYSCTL_NODE(_hw_usb, OID_AUTO, ukbd, CTLFLAG_RW, 0, "USB keyboard");
@@ -98,9 +98,9 @@ SYSCTL_INT(_hw_usb_ukbd, OID_AUTO, no_leds, CTLFLAG_RW,
 SYSCTL_INT(_hw_usb_ukbd, OID_AUTO, pollrate, CTLFLAG_RW,
     &ukbd_pollrate, 0, "Force this polling rate, 1-1000Hz");
 
-TUNABLE_INT("hw.usb.ukbd.no_leds", &ukbd_no_leds);
 TUNABLE_INT("hw.usb.ukbd.pollrate", &ukbd_pollrate);
 #endif
+TUNABLE_INT("hw.hid.ukbd_no_leds", &ukbd_no_leds);
 TUNABLE_INT("hw.hid.ukbd_debug", &ukbd_debug);
 
 #define DPRINTFN(l, f, ...)	\
@@ -179,7 +179,9 @@ struct ukbd_softc {
 	uint32_t sc_flags;		/* flags */
 #define	UKBD_FLAG_COMPOSE	0x00000001
 #define	UKBD_FLAG_POLLING	0x00000002
+#if 0
 #define	UKBD_FLAG_SET_LEDS	0x00000004
+#endif
 #define	UKBD_FLAG_ATTACHED	0x00000010
 #define	UKBD_FLAG_GONE		0x00000020
 
@@ -204,8 +206,11 @@ struct ukbd_softc {
 	int	sc_mode;		/* input mode (K_XLATE,K_RAW,K_CODE) */
 	int	sc_state;		/* shift/lock key state */
 	int	sc_accents;		/* accent key index (> 0) */
-	int	sc_led_size;
-	int	sc_kbd_size;
+	uint16_t sc_led_size;
+	uint16_t sc_kbd_size;
+	uint8_t sc_led_id;
+
+	uint8_t *sc_outbuf;
 
 	uint16_t sc_inputs;
 	uint16_t sc_inputhead;
@@ -688,6 +693,7 @@ ukbd_input_handler(uint8_t id, uint8_t *buf, int len, void *arg)
 		return;
 	}
 
+	UKBD_LOCK(sc);
 	/* scan through HID data */
 	if ((sc->sc_flags & UKBD_FLAG_APPLE_EJECT) &&
 	    (id == sc->sc_id_apple_eject)) {
@@ -802,147 +808,8 @@ ukbd_input_handler(uint8_t id, uint8_t *buf, int len, void *arg)
 			ukbd_start_timer(sc);
 		}
 	}
+	UKBD_UNLOCK(sc);
 }
-
-#if 0
-static void
-ukbd_set_leds_callback(struct usb_xfer *xfer, usb_error_t error)
-{
-	struct ukbd_softc *sc = usbd_xfer_softc(xfer);
-	struct usb_device_request req;
-	struct usb_page_cache *pc;
-	uint8_t id;
-	uint8_t any;
-	int len;
-
-	UKBD_LOCK_ASSERT();
-
-#ifdef USB_DEBUG
-	if (ukbd_no_leds)
-		return;
-#endif
-
-	switch (USB_GET_STATE(xfer)) {
-	case USB_ST_TRANSFERRED:
-	case USB_ST_SETUP:
-		if (!(sc->sc_flags & UKBD_FLAG_SET_LEDS))
-			break;
-		sc->sc_flags &= ~UKBD_FLAG_SET_LEDS;
-
-		req.bmRequestType = UT_WRITE_CLASS_INTERFACE;
-		req.bRequest = UR_SET_REPORT;
-		USETW2(req.wValue, UHID_OUTPUT_REPORT, 0);
-		req.wIndex[0] = sc->sc_iface_no;
-		req.wIndex[1] = 0;
-		req.wLength[1] = 0;
-
-		memset(sc->sc_buffer, 0, UKBD_BUFFER_SIZE);
-
-		id = 0;
-		any = 0;
-
-		/* Assumption: All led bits must be in the same ID. */
-
-		if (sc->sc_flags & UKBD_FLAG_NUMLOCK) {
-			if (sc->sc_leds & NLKED) {
-				hid_put_data_unsigned(sc->sc_buffer + 1, UKBD_BUFFER_SIZE - 1,
-				    &sc->sc_loc_numlock, 1);
-			}
-			id = sc->sc_id_numlock;
-			any = 1;
-		}
-
-		if (sc->sc_flags & UKBD_FLAG_SCROLLLOCK) {
-			if (sc->sc_leds & SLKED) {
-				hid_put_data_unsigned(sc->sc_buffer + 1, UKBD_BUFFER_SIZE - 1,
-				    &sc->sc_loc_scrolllock, 1);
-			}
-			id = sc->sc_id_scrolllock;
-			any = 1;
-		}
-
-		if (sc->sc_flags & UKBD_FLAG_CAPSLOCK) {
-			if (sc->sc_leds & CLKED) {
-				hid_put_data_unsigned(sc->sc_buffer + 1, UKBD_BUFFER_SIZE - 1,
-				    &sc->sc_loc_capslock, 1);
-			}
-			id = sc->sc_id_capslock;
-			any = 1;
-		}
-
-		/* if no leds, nothing to do */
-		if (!any)
-			break;
-
-#ifdef EVDEV_SUPPORT
-		if (sc->sc_evdev != NULL)
-			evdev_push_leds(sc->sc_evdev, sc->sc_leds);
-#endif
-
-		/* range check output report length */
-		len = sc->sc_led_size;
-		if (len > (UKBD_BUFFER_SIZE - 1))
-			len = (UKBD_BUFFER_SIZE - 1);
-
-		/* check if we need to prefix an ID byte */
-		sc->sc_buffer[0] = id;
-
-		pc = usbd_xfer_get_frame(xfer, 1);
-		if (id != 0) {
-			len++;
-			usbd_copy_in(pc, 0, sc->sc_buffer, len);
-		} else {
-			usbd_copy_in(pc, 0, sc->sc_buffer + 1, len);
-		}
-		req.wLength[0] = len;
-		usbd_xfer_set_frame_len(xfer, 1, len);
-
-		DPRINTF("len=%d, id=%d\n", len, id);
-
-		/* setup control request last */
-		pc = usbd_xfer_get_frame(xfer, 0);
-		usbd_copy_in(pc, 0, &req, sizeof(req));
-		usbd_xfer_set_frame_len(xfer, 0, sizeof(req));
-
-		/* start data transfer */
-		usbd_xfer_set_frames(xfer, 2);
-		usbd_transfer_submit(xfer);
-		break;
-
-	default:			/* Error */
-		DPRINTFN(1, "error=%s\n", usbd_errstr(error));
-		break;
-	}
-}
-
-static const struct usb_config ukbd_config[UKBD_N_TRANSFER] = {
-
-	[UKBD_INTR_DT] = {
-		.type = UE_INTERRUPT,
-		.endpoint = UE_ADDR_ANY,
-		.direction = UE_DIR_IN,
-		.flags = {.pipe_bof = 1,.short_xfer_ok = 1,},
-		.bufsize = 0,	/* use wMaxPacketSize */
-		.callback = &ukbd_intr_callback,
-	},
-
-	[UKBD_CTRL_LED] = {
-		.type = UE_CONTROL,
-		.endpoint = 0x00,	/* Control pipe */
-		.direction = UE_DIR_ANY,
-		.bufsize = sizeof(struct usb_device_request) + UKBD_BUFFER_SIZE,
-		.callback = &ukbd_set_leds_callback,
-		.timeout = 1000,	/* 1 second */
-	},
-};
-
-/* A match on these entries will load ukbd */
-static const STRUCT_USB_HOST_ID __used ukbd_devs[] = {
-	{USB_IFACE_CLASS(UICLASS_HID),
-	 USB_IFACE_SUBCLASS(UISUBCLASS_BOOT),
-	 USB_IFACE_PROTOCOL(UIPROTO_BOOT_KEYBOARD),},
-};
-#endif
 
 static int
 ukbd_probe(device_t dev)
@@ -993,6 +860,8 @@ static void
 ukbd_parse_hid(struct ukbd_softc *sc, const uint8_t *ptr, uint32_t len)
 {
 	uint32_t flags;
+	uint8_t outid;
+	int any = 0;
 
 	/* reset detected bits */
 	sc->sc_flags &= ~UKBD_FLAG_HID_MASK;
@@ -1098,9 +967,7 @@ ukbd_parse_hid(struct ukbd_softc *sc, const uint8_t *ptr, uint32_t len)
 	}
 
 	/* figure out leds on keyboard */
-	sc->sc_led_size = hid_report_size_a(ptr, len,
-	    hid_output, NULL);
-
+	/* Assumption: All led bits must be in the same ID. */
 	if (hid_locate(ptr, len,
 	    HID_USAGE2(HUP_LEDS, 0x01),
 	    hid_output, 0, &sc->sc_loc_numlock, &flags,
@@ -1108,6 +975,10 @@ ukbd_parse_hid(struct ukbd_softc *sc, const uint8_t *ptr, uint32_t len)
 		if (flags & HIO_VARIABLE)
 			sc->sc_flags |= UKBD_FLAG_NUMLOCK;
 		DPRINTFN(1, "Found keyboard numlock\n");
+		if (any == 0) {
+			outid = sc->sc_id_numlock;
+			any = 1;
+		}
 	}
 	if (hid_locate(ptr, len,
 	    HID_USAGE2(HUP_LEDS, 0x02),
@@ -1116,6 +987,14 @@ ukbd_parse_hid(struct ukbd_softc *sc, const uint8_t *ptr, uint32_t len)
 		if (flags & HIO_VARIABLE)
 			sc->sc_flags |= UKBD_FLAG_CAPSLOCK;
 		DPRINTFN(1, "Found keyboard capslock\n");
+		if (any == 0) {
+			outid = sc->sc_id_capslock;
+			any = 1;
+		} else if (outid != sc->sc_id_capslock) {
+			DPRINTFN(1, "Capslock on different id %d\n",
+			    sc->sc_id_capslock);
+			sc->sc_flags &= ~UKBD_FLAG_CAPSLOCK;
+		}
 	}
 	if (hid_locate(ptr, len,
 	    HID_USAGE2(HUP_LEDS, 0x03),
@@ -1124,6 +1003,23 @@ ukbd_parse_hid(struct ukbd_softc *sc, const uint8_t *ptr, uint32_t len)
 		if (flags & HIO_VARIABLE)
 			sc->sc_flags |= UKBD_FLAG_SCROLLLOCK;
 		DPRINTFN(1, "Found keyboard scrolllock\n");
+		if (any == 0) {
+			outid = sc->sc_id_scrolllock;
+			any = 1;
+		} else if (outid != sc->sc_id_capslock) {
+			DPRINTFN(1, "Scrolllock on different id %d\n",
+			    sc->sc_id_scrolllock);
+			sc->sc_flags &= ~UKBD_FLAG_SCROLLLOCK;
+		}
+	}
+
+	if (any != 0) {
+		sc->sc_led_size = hid_report_size(ptr, len,
+		    hid_output, outid);
+		sc->sc_led_id = outid;
+	} else {
+		sc->sc_led_size = 0;
+		sc->sc_led_id = 0;
 	}
 }
 
@@ -1211,6 +1107,13 @@ ukbd_attach(device_t dev)
 		ukbd_parse_hid(sc, ukbd_boot_desc, sizeof(ukbd_boot_desc));
 	}
 #endif
+
+	if (sc->sc_led_size > 0) {
+		sc->sc_outbuf = kmalloc(sc->sc_led_size, M_DEVBUF,
+		    M_WAITOK | M_ZERO);
+	} else {
+		sc->sc_outbuf = NULL;
+	}
 
 	/* ignore if SETIDLE fails, hence it is not crucial */
 	HID_SETIDLE(device_get_parent(dev), 0, 0);
@@ -1327,13 +1230,6 @@ ukbd_detach(device_t dev)
 
 	ukbd_disable(&sc->sc_kbd);
 
-#if 0
-	/*
-	 * XXX make sure this is in the correct place here,
-	 * it was taken from below the second if()
-	 */
-	usbd_transfer_unsetup(sc->sc_xfer, UKBD_N_TRANSFER);
-#endif
 	callout_drain(&sc->sc_callout);
 
 #ifdef KBD_INSTALL_CDEV
@@ -1370,6 +1266,9 @@ ukbd_detach(device_t dev)
 
 	DPRINTF("%s: disconnected\n",
 	    device_get_nameunit(dev));
+
+	if (sc->sc_outbuf != NULL)
+		kfree(sc->sc_outbuf, M_DEVBUF);
 
 	return (0);
 }
@@ -1980,13 +1879,40 @@ ukbd_set_leds(struct ukbd_softc *sc, uint8_t leds)
 	DPRINTF("leds=0x%02x\n", leds);
 
 	sc->sc_leds = leds;
-	sc->sc_flags |= UKBD_FLAG_SET_LEDS;
 
-#if 0
-	/* start transfer, if not already started */
+	if (ukbd_no_leds || sc->sc_outbuf == NULL || sc->sc_led_size == 0)
+		return;
 
-	usbd_transfer_start(sc->sc_xfer[UKBD_CTRL_LED]);
+	memset(sc->sc_outbuf, 0, sc->sc_led_size);
+
+	if (sc->sc_flags & UKBD_FLAG_NUMLOCK) {
+		if (sc->sc_leds & NLKED) {
+			hid_put_data_unsigned(sc->sc_outbuf, sc->sc_led_size,
+			    &sc->sc_loc_numlock, 1);
+		}
+	}
+
+	if (sc->sc_flags & UKBD_FLAG_SCROLLLOCK) {
+		if (sc->sc_leds & SLKED) {
+			hid_put_data_unsigned(sc->sc_outbuf, sc->sc_led_size,
+			    &sc->sc_loc_scrolllock, 1);
+		}
+	}
+
+	if (sc->sc_flags & UKBD_FLAG_CAPSLOCK) {
+		if (sc->sc_leds & CLKED) {
+			hid_put_data_unsigned(sc->sc_outbuf, sc->sc_led_size,
+			    &sc->sc_loc_capslock, 1);
+		}
+	}
+
+#ifdef EVDEV_SUPPORT
+	if (sc->sc_evdev != NULL)
+		evdev_push_leds(sc->sc_evdev, sc->sc_leds);
 #endif
+
+	HID_SET_REPORT(device_get_parent(sc->sc_dev), sc->sc_led_id,
+	    sc->sc_outbuf, sc->sc_led_size);
 }
 
 #ifdef UKBD_EMULATE_ATSCANCODE
