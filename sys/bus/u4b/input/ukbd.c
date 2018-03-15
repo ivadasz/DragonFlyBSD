@@ -1880,10 +1880,16 @@ ukbd_set_leds(struct ukbd_softc *sc, uint8_t leds)
 
 	sc->sc_leds = leds;
 
-	if (ukbd_no_leds || sc->sc_outbuf == NULL || sc->sc_led_size == 0)
+	if (ukbd_no_leds || sc->sc_led_size == 0)
 		return;
 
-	memset(sc->sc_outbuf, 0, sc->sc_led_size);
+	if (sc->sc_outbuf == NULL) {
+		/* XXX Instead pre-allocate enough buffers. */
+		sc->sc_outbuf = kmalloc(sc->sc_led_size, M_DEVBUF,
+		    M_WAITOK | M_ZERO);
+	} else {
+		memset(sc->sc_outbuf, 0, sc->sc_led_size);
+	}
 
 	if (sc->sc_flags & UKBD_FLAG_NUMLOCK) {
 		if (sc->sc_leds & NLKED) {
@@ -1913,6 +1919,7 @@ ukbd_set_leds(struct ukbd_softc *sc, uint8_t leds)
 
 	HID_SET_REPORT(device_get_parent(sc->sc_dev), sc->sc_led_id,
 	    sc->sc_outbuf, sc->sc_led_size);
+	sc->sc_outbuf = NULL;
 }
 
 #ifdef UKBD_EMULATE_ATSCANCODE
