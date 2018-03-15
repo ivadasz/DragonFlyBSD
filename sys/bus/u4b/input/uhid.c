@@ -127,7 +127,7 @@ struct uhid_softc {
 	device_t child;
 	hid_input_handler_t input_handler;
 	void *input_arg;
-	const char *output;
+	char *output;
 	uint16_t output_len;
 	uint8_t output_id;
 };
@@ -171,6 +171,8 @@ tr_setup:
 			usbd_xfer_set_frame_len(xfer, 0, sc->output_len);
 		}
 		usbd_transfer_submit(xfer);
+		/* XXX Instead give back the buffer, via a callback. */
+		kfree(sc->output, M_DEVBUF);
 		sc->output = NULL;
 		sc->output_len = 0;
 		return;
@@ -296,6 +298,8 @@ uhid_write_callback(struct usb_xfer *xfer, usb_error_t error)
 		usbd_xfer_set_frame_len(xfer, 1, sc->output_len);
 		usbd_xfer_set_frames(xfer, 2);
 		usbd_transfer_submit(xfer);
+		/* XXX Instead give back the buffer, via a callback. */
+		kfree(sc->output, M_DEVBUF);
 		sc->output = NULL;
 		sc->output_len = 0;
 		return;
@@ -774,6 +778,12 @@ uhid_start(device_t dev)
 
 	device_printf(dev, "starting interrupt input transfer\n");
 	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
+	usbd_transfer_stop(sc->sc_xfer[UHID_INTR_DT_WR]);
+	usbd_transfer_stop(sc->sc_xfer[UHID_CTRL_DT_WR]);
+	if (sc->output != NULL) {
+		/* XXX Instead give back the buffer, via a callback. */
+		kfree(sc->output, M_DEVBUF);
+	}
 	sc->output = NULL;
 	sc->output_len = 0;
 	sc->output_id = 0;
@@ -792,6 +802,10 @@ uhid_stop(device_t dev)
 	usbd_transfer_stop(sc->sc_xfer[UHID_INTR_DT_RD]);
 	usbd_transfer_stop(sc->sc_xfer[UHID_INTR_DT_WR]);
 	usbd_transfer_stop(sc->sc_xfer[UHID_CTRL_DT_WR]);
+	if (sc->output != NULL) {
+		/* XXX Instead give back the buffer, via a callback. */
+		kfree(sc->output, M_DEVBUF);
+	}
 	sc->output = NULL;
 	sc->output_len = 0;
 	sc->output_id = 0;
@@ -819,8 +833,14 @@ static void
 uhid_set_report(device_t dev, uint8_t id, uint8_t *buf, uint16_t len)
 {
 	struct uhid_softc *sc = device_get_softc(dev);
+	int needstart;
 
 	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
+	if (sc->output != NULL) {
+		/* XXX Instead give back the buffer, via a callback. */
+		kfree(sc->output, M_DEVBUF);
+	}
+	needstart = sc->output == NULL;
 	sc->output = buf;
 	sc->output_len = len;
 	sc->output_id = id;
@@ -831,7 +851,7 @@ uhid_set_report(device_t dev, uint8_t id, uint8_t *buf, uint16_t len)
 		sc->output = NULL;
 		sc->output_len = 0;
 		sc->output_id = 0;
-	} else {
+	} else if (needstart) {
 		if (sc->sc_xfer[UHID_INTR_DT_WR] == NULL) {
 			usbd_transfer_start(sc->sc_xfer[UHID_CTRL_DT_WR]);
 		} else {
