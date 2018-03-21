@@ -637,7 +637,7 @@ ums_attach(device_t dev)
 	    "", "Dump of parsed HID report descriptor");
 #endif
 
-	HID_SET_HANDLER(device_get_parent(dev), ums_input_handler, sc);
+	HID_SET_HANDLER(device_get_parent(dev), ums_input_handler, NULL, sc);
 
 	return (0);
 
@@ -655,8 +655,8 @@ ums_detach(device_t self)
 
 	DPRINTF("sc=%p\n", sc);
 
-	HID_STOP(device_get_parent(self));
-	HID_SET_HANDLER(device_get_parent(self), NULL, NULL);
+	HID_STOP_READ(device_get_parent(self));
+	HID_SET_HANDLER(device_get_parent(self), NULL, NULL, NULL);
 	callout_drain(&sc->sc_callout);
 
 	if (sc->sc_fifo != NULL)
@@ -810,7 +810,7 @@ ums_ev_open(struct evdev_dev *evdev, void *ev_softc)
 	sc->sc_evflags = UMS_EVDEV_OPENED;
 
 	if (sc->sc_opened == 0)
-		HID_START(device_get_parent(sc->dev));
+		HID_START_READ(device_get_parent(sc->dev));
 
 	return (0);
 }
@@ -842,7 +842,7 @@ ums_open(void *arg)
 #ifdef EVDEV_SUPPORT
 	if (sc->sc_evflags == 0)
 #endif
-		HID_START(device_get_parent(sc->dev));
+		HID_START_READ(device_get_parent(sc->dev));
 	lockmgr(&sc->sc_lock, LK_RELEASE);
 }
 
@@ -857,7 +857,7 @@ ums_close(void *arg)
 	if (sc->sc_evflags == 0)
 #endif
 	{
-		HID_STOP(device_get_parent(sc->dev));
+		HID_STOP_READ(device_get_parent(sc->dev));
 		callout_stop(&sc->sc_callout);
 	}
 	lockmgr(&sc->sc_lock, LK_RELEASE);

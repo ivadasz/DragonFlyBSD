@@ -38,31 +38,21 @@
  * HID spec: http://www.usb.org/developers/devclass_docs/HID1_11.pdf
  */
 
-#include <sys/stdint.h>
 #include <sys/param.h>
-#include <sys/queue.h>
 #include <sys/types.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/bus.h>
 #include <sys/module.h>
 #include <sys/lock.h>
-#include <sys/condvar.h>
 #include <sys/sysctl.h>
-#include <sys/unistd.h>
-#include <sys/callout.h>
 #include <sys/malloc.h>
-#include <sys/priv.h>
-#include <sys/conf.h>
-#include <sys/fcntl.h>
-#include <sys/mutex.h>
 
 #include "usbdevs.h"
 #include <bus/u4b/usb.h>
 #include <bus/u4b/usbdi.h>
 #include <bus/u4b/usbdi_util.h>
 #include <bus/u4b/usbhid.h>
-#include <bus/u4b/usb_ioctl.h>
 
 #define	USB_DEBUG_VAR uhid_debug
 #include <bus/u4b/usb_debug.h>
@@ -126,7 +116,9 @@ struct uhid_softc {
 	int sc_have_multi_id;
 	device_t child;
 	hid_input_handler_t input_handler;
-	void *input_arg;
+	hid_output_handler_t output_handler;
+	void *handler_arg;
+
 	char *output;
 	uint16_t output_len;
 	uint8_t output_id;
@@ -171,10 +163,23 @@ tr_setup:
 			usbd_xfer_set_frame_len(xfer, 0, sc->output_len);
 		}
 		usbd_transfer_submit(xfer);
-		/* XXX Instead give back the buffer, via a callback. */
-		kfree(sc->output, M_DEVBUF);
-		sc->output = NULL;
-		sc->output_len = 0;
+		if (sc->output_handler != NULL) {
+			hid_output_handler_t fn = sc->output_handler;
+			void *arg = sc->handler_arg;
+			char *buffer = sc->output;
+			uint16_t len = sc->output_len;
+
+			sc->output = NULL;
+			sc->output_len = 0;
+			sc->output_id = 0;
+			lockmgr(&sc->sc_lock, LK_RELEASE);
+			fn(buffer, len, arg);
+			lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
+		} else {
+			sc->output = NULL;
+			sc->output_len = 0;
+			sc->output_id = 0;
+		}
 		return;
 
 	default:			/* Error */
@@ -213,7 +218,7 @@ uhid_intr_read_callback(struct usb_xfer *xfer, usb_error_t error)
 				actlen = sc->sc_isize;
 			/* XXX handle data */
 			usbd_copy_out(pc, 0, sc->sc_buffer, actlen);
-			uhid_dump(sc->sc_buffer, actlen);
+//			uhid_dump(sc->sc_buffer, actlen);
 			if (sc->input_handler != NULL) {
 				uint8_t id = 0;
 				uint8_t *buffer = sc->sc_buffer;
@@ -225,7 +230,7 @@ uhid_intr_read_callback(struct usb_xfer *xfer, usb_error_t error)
 				usbd_xfer_set_frame_len(xfer, 0, sc->sc_isize);
 				usbd_transfer_submit(xfer);
 				hid_input_handler_t fn = sc->input_handler;
-				void *arg = sc->input_arg;
+				void *arg = sc->handler_arg;
 				lockmgr(&sc->sc_lock, LK_RELEASE);
 				fn(id, buffer, actlen, arg);
 				lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
@@ -298,10 +303,23 @@ uhid_write_callback(struct usb_xfer *xfer, usb_error_t error)
 		usbd_xfer_set_frame_len(xfer, 1, sc->output_len);
 		usbd_xfer_set_frames(xfer, 2);
 		usbd_transfer_submit(xfer);
-		/* XXX Instead give back the buffer, via a callback. */
-		kfree(sc->output, M_DEVBUF);
-		sc->output = NULL;
-		sc->output_len = 0;
+		if (sc->output_handler != NULL) {
+			hid_output_handler_t fn = sc->output_handler;
+			void *arg = sc->handler_arg;
+			char *buffer = sc->output;
+			uint16_t len = sc->output_len;
+
+			sc->output = NULL;
+			sc->output_len = 0;
+			sc->output_id = 0;
+			lockmgr(&sc->sc_lock, LK_RELEASE);
+			fn(buffer, len, arg);
+			lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
+		} else {
+			sc->output = NULL;
+			sc->output_len = 0;
+			sc->output_id = 0;
+		}
 		return;
 
 	default:
@@ -325,7 +343,7 @@ uhid_read_callback(struct usb_xfer *xfer, usb_error_t error)
 		usbd_copy_out(pc, sizeof(req), sc->sc_buffer, sc->sc_isize);
 		kprintf("uhid: %s: report (length: %u):\n",
 		    __func__, sc->sc_isize);
-		uhid_dump(sc->sc_buffer, sc->sc_isize);
+//		uhid_dump(sc->sc_buffer, sc->sc_isize);
 		return;
 
 	case USB_ST_SETUP:
@@ -386,272 +404,6 @@ static const struct usb_config uhid_config[UHID_N_TRANSFER] = {
 		.timeout = 1000,	/* 1 second */
 	},
 };
-
-#if 0
-static void
-uhid_start_read(struct usb_fifo *fifo)
-{
-	struct uhid_softc *sc = usb_fifo_softc(fifo);
-
-	if (sc->sc_flags & UHID_FLAG_IMMED) {
-		usbd_transfer_start(sc->sc_xfer[UHID_CTRL_DT_RD]);
-	} else {
-		usbd_transfer_start(sc->sc_xfer[UHID_INTR_DT_RD]);
-	}
-}
-
-static void
-uhid_stop_read(struct usb_fifo *fifo)
-{
-	struct uhid_softc *sc = usb_fifo_softc(fifo);
-
-	usbd_transfer_stop(sc->sc_xfer[UHID_CTRL_DT_RD]);
-	usbd_transfer_stop(sc->sc_xfer[UHID_INTR_DT_RD]);
-}
-
-static void
-uhid_start_write(struct usb_fifo *fifo)
-{
-	struct uhid_softc *sc = usb_fifo_softc(fifo);
-
-	if ((sc->sc_flags & UHID_FLAG_IMMED) ||
-	    sc->sc_xfer[UHID_INTR_DT_WR] == NULL) {
-		usbd_transfer_start(sc->sc_xfer[UHID_CTRL_DT_WR]);
-	} else {
-		usbd_transfer_start(sc->sc_xfer[UHID_INTR_DT_WR]);
-	}
-}
-
-static void
-uhid_stop_write(struct usb_fifo *fifo)
-{
-	struct uhid_softc *sc = usb_fifo_softc(fifo);
-
-	usbd_transfer_stop(sc->sc_xfer[UHID_CTRL_DT_WR]);
-	usbd_transfer_stop(sc->sc_xfer[UHID_INTR_DT_WR]);
-}
-
-static int
-uhid_get_report(struct uhid_softc *sc, uint8_t type,
-    uint8_t id, void *kern_data, void *user_data,
-    uint16_t len)
-{
-	int err;
-	uint8_t free_data = 0;
-
-	if (kern_data == NULL) {
-		kern_data = kmalloc(len, M_USBDEV, M_WAITOK);
-		if (kern_data == NULL) {
-			err = ENOMEM;
-			goto done;
-		}
-		free_data = 1;
-	}
-	err = usbd_req_get_report(sc->sc_udev, NULL, kern_data,
-	    len, sc->sc_iface_index, type, id);
-	if (err) {
-		err = ENXIO;
-		goto done;
-	}
-	if (user_data) {
-		/* dummy buffer */
-		err = copyout(kern_data, user_data, len);
-		if (err) {
-			goto done;
-		}
-	}
-done:
-	if (free_data) {
-		kfree(kern_data, M_USBDEV);
-	}
-	return (err);
-}
-
-static int
-uhid_set_report(struct uhid_softc *sc, uint8_t type,
-    uint8_t id, void *kern_data, void *user_data,
-    uint16_t len)
-{
-	int err;
-	uint8_t free_data = 0;
-
-	if (kern_data == NULL) {
-		kern_data = kmalloc(len, M_USBDEV, M_WAITOK);
-		if (kern_data == NULL) {
-			err = ENOMEM;
-			goto done;
-		}
-		free_data = 1;
-		err = copyin(user_data, kern_data, len);
-		if (err) {
-			goto done;
-		}
-	}
-	err = usbd_req_set_report(sc->sc_udev, NULL, kern_data,
-	    len, sc->sc_iface_index, type, id);
-	if (err) {
-		err = ENXIO;
-		goto done;
-	}
-done:
-	if (free_data) {
-		kfree(kern_data, M_USBDEV);
-	}
-	return (err);
-}
-
-static int
-uhid_open(struct usb_fifo *fifo, int fflags)
-{
-	struct uhid_softc *sc = usb_fifo_softc(fifo);
-
-	/*
-	 * The buffers are one byte larger than maximum so that one
-	 * can detect too large read/writes and short transfers:
-	 */
-	if (fflags & FREAD) {
-		/* reset flags */
-		lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
-		sc->sc_flags &= ~UHID_FLAG_IMMED;
-		lockmgr(&sc->sc_lock, LK_RELEASE);
-
-		if (usb_fifo_alloc_buffer(fifo,
-		    sc->sc_isize + 1, UHID_FRAME_NUM)) {
-			return (ENOMEM);
-		}
-	}
-	if (fflags & FWRITE) {
-		if (usb_fifo_alloc_buffer(fifo,
-		    sc->sc_osize + 1, UHID_FRAME_NUM)) {
-			return (ENOMEM);
-		}
-	}
-	return (0);
-}
-
-static void
-uhid_close(struct usb_fifo *fifo, int fflags)
-{
-	if (fflags & (FREAD | FWRITE)) {
-		usb_fifo_free_buffer(fifo);
-	}
-}
-
-static int
-uhid_ioctl(struct usb_fifo *fifo, u_long cmd, void *addr,
-    int fflags)
-{
-	struct uhid_softc *sc = usb_fifo_softc(fifo);
-	struct usb_gen_descriptor *ugd;
-	uint32_t size;
-	int error = 0;
-	uint8_t id;
-
-	switch (cmd) {
-	case USB_GET_REPORT_DESC:
-		ugd = addr;
-		if (sc->sc_repdesc_size > ugd->ugd_maxlen) {
-			size = ugd->ugd_maxlen;
-		} else {
-			size = sc->sc_repdesc_size;
-		}
-		ugd->ugd_actlen = size;
-		if (ugd->ugd_data == NULL)
-			break;		/* descriptor length only */
-		error = copyout(sc->sc_repdesc_ptr, ugd->ugd_data, size);
-		break;
-
-	case USB_SET_IMMED:
-		if (!(fflags & FREAD)) {
-			error = EPERM;
-			break;
-		}
-		if (*(int *)addr) {
-
-			/* do a test read */
-
-			error = uhid_get_report(sc, UHID_INPUT_REPORT,
-			    sc->sc_iid, NULL, NULL, sc->sc_isize);
-			if (error) {
-				break;
-			}
-			lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
-			sc->sc_flags |= UHID_FLAG_IMMED;
-			lockmgr(&sc->sc_lock, LK_RELEASE);
-		} else {
-			lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
-			sc->sc_flags &= ~UHID_FLAG_IMMED;
-			lockmgr(&sc->sc_lock, LK_RELEASE);
-		}
-		break;
-
-	case USB_GET_REPORT:
-		if (!(fflags & FREAD)) {
-			error = EPERM;
-			break;
-		}
-		ugd = addr;
-		switch (ugd->ugd_report_type) {
-		case UHID_INPUT_REPORT:
-			size = sc->sc_isize;
-			id = sc->sc_iid;
-			break;
-		case UHID_OUTPUT_REPORT:
-			size = sc->sc_osize;
-			id = sc->sc_oid;
-			break;
-		case UHID_FEATURE_REPORT:
-			size = sc->sc_fsize;
-			id = sc->sc_fid;
-			break;
-		default:
-			return (EINVAL);
-		}
-		if (id != 0)
-			copyin(ugd->ugd_data, &id, 1);
-		error = uhid_get_report(sc, ugd->ugd_report_type, id,
-		    NULL, ugd->ugd_data, imin(ugd->ugd_maxlen, size));
-		break;
-
-	case USB_SET_REPORT:
-		if (!(fflags & FWRITE)) {
-			error = EPERM;
-			break;
-		}
-		ugd = addr;
-		switch (ugd->ugd_report_type) {
-		case UHID_INPUT_REPORT:
-			size = sc->sc_isize;
-			id = sc->sc_iid;
-			break;
-		case UHID_OUTPUT_REPORT:
-			size = sc->sc_osize;
-			id = sc->sc_oid;
-			break;
-		case UHID_FEATURE_REPORT:
-			size = sc->sc_fsize;
-			id = sc->sc_fid;
-			break;
-		default:
-			return (EINVAL);
-		}
-		if (id != 0)
-			copyin(ugd->ugd_data, &id, 1);
-		error = uhid_set_report(sc, ugd->ugd_report_type, id,
-		    NULL, ugd->ugd_data, imin(ugd->ugd_maxlen, size));
-		break;
-
-	case USB_GET_REPORT_ID:
-		*(int *)addr = 0;	/* XXX: we only support reportid 0? */
-		break;
-
-	default:
-		error = EINVAL;
-		break;
-	}
-	return (error);
-}
-#endif
 
 static void
 uhid_dump(u_char *ptr, uint16_t len)
@@ -761,54 +513,37 @@ uhid_get_descriptor(device_t dev, char **descp, uint16_t *sizep)
 }
 
 static void
-uhid_set_handler(device_t dev, hid_input_handler_t handler, void *arg)
+uhid_set_handler(device_t dev, hid_input_handler_t input,
+    hid_output_handler_t output, void *arg)
 {
 	struct uhid_softc *sc = device_get_softc(dev);
 
 	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
-	sc->input_handler = handler;
-	sc->input_arg = arg;
+	sc->input_handler = input;
+	sc->output_handler = output;
+	sc->handler_arg = arg;
 	lockmgr(&sc->sc_lock, LK_RELEASE);
 }
 
 static void
-uhid_start(device_t dev)
+uhid_start_read(device_t dev)
 {
 	struct uhid_softc *sc = device_get_softc(dev);
 
 	device_printf(dev, "starting interrupt input transfer\n");
 	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
-	usbd_transfer_stop(sc->sc_xfer[UHID_INTR_DT_WR]);
-	usbd_transfer_stop(sc->sc_xfer[UHID_CTRL_DT_WR]);
-	if (sc->output != NULL) {
-		/* XXX Instead give back the buffer, via a callback. */
-		kfree(sc->output, M_DEVBUF);
-	}
-	sc->output = NULL;
-	sc->output_len = 0;
-	sc->output_id = 0;
 	usbd_transfer_start(sc->sc_xfer[UHID_INTR_DT_RD]);
 	lockmgr(&sc->sc_lock, LK_RELEASE);
 }
 
 static void
-uhid_stop(device_t dev)
+uhid_stop_read(device_t dev)
 {
 	struct uhid_softc *sc = device_get_softc(dev);
 
 	device_printf(dev, "stopping interrupt input transfer\n");
 	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
-//	usbd_transfer_stop(sc->sc_xfer[UHID_CTRL_DT_RD]);
 	usbd_transfer_stop(sc->sc_xfer[UHID_INTR_DT_RD]);
-	usbd_transfer_stop(sc->sc_xfer[UHID_INTR_DT_WR]);
-	usbd_transfer_stop(sc->sc_xfer[UHID_CTRL_DT_WR]);
-	if (sc->output != NULL) {
-		/* XXX Instead give back the buffer, via a callback. */
-		kfree(sc->output, M_DEVBUF);
-	}
-	sc->output = NULL;
-	sc->output_len = 0;
-	sc->output_id = 0;
 	lockmgr(&sc->sc_lock, LK_RELEASE);
 }
 
@@ -829,6 +564,8 @@ uhid_setidle(device_t dev, uint8_t duration, uint8_t id)
 	}
 }
 
+/* XXX Add type argument, which can be hid_output or hid_feature. */
+/* XXX Just KKASSERT that it is a valid type here. */
 static void
 uhid_set_report(device_t dev, uint8_t id, uint8_t *buf, uint16_t len)
 {
@@ -836,11 +573,10 @@ uhid_set_report(device_t dev, uint8_t id, uint8_t *buf, uint16_t len)
 	int needstart;
 
 	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
-	if (sc->output != NULL) {
-		/* XXX Instead give back the buffer, via a callback. */
-		kfree(sc->output, M_DEVBUF);
-	}
 	needstart = sc->output == NULL;
+	if (sc->output != NULL && sc->output_handler != NULL)
+		sc->output_handler(sc->output, 0, sc->handler_arg);
+
 	sc->output = buf;
 	sc->output_len = len;
 	sc->output_id = id;
@@ -861,12 +597,23 @@ uhid_set_report(device_t dev, uint8_t id, uint8_t *buf, uint16_t len)
 	lockmgr(&sc->sc_lock, LK_RELEASE);
 }
 
+/* XXX Add type argument, which can be hid_input or hid_feature. */
+/* XXX Just KKASSERT that it is a valid type here. */
+/* XXX Add uhid_get_report method. */
+
+/*
+ * XXX So GET_REPORT can be used for input and feature reports,
+ *     and SET_REPORT can be used for output and feature reports.
+ *
+ * XXX This requires adding the type argument to the input_handler and
+ *     output_handler callbacks, as well.
+ */
+
 static int
 uhid_attach(device_t dev)
 {
 	struct usb_attach_arg *uaa = device_get_ivars(dev);
 	struct uhid_softc *sc = device_get_softc(dev);
-//	int unit = device_get_unit(dev);
 	int error = 0;
 
 	DPRINTFN(10, "sc=%p\n", sc);
@@ -938,16 +685,7 @@ uhid_attach(device_t dev)
 			goto detach;
 		}
 	}
-#if 0
-	/* XXX Set idle rate to infinite for all Report IDs. */
-	error = usbd_req_set_idle(uaa->device, NULL,
-	    uaa->info.bIfaceIndex, 0, 0);
 
-	if (error) {
-		DPRINTF("set idle failed, error=%s (ignored)\n",
-		    usbd_errstr(error));
-	}
-#endif
 	sc->sc_isize = hid_report_size_a
 	    (sc->sc_repdesc_ptr, sc->sc_repdesc_size, hid_input, &sc->sc_iid);
 
@@ -1071,8 +809,8 @@ static device_method_t uhid_methods[] = {
 
 	DEVMETHOD(hid_get_descriptor, uhid_get_descriptor),
 	DEVMETHOD(hid_set_handler, uhid_set_handler),
-	DEVMETHOD(hid_start, uhid_start),
-	DEVMETHOD(hid_stop, uhid_stop),
+	DEVMETHOD(hid_start_read, uhid_start_read),
+	DEVMETHOD(hid_stop_read, uhid_stop_read),
 	DEVMETHOD(hid_setidle, uhid_setidle),
 	DEVMETHOD(hid_set_report, uhid_set_report),
 
