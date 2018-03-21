@@ -48,19 +48,20 @@ METHOD void get_descriptor {
 # Set NULL handler to stop handling input reports.
 METHOD void set_handler {
 	device_t dev;
-	hid_input_handler_t handler;
+	hid_input_handler_t input;
+	hid_output_handler_t output;
 	void *arg;
 };
 
 # Activates input from hardware device.
-METHOD void start {
+METHOD void start_read {
 	device_t dev;
 };
 
 # Deactivates input from hardware device.
 # WARNING: Further input reports may still be delivered via the handler
 #          method after deactivating input with stop().
-METHOD void stop {
+METHOD void stop_read {
 	device_t dev;
 };
 
@@ -72,7 +73,9 @@ METHOD void setidle {
 }
 
 # SET_REPORT
-# Currently allows exactly one transfer in flight at a time.
+# Currently has exactly one transfer in flight at a time. Successful transfers
+# call the output_handler callback with a nonzero length, cancelled transfers
+# call the callback with a zero length.
 METHOD void set_report {
 	device_t dev;
 	uint8_t id;
