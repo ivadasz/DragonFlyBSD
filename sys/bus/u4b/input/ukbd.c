@@ -210,7 +210,7 @@ struct ukbd_softc {
 	uint16_t sc_kbd_size;
 	uint8_t sc_led_id;
 
-	uint8_t *sc_outbuf;
+	uint8_t *sc_outbuf[2];
 
 	uint16_t sc_inputs;
 	uint16_t sc_inputhead;
@@ -497,7 +497,7 @@ ukbd_get_key(struct ukbd_softc *sc, uint8_t wait)
 	if (sc->sc_inputs == 0 &&
 	    (sc->sc_flags & UKBD_FLAG_GONE) == 0) {
 		/* start transfer, if not already started */
-		HID_START(device_get_parent(sc->sc_dev));
+		HID_START_READ(device_get_parent(sc->sc_dev));
 	}
 
 	if (sc->sc_flags & UKBD_FLAG_POLLING)
@@ -684,8 +684,6 @@ ukbd_input_handler(uint8_t id, uint8_t *buf, int len, void *arg)
 	struct ukbd_softc *sc = arg;
 	uint8_t i;
 
-	UKBD_LOCK_ASSERT();
-
 	DPRINTF("actlen=%d bytes\n", len);
 
 	if (len == 0) {
@@ -808,6 +806,19 @@ ukbd_input_handler(uint8_t id, uint8_t *buf, int len, void *arg)
 			ukbd_start_timer(sc);
 		}
 	}
+	UKBD_UNLOCK(sc);
+}
+
+static void
+ukbd_output_handler(uint8_t *buf, int len, void *arg)
+{
+	struct ukbd_softc *sc = arg;
+
+	UKBD_LOCK(sc);
+	if (sc->sc_outbuf[0] == NULL)
+		sc->sc_outbuf[0] = buf;
+	else if (sc->sc_outbuf[1] == NULL)
+		sc->sc_outbuf[1] = buf;
 	UKBD_UNLOCK(sc);
 }
 
@@ -1109,11 +1120,22 @@ ukbd_attach(device_t dev)
 #endif
 
 	if (sc->sc_led_size > 0) {
-		sc->sc_outbuf = kmalloc(sc->sc_led_size, M_DEVBUF,
+		/*
+		 * The current buffering in the HID bus, requires us to have
+		 * one buffer in reserve.
+		 */
+		sc->sc_outbuf[0] = kmalloc(sc->sc_led_size, M_DEVBUF,
+		    M_WAITOK | M_ZERO);
+		sc->sc_outbuf[1] = kmalloc(sc->sc_led_size, M_DEVBUF,
 		    M_WAITOK | M_ZERO);
 	} else {
-		sc->sc_outbuf = NULL;
+		sc->sc_outbuf[0] = NULL;
+		sc->sc_outbuf[1] = NULL;
 	}
+
+	/* ukbd_input_handler will only be called after HID_START_READ. */
+	HID_SET_HANDLER(device_get_parent(dev), ukbd_input_handler,
+	    ukbd_output_handler, sc);
 
 	/* ignore if SETIDLE fails, hence it is not crucial */
 	HID_SETIDLE(device_get_parent(dev), 0, 0);
@@ -1134,8 +1156,6 @@ ukbd_attach(device_t dev)
 		goto detach;
 	}
 #endif
-
-	HID_SET_HANDLER(device_get_parent(dev), ukbd_input_handler, sc);
 
 #ifdef EVDEV_SUPPORT
 	evdev = evdev_alloc();
@@ -1193,7 +1213,7 @@ ukbd_attach(device_t dev)
 	usbd_transfer_start(sc->sc_xfer[UKBD_INTR_DT]);
 	UKBD_UNLOCK(sc);
 #endif
-	HID_START(device_get_parent(dev));
+	HID_START_READ(device_get_parent(dev));
 
 	return (0);			/* success */
 detach:
@@ -1211,8 +1231,8 @@ ukbd_detach(device_t dev)
 
 	DPRINTF("\n");
 
-	HID_STOP(device_get_parent(dev));
-	HID_SET_HANDLER(device_get_parent(dev), NULL, NULL);
+	HID_STOP_READ(device_get_parent(dev));
+	HID_SET_HANDLER(device_get_parent(dev), NULL, NULL, NULL);
 
 	crit_enter();
 	sc->sc_flags |= UKBD_FLAG_GONE;
@@ -1267,8 +1287,10 @@ ukbd_detach(device_t dev)
 	DPRINTF("%s: disconnected\n",
 	    device_get_nameunit(dev));
 
-	if (sc->sc_outbuf != NULL)
-		kfree(sc->sc_outbuf, M_DEVBUF);
+	if (sc->sc_outbuf[0] != NULL)
+		kfree(sc->sc_outbuf[0], M_DEVBUF);
+	if (sc->sc_outbuf[1] != NULL)
+		kfree(sc->sc_outbuf[1], M_DEVBUF);
 
 	return (0);
 }
@@ -1877,37 +1899,44 @@ ukbd_set_leds(struct ukbd_softc *sc, uint8_t leds)
 {
 	UKBD_LOCK_ASSERT();
 	DPRINTF("leds=0x%02x\n", leds);
+	uint8_t *buf = NULL;
 
 	sc->sc_leds = leds;
 
 	if (ukbd_no_leds || sc->sc_led_size == 0)
 		return;
 
-	if (sc->sc_outbuf == NULL) {
-		/* XXX Instead pre-allocate enough buffers. */
-		sc->sc_outbuf = kmalloc(sc->sc_led_size, M_DEVBUF,
-		    M_WAITOK | M_ZERO);
-	} else {
-		memset(sc->sc_outbuf, 0, sc->sc_led_size);
+	if (sc->sc_outbuf[0] != NULL) {
+		buf = sc->sc_outbuf[0];
+		sc->sc_outbuf[0] = NULL;
+	} else if (sc->sc_outbuf[1] != NULL) {
+		buf = sc->sc_outbuf[1];
+		sc->sc_outbuf[1] = NULL;
 	}
+
+	/* This should not be possible. */
+	if (buf == NULL)
+		return;
+
+	memset(buf, 0, sc->sc_led_size);
 
 	if (sc->sc_flags & UKBD_FLAG_NUMLOCK) {
 		if (sc->sc_leds & NLKED) {
-			hid_put_data_unsigned(sc->sc_outbuf, sc->sc_led_size,
+			hid_put_data_unsigned(buf, sc->sc_led_size,
 			    &sc->sc_loc_numlock, 1);
 		}
 	}
 
 	if (sc->sc_flags & UKBD_FLAG_SCROLLLOCK) {
 		if (sc->sc_leds & SLKED) {
-			hid_put_data_unsigned(sc->sc_outbuf, sc->sc_led_size,
+			hid_put_data_unsigned(buf, sc->sc_led_size,
 			    &sc->sc_loc_scrolllock, 1);
 		}
 	}
 
 	if (sc->sc_flags & UKBD_FLAG_CAPSLOCK) {
 		if (sc->sc_leds & CLKED) {
-			hid_put_data_unsigned(sc->sc_outbuf, sc->sc_led_size,
+			hid_put_data_unsigned(buf, sc->sc_led_size,
 			    &sc->sc_loc_capslock, 1);
 		}
 	}
@@ -1918,8 +1947,7 @@ ukbd_set_leds(struct ukbd_softc *sc, uint8_t leds)
 #endif
 
 	HID_SET_REPORT(device_get_parent(sc->sc_dev), sc->sc_led_id,
-	    sc->sc_outbuf, sc->sc_led_size);
-	sc->sc_outbuf = NULL;
+	    buf, sc->sc_led_size);
 }
 
 #ifdef UKBD_EMULATE_ATSCANCODE

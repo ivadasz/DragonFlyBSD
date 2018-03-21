@@ -221,4 +221,5 @@ int	hid_is_absmouse(const void *d_ptr, uint16_t d_len);
 
 typedef void (*hid_input_handler_t)(uint8_t id, uint8_t *buf, int count,
 				    void *arg);
+typedef void (*hid_output_handler_t)(uint8_t *buf, int count, void *arg);
 #endif					/* _KERNEL */
