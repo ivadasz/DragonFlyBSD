@@ -313,7 +313,7 @@ device		kue		# Kawasaki LSI USB ethernet
 #device		rum		# Ralink Technology RT2501USB/RT2601USB
 
 # HID input support
-device		hid		# HID bus driver
+device		hidbus		# HID bus driver
 device		ukbd		# Keyboard
 device		ums		# Mouse
 

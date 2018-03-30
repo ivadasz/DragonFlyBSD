@@ -1,4 +1,4 @@
-SUBDIR=	cam firewire gpio iicbus mmc pccard ppbus smbus u4b
+SUBDIR=	cam firewire gpio hid iicbus mmc pccard ppbus smbus u4b
 
 # empty to allow concurrent building
 #

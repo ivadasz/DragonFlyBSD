@@ -59,6 +59,8 @@
 
 #include <bus/u4b/serial/usb_serial.h>
 
+#include <bus/hid/hid_common.h>
+
 #define	UCYCOM_MAX_IOLEN	(1024 + 2)	/* bytes */
 
 #define	UCYCOM_IFACE_INDEX	0

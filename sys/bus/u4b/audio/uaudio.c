@@ -74,6 +74,8 @@
 
 #include <bus/u4b/quirk/usb_quirk.h>
 
+#include <bus/hid/hid_common.h>
+
 #include <sys/reboot.h>			/* for bootverbose */
 
 #include "opt_snd.h"
