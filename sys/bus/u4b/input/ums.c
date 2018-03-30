@@ -1057,7 +1057,7 @@ static driver_t ums_driver = {
 	.size = sizeof(struct ums_softc),
 };
 
-DRIVER_MODULE(ums, uhid, ums_driver, ums_devclass, NULL, NULL);
+DRIVER_MODULE(ums, usbhid, ums_driver, ums_devclass, NULL, NULL);
 #ifdef EVDEV_SUPPORT
 MODULE_DEPEND(ums, evdev, 1, 1, 1);
 #endif

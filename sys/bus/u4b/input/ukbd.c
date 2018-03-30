@@ -2093,7 +2093,7 @@ static driver_t ukbd_driver = {
 	.size = sizeof(struct ukbd_softc),
 };
 
-DRIVER_MODULE(ukbd, uhid, ukbd_driver, ukbd_devclass, ukbd_driver_load, NULL);
+DRIVER_MODULE(ukbd, usbhid, ukbd_driver, ukbd_devclass, ukbd_driver_load, NULL);
 #ifdef EVDEV_SUPPORT
 MODULE_DEPEND(ukbd, evdev, 1, 1, 1);
 #endif
