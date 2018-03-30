@@ -1874,9 +1874,7 @@ device		xhci
 # General USB code (mandatory for USB)
 device		usb
 # Human Interface Device (anything with buttons and dials)
-device		uhid
-# USB keyboard
-device		ukbd
+device		usbhid
 # USB printer
 device		ulpt
 # USB mass storage (Requires scbus and da)
@@ -1885,8 +1883,6 @@ device		umass
 device		usfs
 # USB modem support
 device		umodem
-# USB mouse
-device		ums
 # eGalax USB touch screen
 device		uep
 # Diamond Rio 500 MP3 player
@@ -1982,9 +1978,14 @@ device		usb_template
 #
 options 	USB_DEBUG
 
-# options for ukbd:
-options 	UKBD_DFLT_KEYMAP	# specify the built-in keymap
-makeoptions	UKBD_DFLT_KEYMAP=it.iso
+# HID input support
+device		hidbus		# HID bus driver
+device		hidkbd		# Keyboard
+device		hidms		# Mouse
+
+# options for hidkbd:
+options 	HIDKBD_DFLT_KEYMAP	# specify the built-in keymap
+makeoptions	HIDKBD_DFLT_KEYMAP=it.iso
 
 # Firewire support
 device		firewire	# Firewire bus code
