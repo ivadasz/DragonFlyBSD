@@ -2941,8 +2941,8 @@ bus/u4b/audio/uaudio_pcm.c		optional snd_uaudio
 #
 # HID input drivers
 #
-bus/u4b/input/ukbd.c			optional ukbd
-bus/u4b/input/ums.c			optional ums
+bus/hid/hidkbd/hidkbd.c			optional hidkbd
+bus/hid/hidms/hidms.c			optional hidms
 
 #
 # Hyper-V support

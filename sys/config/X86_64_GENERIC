@@ -313,8 +313,8 @@ device		kue		# Kawasaki LSI USB ethernet
 
 # HID input support
 device		hidbus		# HID bus driver
-device		ukbd		# Keyboard
-device		ums		# Mouse
+device		hidkbd		# Keyboard
+device		hidms		# Mouse
 
 # FireWire support
 device		firewire	# FireWire bus code
