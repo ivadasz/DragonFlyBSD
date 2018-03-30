@@ -2920,8 +2920,8 @@ dev/virtual/amazon/ena/ena-com/ena_eth_com.c optional ena
 #
 # HID input drivers
 #
-bus/u4b/input/ukbd.c			optional ukbd
-bus/u4b/input/ums.c			optional ums
+bus/hid/hidkbd/hidkbd.c			optional hidkbd
+bus/hid/hidms/hidms.c			optional hidms
 
 #
 # Hyper-V support

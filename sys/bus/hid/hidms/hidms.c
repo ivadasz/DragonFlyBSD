@@ -69,23 +69,18 @@
 #define	MOUSE_FLAGS_MASK (HIO_CONST|HIO_RELATIVE)
 #define	MOUSE_FLAGS (HIO_RELATIVE)
 
-#define	UMS_BUF_SIZE      8		/* bytes */
-#define	UMS_IFQ_MAXLEN   50		/* units */
-#define	UMS_BUTTON_MAX   31		/* exclusive, must be less than 32 */
-#define	UMS_BUT(i) ((i) < 3 ? (((i) + 2) % 3) : (i))
-#define	UMS_INFO_MAX	  2		/* maximum number of HID sets */
+#define	HIDMS_BUF_SIZE      8		/* bytes */
+#define	HIDMS_IFQ_MAXLEN   50		/* units */
+#define	HIDMS_BUTTON_MAX   31		/* exclusive, must be less than 32 */
+#define	HIDMS_BUT(i) ((i) < 3 ? (((i) + 2) % 3) : (i))
+#define	HIDMS_INFO_MAX	  2		/* maximum number of HID sets */
 
 #define DPRINTFN(l, f, ...)	\
-    do { if (ums_debug >= (l)) { kprintf(f,## __VA_ARGS__); } } while(0)
+    do { if (hidms_debug >= (l)) { kprintf(f,## __VA_ARGS__); } } while(0)
 
 #define DPRINTF(f, ...) DPRINTFN(1, f,## __VA_ARGS__)
 
-enum {
-	UMS_INTR_DT,
-	UMS_N_TRANSFER,
-};
-
-struct ums_status {
+struct hidms_status {
 	uint32_t buttons;
 	int32_t dx;
 	int32_t dy;
@@ -93,38 +88,38 @@ struct ums_status {
 	int32_t dt;
 };
 
-struct ums_info {
+struct hidms_info {
 	struct hid_location sc_loc_w;
 	struct hid_location sc_loc_x;
 	struct hid_location sc_loc_y;
 	struct hid_location sc_loc_z;
 	struct hid_location sc_loc_t;
-	struct hid_location sc_loc_btn[UMS_BUTTON_MAX];
+	struct hid_location sc_loc_btn[HIDMS_BUTTON_MAX];
 
 	uint32_t sc_flags;
-#define	UMS_FLAG_X_AXIS     0x0001
-#define	UMS_FLAG_Y_AXIS     0x0002
-#define	UMS_FLAG_Z_AXIS     0x0004
-#define	UMS_FLAG_T_AXIS     0x0008
-#define	UMS_FLAG_SBU        0x0010	/* spurious button up events */
-#define	UMS_FLAG_REVZ	    0x0020	/* Z-axis is reversed */
-#define	UMS_FLAG_W_AXIS     0x0040
+#define	HIDMS_FLAG_X_AXIS     0x0001
+#define	HIDMS_FLAG_Y_AXIS     0x0002
+#define	HIDMS_FLAG_Z_AXIS     0x0004
+#define	HIDMS_FLAG_T_AXIS     0x0008
+#define	HIDMS_FLAG_SBU        0x0010	/* spurious button up events */
+#define	HIDMS_FLAG_REVZ	    0x0020	/* Z-axis is reversed */
+#define	HIDMS_FLAG_W_AXIS     0x0040
 
 	uint8_t	sc_iid_w;
 	uint8_t	sc_iid_x;
 	uint8_t	sc_iid_y;
 	uint8_t	sc_iid_z;
 	uint8_t	sc_iid_t;
-	uint8_t	sc_iid_btn[UMS_BUTTON_MAX];
+	uint8_t	sc_iid_btn[HIDMS_BUTTON_MAX];
 	uint8_t	sc_buttons;
 };
 
-struct ums_softc {
+struct hidms_softc {
 	device_t dev;
 	struct flexfifo *sc_fifo;
 	struct lock sc_lock;
 	struct callout sc_callout;
-	struct ums_info sc_info[UMS_INFO_MAX];
+	struct hidms_info sc_info[HIDMS_INFO_MAX];
 
 	mousehw_t sc_hw;
 	mousemode_t sc_mode;
@@ -136,7 +131,7 @@ struct ums_softc {
 	int sc_opened;
 #ifdef EVDEV_SUPPORT
 	int sc_evflags;
-#define	UMS_EVDEV_OPENED	1
+#define	HIDMS_EVDEV_OPENED	1
 #endif
 
 	uint8_t	sc_buttons;
@@ -148,67 +143,67 @@ struct ums_softc {
 #endif
 };
 
-static int ums_debug = 0;
-TUNABLE_INT("hw.hid.ums_debug", &ums_debug);
+static int hidms_debug = 0;
+TUNABLE_INT("hw.hid.hidms_debug", &hidms_debug);
 
-static void ums_put_queue_timeout(void *__sc);
+static void hidms_put_queue_timeout(void *__sc);
 
-static device_probe_t ums_probe;
-static device_attach_t ums_attach;
-static device_detach_t ums_detach;
+static device_probe_t hidms_probe;
+static device_attach_t hidms_attach;
+static device_detach_t hidms_detach;
 
 #ifdef EVDEV_SUPPORT
-static evdev_open_t ums_ev_open;
-static evdev_close_t ums_ev_close;
-static void ums_evdev_push(struct ums_softc *, int32_t, int32_t,
+static evdev_open_t hidms_ev_open;
+static evdev_close_t hidms_ev_close;
+static void hidms_evdev_push(struct hidms_softc *, int32_t, int32_t,
     int32_t, int32_t, int32_t);
 #endif
 
-static void	ums_put_queue(struct ums_softc *, int32_t, int32_t,
+static void	hidms_put_queue(struct hidms_softc *, int32_t, int32_t,
 		    int32_t, int32_t, int32_t);
 #if 0 /* XXX */
-static int	ums_sysctl_handler_parseinfo(SYSCTL_HANDLER_ARGS);
+static int	hidms_sysctl_handler_parseinfo(SYSCTL_HANDLER_ARGS);
 #endif
 
-static u_int ums_pktlen(void *arg);
-static u_int ums_evtopkt(void *arg, uint8_t *ev, uint8_t *pkt);
-static int ums_ioctl(void *arg, caddr_t data, u_long cmd);
-static void ums_open(void *arg);
-static void ums_close(void *arg);
+static u_int hidms_pktlen(void *arg);
+static u_int hidms_evtopkt(void *arg, uint8_t *ev, uint8_t *pkt);
+static int hidms_ioctl(void *arg, caddr_t data, u_long cmd);
+static void hidms_open(void *arg);
+static void hidms_close(void *arg);
 
-static struct flexfifo_ops ums_fifo_ops = {
-	.pktlen = ums_pktlen,
-	.evtopkt = ums_evtopkt,
-	.ioctl = ums_ioctl,
-	.open = ums_open,
-	.close = ums_close,
+static struct flexfifo_ops hidms_fifo_ops = {
+	.pktlen = hidms_pktlen,
+	.evtopkt = hidms_evtopkt,
+	.ioctl = hidms_ioctl,
+	.open = hidms_open,
+	.close = hidms_close,
 };
 
 #ifdef EVDEV_SUPPORT
-static const struct evdev_methods ums_evdev_methods = {
-	.ev_open = &ums_ev_open,
-	.ev_close = &ums_ev_close,
+static const struct evdev_methods hidms_evdev_methods = {
+	.ev_open = &hidms_ev_open,
+	.ev_close = &hidms_ev_close,
 };
 #endif
 
 static void
-ums_put_queue_timeout(void *__sc)
+hidms_put_queue_timeout(void *__sc)
 {
-	struct ums_softc *sc = __sc;
+	struct hidms_softc *sc = __sc;
 
 	KKASSERT(lockowned(&sc->sc_lock));
 
-	ums_put_queue(sc, 0, 0, 0, 0, 0);
+	hidms_put_queue(sc, 0, 0, 0, 0, 0);
 #ifdef EVDEV_SUPPORT
-	ums_evdev_push(sc, 0, 0, 0, 0, 0);
+	hidms_evdev_push(sc, 0, 0, 0, 0, 0);
 #endif
 }
 
 static void
-ums_input_handler(uint8_t id, uint8_t *buf, int len, void *arg)
+hidms_input_handler(uint8_t id, uint8_t *buf, int len, void *arg)
 {
-	struct ums_softc *sc = arg;
-	struct ums_info *info = &sc->sc_info[0];
+	struct hidms_softc *sc = arg;
+	struct hidms_info *info = &sc->sc_info[0];
 	int32_t buttons = 0;
 	int32_t buttons_found = 0;
 #ifdef EVDEV_SUPPORT
@@ -233,40 +228,40 @@ ums_input_handler(uint8_t id, uint8_t *buf, int len, void *arg)
 	    (len > 4) ? buf[4] : 0, (len > 5) ? buf[5] : 0,
 	    (len > 6) ? buf[6] : 0, (len > 7) ? buf[7] : 0);
 
-	if (sc->sc_info[0].sc_flags & UMS_FLAG_SBU) {
+	if (sc->sc_info[0].sc_flags & HIDMS_FLAG_SBU) {
 		if ((*buf == 0x14) || (*buf == 0x15))
 			return;
 	}
 
 repeat:
-	if ((info->sc_flags & UMS_FLAG_W_AXIS) &&
+	if ((info->sc_flags & HIDMS_FLAG_W_AXIS) &&
 	    (id == info->sc_iid_w))
 		dw += hid_get_data(buf, len, &info->sc_loc_w);
 
-	if ((info->sc_flags & UMS_FLAG_X_AXIS) &&
+	if ((info->sc_flags & HIDMS_FLAG_X_AXIS) &&
 	    (id == info->sc_iid_x))
 		dx += hid_get_data(buf, len, &info->sc_loc_x);
 
-	if ((info->sc_flags & UMS_FLAG_Y_AXIS) &&
+	if ((info->sc_flags & HIDMS_FLAG_Y_AXIS) &&
 	    (id == info->sc_iid_y))
 		dy = -hid_get_data(buf, len, &info->sc_loc_y);
 
-	if ((info->sc_flags & UMS_FLAG_Z_AXIS) &&
+	if ((info->sc_flags & HIDMS_FLAG_Z_AXIS) &&
 	    (id == info->sc_iid_z)) {
 		int32_t temp;
 		temp = hid_get_data(buf, len, &info->sc_loc_z);
-		if (info->sc_flags & UMS_FLAG_REVZ)
+		if (info->sc_flags & HIDMS_FLAG_REVZ)
 			temp = -temp;
 		dz -= temp;
 	}
 
-	if ((info->sc_flags & UMS_FLAG_T_AXIS) &&
+	if ((info->sc_flags & HIDMS_FLAG_T_AXIS) &&
 	    (id == info->sc_iid_t))
 		dt -= hid_get_data(buf, len, &info->sc_loc_t);
 
 	for (i = 0; i < info->sc_buttons; i++) {
 		uint32_t mask;
-		mask = 1UL << UMS_BUT(i);
+		mask = 1UL << HIDMS_BUT(i);
 		/* check for correct button ID */
 		if (id != info->sc_iid_btn[i])
 			continue;
@@ -277,7 +272,7 @@ repeat:
 		buttons_found |= mask;
 	}
 
-	if (++info != &sc->sc_info[UMS_INFO_MAX])
+	if (++info != &sc->sc_info[HIDMS_INFO_MAX])
 		goto repeat;
 
 #ifdef EVDEV_SUPPORT
@@ -317,19 +312,19 @@ repeat:
 		 * to the queue.  In any other case we delete
 		 * the timeout event.
 		 */
-		if ((sc->sc_info[0].sc_flags & UMS_FLAG_SBU) &&
+		if ((sc->sc_info[0].sc_flags & HIDMS_FLAG_SBU) &&
 		    (dx == 0) && (dy == 0) && (dz == 0) && (dt == 0) &&
 		    (dw == 0) && (buttons == 0)) {
 
 			callout_reset(&sc->sc_callout, hz / 20,
-			    &ums_put_queue_timeout, sc);
+			    &hidms_put_queue_timeout, sc);
 		} else {
 
 			callout_stop(&sc->sc_callout);
 
-			ums_put_queue(sc, dx, dy, dz, dt, buttons);
+			hidms_put_queue(sc, dx, dy, dz, dt, buttons);
 #ifdef EVDEV_SUPPORT
-			ums_evdev_push(sc, dx, dy, dz, dt,
+			hidms_evdev_push(sc, dx, dy, dz, dt,
 			    buttons_reported);
 #endif
 		}
@@ -337,7 +332,7 @@ repeat:
 }
 
 static int
-ums_probe(device_t dev)
+hidms_probe(device_t dev)
 {
 	char *buf;
 	uint16_t len;
@@ -358,7 +353,7 @@ ums_probe(device_t dev)
 
 #if 0
 	/* XXX Do equivalent check in parent uhid driver. */
-	if (usb_test_quirk(uaa, UQ_UMS_IGNORE))
+	if (usb_test_quirk(uaa, UQ_HIDMS_IGNORE))
 		return (ENXIO);
 #endif
 
@@ -366,10 +361,10 @@ ums_probe(device_t dev)
 }
 
 static void
-ums_hid_parse(struct ums_softc *sc, device_t dev, const uint8_t *buf,
+hidms_hid_parse(struct hidms_softc *sc, device_t dev, const uint8_t *buf,
     uint16_t len, uint8_t index)
 {
-	struct ums_info *info = &sc->sc_info[index];
+	struct hidms_info *info = &sc->sc_info[index];
 	uint32_t flags;
 	uint8_t i;
 	uint8_t j;
@@ -378,14 +373,14 @@ ums_hid_parse(struct ums_softc *sc, device_t dev, const uint8_t *buf,
 	    hid_input, index, &info->sc_loc_x, &flags, &info->sc_iid_x)) {
 
 		if ((flags & MOUSE_FLAGS_MASK) == MOUSE_FLAGS) {
-			info->sc_flags |= UMS_FLAG_X_AXIS;
+			info->sc_flags |= HIDMS_FLAG_X_AXIS;
 		}
 	}
 	if (hid_locate(buf, len, HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_Y),
 	    hid_input, index, &info->sc_loc_y, &flags, &info->sc_iid_y)) {
 
 		if ((flags & MOUSE_FLAGS_MASK) == MOUSE_FLAGS) {
-			info->sc_flags |= UMS_FLAG_Y_AXIS;
+			info->sc_flags |= HIDMS_FLAG_Y_AXIS;
 		}
 	}
 	/* Try the wheel first as the Z activator since it's tradition. */
@@ -396,7 +391,7 @@ ums_hid_parse(struct ums_softc *sc, device_t dev, const uint8_t *buf,
 	    HUG_TWHEEL), hid_input, index, &info->sc_loc_z, &flags,
 	    &info->sc_iid_z)) {
 		if ((flags & MOUSE_FLAGS_MASK) == MOUSE_FLAGS) {
-			info->sc_flags |= UMS_FLAG_Z_AXIS;
+			info->sc_flags |= HIDMS_FLAG_Z_AXIS;
 		}
 		/*
 		 * We might have both a wheel and Z direction, if so put
@@ -407,7 +402,7 @@ ums_hid_parse(struct ums_softc *sc, device_t dev, const uint8_t *buf,
 		    &info->sc_iid_w)) {
 
 			if ((flags & MOUSE_FLAGS_MASK) == MOUSE_FLAGS) {
-				info->sc_flags |= UMS_FLAG_W_AXIS;
+				info->sc_flags |= HIDMS_FLAG_W_AXIS;
 			}
 		}
 	} else if (hid_locate(buf, len, HID_USAGE2(HUP_GENERIC_DESKTOP,
@@ -415,7 +410,7 @@ ums_hid_parse(struct ums_softc *sc, device_t dev, const uint8_t *buf,
 	    &info->sc_iid_z)) {
 
 		if ((flags & MOUSE_FLAGS_MASK) == MOUSE_FLAGS) {
-			info->sc_flags |= UMS_FLAG_Z_AXIS;
+			info->sc_flags |= HIDMS_FLAG_Z_AXIS;
 		}
 	}
 	/*
@@ -432,18 +427,18 @@ ums_hid_parse(struct ums_softc *sc, device_t dev, const uint8_t *buf,
 		info->sc_loc_t.pos += 8;
 
 		if ((flags & MOUSE_FLAGS_MASK) == MOUSE_FLAGS) {
-			info->sc_flags |= UMS_FLAG_T_AXIS;
+			info->sc_flags |= HIDMS_FLAG_T_AXIS;
 		}
 	} else if (hid_locate(buf, len, HID_USAGE2(HUP_CONSUMER,
 		HUC_AC_PAN), hid_input, index, &info->sc_loc_t,
 		&flags, &info->sc_iid_t)) {
 
 		if ((flags & MOUSE_FLAGS_MASK) == MOUSE_FLAGS)
-			info->sc_flags |= UMS_FLAG_T_AXIS;
+			info->sc_flags |= HIDMS_FLAG_T_AXIS;
 	}
 	/* figure out the number of buttons */
 
-	for (i = 0; i < UMS_BUTTON_MAX; i++) {
+	for (i = 0; i < HIDMS_BUTTON_MAX; i++) {
 		if (!hid_locate(buf, len, HID_USAGE2(HUP_BUTTON, (i + 1)),
 		    hid_input, index, &info->sc_loc_btn[i], NULL,
 		    &info->sc_iid_btn[i])) {
@@ -453,7 +448,7 @@ ums_hid_parse(struct ums_softc *sc, device_t dev, const uint8_t *buf,
 
 	/* detect other buttons */
 
-	for (j = 0; (i < UMS_BUTTON_MAX) && (j < 2); i++, j++) {
+	for (j = 0; (i < HIDMS_BUTTON_MAX) && (j < 2); i++, j++) {
 		if (!hid_locate(buf, len, HID_USAGE2(HUP_MICROSOFT, (j + 1)),
 		    hid_input, index, &info->sc_loc_btn[i], NULL,
 		    &info->sc_iid_btn[i])) {
@@ -472,20 +467,20 @@ ums_hid_parse(struct ums_softc *sc, device_t dev, const uint8_t *buf,
 	/* announce information about the mouse */
 	device_printf(dev, "%d buttons and [%s%s%s%s%s] coordinates ID=%u\n",
 	    (info->sc_buttons),
-	    (info->sc_flags & UMS_FLAG_X_AXIS) ? "X" : "",
-	    (info->sc_flags & UMS_FLAG_Y_AXIS) ? "Y" : "",
-	    (info->sc_flags & UMS_FLAG_Z_AXIS) ? "Z" : "",
-	    (info->sc_flags & UMS_FLAG_T_AXIS) ? "T" : "",
-	    (info->sc_flags & UMS_FLAG_W_AXIS) ? "W" : "",
+	    (info->sc_flags & HIDMS_FLAG_X_AXIS) ? "X" : "",
+	    (info->sc_flags & HIDMS_FLAG_Y_AXIS) ? "Y" : "",
+	    (info->sc_flags & HIDMS_FLAG_Z_AXIS) ? "Z" : "",
+	    (info->sc_flags & HIDMS_FLAG_T_AXIS) ? "T" : "",
+	    (info->sc_flags & HIDMS_FLAG_W_AXIS) ? "W" : "",
 	    info->sc_iid_x);
 }
 
 static int
-ums_attach(device_t dev)
+hidms_attach(device_t dev)
 {
-	struct ums_softc *sc = device_get_softc(dev);
+	struct hidms_softc *sc = device_get_softc(dev);
 #if 0
-	struct ums_info *info;
+	struct hidms_info *info;
 #endif
 	char *d_ptr = NULL;
 #ifdef EVDEV_SUPPORT
@@ -500,7 +495,7 @@ ums_attach(device_t dev)
 	DPRINTFN(11, "sc=%p\n", sc);
 
 	sc->dev = dev;
-	lockinit(&sc->sc_lock, "ums lock", 0, LK_CANRECURSE);
+	lockinit(&sc->sc_lock, "hidms lock", 0, LK_CANRECURSE);
 	callout_init_lk(&sc->sc_callout, &sc->sc_lock);
 
 	HID_GET_DESCRIPTOR(device_get_parent(dev), &d_ptr, &d_len);
@@ -517,10 +512,10 @@ ums_attach(device_t dev)
 		sc->sc_iid = 0;
 
 		info = &sc->sc_info[0];
-		info->sc_flags = (UMS_FLAG_X_AXIS |
-		    UMS_FLAG_Y_AXIS |
-		    UMS_FLAG_Z_AXIS |
-		    UMS_FLAG_SBU);
+		info->sc_flags = (HIDMS_FLAG_X_AXIS |
+		    HIDMS_FLAG_Y_AXIS |
+		    HIDMS_FLAG_Z_AXIS |
+		    HIDMS_FLAG_SBU);
 		info->sc_buttons = 3;
 		isize = 5;
 		/* 1st byte of descriptor report contains garbage */
@@ -545,8 +540,8 @@ ums_attach(device_t dev)
 #endif
 	{
 		/* Search the HID descriptor and announce device */
-		for (i = 0; i < UMS_INFO_MAX; i++) {
-			ums_hid_parse(sc, dev, d_ptr, d_len, i);
+		for (i = 0; i < HIDMS_INFO_MAX; i++) {
+			hidms_hid_parse(sc, dev, d_ptr, d_len, i);
 		}
 	}
 
@@ -554,13 +549,13 @@ ums_attach(device_t dev)
 	if (usb_test_quirk(uaa, UQ_MS_REVZ)) {
 		info = &sc->sc_info[0];
 		/* Some wheels need the Z axis reversed. */
-		info->sc_flags |= UMS_FLAG_REVZ;
+		info->sc_flags |= HIDMS_FLAG_REVZ;
 	}
 #endif
 	d_ptr = NULL;
 
 #ifdef USB_DEBUG
-	for (j = 0; j < UMS_INFO_MAX; j++) {
+	for (j = 0; j < HIDMS_INFO_MAX; j++) {
 		info = &sc->sc_info[j];
 
 		DPRINTF("sc=%p, index=%d\n", sc, j);
@@ -585,9 +580,9 @@ ums_attach(device_t dev)
 #endif
 
 	char buf[16];
-	ksnprintf(buf, sizeof(buf), "ums%d", device_get_unit(dev));
-	sc->sc_fifo = flexfifo_create(sizeof(struct ums_status), 256,
-	    &ums_fifo_ops, device_get_unit(dev), buf, sc, 8);
+	ksnprintf(buf, sizeof(buf), "hidms%d", device_get_unit(dev));
+	sc->sc_fifo = flexfifo_create(sizeof(struct hidms_status), 256,
+	    &hidms_fifo_ops, device_get_unit(dev), buf, sc, 8);
 	udev_dict_set_cstr(flexfifo_get_cdev(sc->sc_fifo),
 	    "subsystem", "mouse");
 
@@ -600,7 +595,7 @@ ums_attach(device_t dev)
 	    uaa->info.idProduct, 0);
 	evdev_set_serial(sc->sc_evdev, usb_get_serial(uaa->device));
 #endif
-	evdev_set_methods(sc->sc_evdev, sc, &ums_evdev_methods);
+	evdev_set_methods(sc->sc_evdev, sc, &hidms_evdev_methods);
 	evdev_support_prop(sc->sc_evdev, INPUT_PROP_POINTER);
 	evdev_support_event(sc->sc_evdev, EV_SYN);
 	evdev_support_event(sc->sc_evdev, EV_REL);
@@ -608,16 +603,16 @@ ums_attach(device_t dev)
 
 	info = &sc->sc_info[0];
 
-	if (info->sc_flags & UMS_FLAG_X_AXIS)
+	if (info->sc_flags & HIDMS_FLAG_X_AXIS)
 		evdev_support_rel(sc->sc_evdev, REL_X);
 
-	if (info->sc_flags & UMS_FLAG_Y_AXIS)
+	if (info->sc_flags & HIDMS_FLAG_Y_AXIS)
 		evdev_support_rel(sc->sc_evdev, REL_Y);
 
-	if (info->sc_flags & UMS_FLAG_Z_AXIS)
+	if (info->sc_flags & HIDMS_FLAG_Z_AXIS)
 		evdev_support_rel(sc->sc_evdev, REL_WHEEL);
 
-	if (info->sc_flags & UMS_FLAG_T_AXIS)
+	if (info->sc_flags & HIDMS_FLAG_T_AXIS)
 		evdev_support_rel(sc->sc_evdev, REL_HWHEEL);
 
 	for (i = 0; i < info->sc_buttons; i++)
@@ -632,25 +627,25 @@ ums_attach(device_t dev)
 	SYSCTL_ADD_PROC(device_get_sysctl_ctx(dev),
 	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)),
 	    OID_AUTO, "parseinfo", CTLTYPE_STRING|CTLFLAG_RD,
-	    sc, 0, ums_sysctl_handler_parseinfo,
+	    sc, 0, hidms_sysctl_handler_parseinfo,
 	    "", "Dump of parsed HID report descriptor");
 #endif
 
-	HID_SET_HANDLER(device_get_parent(dev), ums_input_handler, NULL, sc);
+	HID_SET_HANDLER(device_get_parent(dev), hidms_input_handler, NULL, sc);
 
 	return (0);
 
 #ifdef EVDEV_SUPPORT
 detach:
-	ums_detach(dev);
+	hidms_detach(dev);
 	return (ENOMEM);
 #endif
 }
 
 static int
-ums_detach(device_t self)
+hidms_detach(device_t self)
 {
-	struct ums_softc *sc = device_get_softc(self);
+	struct hidms_softc *sc = device_get_softc(self);
 
 	DPRINTF("sc=%p\n", sc);
 
@@ -671,7 +666,7 @@ ums_detach(device_t self)
 }
 
 static void
-ums_reset(struct ums_softc *sc)
+hidms_reset(struct hidms_softc *sc)
 {
 
 	/* reset all USB mouse parameters */
@@ -712,21 +707,21 @@ ums_reset(struct ums_softc *sc)
 #endif
 
 static void
-ums_put_queue(struct ums_softc *sc, int32_t dx, int32_t dy,
+hidms_put_queue(struct hidms_softc *sc, int32_t dx, int32_t dy,
     int32_t dz, int32_t dt, int32_t buttons)
 {
-	struct ums_status status;
+	struct hidms_status status;
 
-	status = (struct ums_status){ buttons, dx, dy, dz, dt };
+	status = (struct hidms_status){ buttons, dx, dy, dz, dt };
 	if (sc->sc_fifo != NULL)
 		flexfifo_enqueue_ring(sc->sc_fifo, (void *)&status);
 }
 
 static u_int
-ums_evtopkt(void *arg, uint8_t *ev, uint8_t *pkt)
+hidms_evtopkt(void *arg, uint8_t *ev, uint8_t *pkt)
 {
-	struct ums_softc *sc = arg;
-	struct ums_status *status = (struct ums_status *)ev;
+	struct hidms_softc *sc = arg;
+	struct hidms_status *status = (struct hidms_status *)ev;
 	uint32_t buttons = status->buttons;
 	int32_t dx = status->dx;
 	int32_t dy = status->dy;
@@ -767,9 +762,9 @@ ums_evtopkt(void *arg, uint8_t *ev, uint8_t *pkt)
 }
 
 static u_int
-ums_pktlen(void *arg)
+hidms_pktlen(void *arg)
 {
-	struct ums_softc *sc = arg;
+	struct hidms_softc *sc = arg;
 
 	if (sc->sc_mode.level == 1)
 		return 8;
@@ -779,7 +774,7 @@ ums_pktlen(void *arg)
 
 #ifdef EVDEV_SUPPORT
 static void
-ums_evdev_push(struct ums_softc *sc, int32_t dx, int32_t dy,
+hidms_evdev_push(struct hidms_softc *sc, int32_t dx, int32_t dy,
     int32_t dz, int32_t dt, int32_t buttons)
 {
 	if (evdev_rcpt_mask & EVDEV_RCPT_HW_MOUSE) {
@@ -800,13 +795,13 @@ ums_evdev_push(struct ums_softc *sc, int32_t dx, int32_t dy,
 
 #ifdef EVDEV_SUPPORT
 static int
-ums_ev_open(struct evdev_dev *evdev, void *ev_softc)
+hidms_ev_open(struct evdev_dev *evdev, void *ev_softc)
 {
-	struct ums_softc *sc = (struct ums_softc *)ev_softc;
+	struct hidms_softc *sc = (struct hidms_softc *)ev_softc;
 
 	KKASSERT(lockowned(&sc->sc_lock));
 
-	sc->sc_evflags = UMS_EVDEV_OPENED;
+	sc->sc_evflags = HIDMS_EVDEV_OPENED;
 
 	if (sc->sc_opened == 0)
 		HID_START_READ(device_get_parent(sc->dev));
@@ -815,9 +810,9 @@ ums_ev_open(struct evdev_dev *evdev, void *ev_softc)
 }
 
 static void
-ums_ev_close(struct evdev_dev *evdev, void *ev_softc)
+hidms_ev_close(struct evdev_dev *evdev, void *ev_softc)
 {
-	struct ums_softc *sc = (struct ums_softc *)ev_softc;
+	struct hidms_softc *sc = (struct hidms_softc *)ev_softc;
 
 	KKASSERT(lockowned(&sc->sc_lock));
 
@@ -831,11 +826,11 @@ ums_ev_close(struct evdev_dev *evdev, void *ev_softc)
 #endif
 
 static void
-ums_open(void *arg)
+hidms_open(void *arg)
 {
-	struct ums_softc *sc = arg;
+	struct hidms_softc *sc = arg;
 
-	ums_reset(sc);
+	hidms_reset(sc);
 	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
 	sc->sc_opened = 1;
 #ifdef EVDEV_SUPPORT
@@ -846,9 +841,9 @@ ums_open(void *arg)
 }
 
 static void
-ums_close(void *arg)
+hidms_close(void *arg)
 {
-	struct ums_softc *sc = arg;
+	struct hidms_softc *sc = arg;
 
 	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
 	sc->sc_opened = 0;
@@ -863,9 +858,9 @@ ums_close(void *arg)
 }
 
 static int
-ums_ioctl(void *arg, caddr_t data, u_long cmd)
+hidms_ioctl(void *arg, caddr_t data, u_long cmd)
 {
-	struct ums_softc *sc = arg;
+	struct hidms_softc *sc = arg;
 	mousemode_t mode;
 	int error = 0;
 
@@ -978,21 +973,21 @@ ums_ioctl(void *arg, caddr_t data, u_long cmd)
 
 #if 0 /* XXX */
 static int
-ums_sysctl_handler_parseinfo(SYSCTL_HANDLER_ARGS)
+hidms_sysctl_handler_parseinfo(SYSCTL_HANDLER_ARGS)
 {
-	struct ums_softc *sc = arg1;
-	struct ums_info *info;
+	struct hidms_softc *sc = arg1;
+	struct hidms_info *info;
 	struct sbuf *sb;
 	int i, j, err, had_output;
 
 	sb = sbuf_new_auto();
-	for (i = 0, had_output = 0; i < UMS_INFO_MAX; i++) {
+	for (i = 0, had_output = 0; i < HIDMS_INFO_MAX; i++) {
 		info = &sc->sc_info[i];
 
 		/* Don't emit empty info */
 		if ((info->sc_flags &
-		    (UMS_FLAG_X_AXIS | UMS_FLAG_Y_AXIS | UMS_FLAG_Z_AXIS |
-		     UMS_FLAG_T_AXIS | UMS_FLAG_W_AXIS)) == 0 &&
+		    (HIDMS_FLAG_X_AXIS | HIDMS_FLAG_Y_AXIS | HIDMS_FLAG_Z_AXIS |
+		     HIDMS_FLAG_T_AXIS | HIDMS_FLAG_W_AXIS)) == 0 &&
 		    info->sc_buttons == 0)
 			continue;
 
@@ -1000,27 +995,27 @@ ums_sysctl_handler_parseinfo(SYSCTL_HANDLER_ARGS)
 			sbuf_printf(sb, "\n");
 		had_output = 1;
 		sbuf_printf(sb, "i%d:", i + 1);
-		if (info->sc_flags & UMS_FLAG_X_AXIS)
+		if (info->sc_flags & HIDMS_FLAG_X_AXIS)
 			sbuf_printf(sb, " X:r%d, p%d, s%d;",
 			    (int)info->sc_iid_x,
 			    (int)info->sc_loc_x.pos,
 			    (int)info->sc_loc_x.size);
-		if (info->sc_flags & UMS_FLAG_Y_AXIS)
+		if (info->sc_flags & HIDMS_FLAG_Y_AXIS)
 			sbuf_printf(sb, " Y:r%d, p%d, s%d;",
 			    (int)info->sc_iid_y,
 			    (int)info->sc_loc_y.pos,
 			    (int)info->sc_loc_y.size);
-		if (info->sc_flags & UMS_FLAG_Z_AXIS)
+		if (info->sc_flags & HIDMS_FLAG_Z_AXIS)
 			sbuf_printf(sb, " Z:r%d, p%d, s%d;",
 			    (int)info->sc_iid_z,
 			    (int)info->sc_loc_z.pos,
 			    (int)info->sc_loc_z.size);
-		if (info->sc_flags & UMS_FLAG_T_AXIS)
+		if (info->sc_flags & HIDMS_FLAG_T_AXIS)
 			sbuf_printf(sb, " T:r%d, p%d, s%d;",
 			    (int)info->sc_iid_t,
 			    (int)info->sc_loc_t.pos,
 			    (int)info->sc_loc_t.size);
-		if (info->sc_flags & UMS_FLAG_W_AXIS)
+		if (info->sc_flags & HIDMS_FLAG_W_AXIS)
 			sbuf_printf(sb, " W:r%d, p%d, s%d;",
 			    (int)info->sc_iid_w,
 			    (int)info->sc_loc_w.pos,
@@ -1041,23 +1036,23 @@ ums_sysctl_handler_parseinfo(SYSCTL_HANDLER_ARGS)
 }
 #endif
 
-static devclass_t ums_devclass;
+static devclass_t hidms_devclass;
 
-static device_method_t ums_methods[] = {
-	DEVMETHOD(device_probe, ums_probe),
-	DEVMETHOD(device_attach, ums_attach),
-	DEVMETHOD(device_detach, ums_detach),
+static device_method_t hidms_methods[] = {
+	DEVMETHOD(device_probe, hidms_probe),
+	DEVMETHOD(device_attach, hidms_attach),
+	DEVMETHOD(device_detach, hidms_detach),
 	DEVMETHOD_END
 };
 
-static driver_t ums_driver = {
-	.name = "ums",
-	.methods = ums_methods,
-	.size = sizeof(struct ums_softc),
+static driver_t hidms_driver = {
+	.name = "hidms",
+	.methods = hidms_methods,
+	.size = sizeof(struct hidms_softc),
 };
 
-DRIVER_MODULE(ums, usbhid, ums_driver, ums_devclass, NULL, NULL);
+DRIVER_MODULE(hidms, usbhid, hidms_driver, hidms_devclass, NULL, NULL);
 #ifdef EVDEV_SUPPORT
-MODULE_DEPEND(ums, evdev, 1, 1, 1);
+MODULE_DEPEND(hidms, evdev, 1, 1, 1);
 #endif
-MODULE_VERSION(ums, 1);
+MODULE_VERSION(hidms, 1);
