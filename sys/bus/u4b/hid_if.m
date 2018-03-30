@@ -82,3 +82,23 @@ METHOD void set_report {
 	uint8_t *buf;
 	uint16_t len;
 }
+
+# SET_FEATURE
+# Sets the feature report, blocking.
+METHOD int set_feature {
+	device_t dev;
+	uint8_t id;
+	uint8_t *buf;
+	uint16_t len;
+}
+
+# GET_REPORT
+# Gets the input report, or feature report. Blocking.
+# The caller should figure out how long the buffer should be for the report id.
+METHOD int get_report {
+	device_t dev;
+	uint8_t id;
+	uint8_t *buf;
+	uint16_t len;
+	int type;
+}
