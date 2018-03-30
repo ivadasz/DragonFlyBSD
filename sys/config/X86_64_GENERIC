@@ -300,11 +300,9 @@ device		cryptodev	# /dev/crypto for access to h/w
 device		usb		# USB Bus (required)
 device		uhci		# UHCI PCI->USB interface
 device		ohci		# OHCI PCI->USB interface
-#device		uhid		# "Human Interface Devices"
-#device		ukbd		# Keyboard
+device		usbhid		# "Human Interface Devices"
 device		ulpt		# Printer
 device		umass		# Disks/Mass storage - Requires scbus and da
-#device		ums		# Mouse
 # USB Ethernet, requires mii
 device		axe		# ASIX Electronics USB Ethernet
 device		aue		# ADMtek USB ethernet
@@ -312,6 +310,11 @@ device		cue		# CATC USB ethernet
 device		kue		# Kawasaki LSI USB ethernet
 # USB wireless NICs, requires wlan, wlan_amrr
 #device		rum		# Ralink Technology RT2501USB/RT2601USB
+
+# HID input support
+device		hid		# HID bus driver
+device		ukbd		# Keyboard
+device		ums		# Mouse
 
 # FireWire support
 device		firewire	# FireWire bus code
