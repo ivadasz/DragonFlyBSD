@@ -2885,10 +2885,8 @@ bus/u4b/misc/ufm.c			optional ufm
 #
 # USB input drivers
 #
-bus/u4b/input/ukbd.c			optional ukbd
-bus/u4b/input/ums.c			optional ums
-bus/u4b/input/uep.c			optional uep
-bus/u4b/input/uhid.c			optional uhid
+bus/u4b/input/usbhid.c			optional usbhid
+#bus/u4b/input/uep.c			optional uep
 #
 # USB quirks
 #
@@ -2918,6 +2916,12 @@ dev/virtual/amazon/ena/ena.c		optional ena
 dev/virtual/amazon/ena/ena_sysctl.c 	optional ena
 dev/virtual/amazon/ena/ena-com/ena_com.c optional ena
 dev/virtual/amazon/ena/ena-com/ena_eth_com.c optional ena
+
+#
+# HID input drivers
+#
+bus/u4b/input/ukbd.c			optional ukbd
+bus/u4b/input/ums.c			optional ums
 
 #
 # Hyper-V support
@@ -2950,5 +2954,5 @@ dev/virtual/vmware/vmxnet3/if_vmx.c	optional vmx
 #
 # common HID support
 #
-bus/u4b/hid_if.m			optional usb
-bus/u4b/hid_common.c			optional usb
+bus/u4b/hid_if.m			optional hid
+bus/u4b/hid_common.c			optional hid
