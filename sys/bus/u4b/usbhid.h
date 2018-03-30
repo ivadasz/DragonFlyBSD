@@ -30,7 +30,7 @@
 #define	_USB_HID_H_
 
 #include <bus/u4b/usb_endian.h>
-#include <bus/u4b/hid_common.h>
+#include <bus/hid/hid_constants.h>
 
 #define	UR_GET_HID_DESCRIPTOR	0x06
 #define	UDESC_HID		0x21

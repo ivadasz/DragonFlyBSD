@@ -54,7 +54,7 @@ LDIRS=	net netbt netgraph netgraph7 netinet netinet6 sys vm
 #
 LSUBDIRS= \
 	bus/cam bus/cam/scsi \
-	bus/cam bus/pccard bus/pci bus/isa bus/ppbus bus/smbus bus/u4b \
+	bus/cam bus/pccard bus/pci bus/isa bus/ppbus bus/smbus bus/u4b bus/hid \
 	dev/disk/dm \
 	dev/disk/mpt/mpilib \
 	dev/misc/lpt dev/misc/ppi dev/misc/putter \

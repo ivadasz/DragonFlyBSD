@@ -12,6 +12,8 @@
             scsi
             ..
         ..
+        hid
+        ..
         isa
         ..
         pccard

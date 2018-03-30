@@ -60,9 +60,8 @@ __FBSDID("$FreeBSD: head/sys/dev/usb/input/ukbd.c 262972 2014-03-10 08:52:30Z hs
 #include <sys/sched.h>
 #include <sys/thread2.h>
 
-#include <bus/u4b/hid_common.h>
-
-#include <bus/u4b/hidvar.h>
+#include <bus/hid/hid_common.h>
+#include <bus/hid/hidvar.h>
 #include "hid_if.h"
 
 #ifdef EVDEV_SUPPORT
