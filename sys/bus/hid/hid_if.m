@@ -34,7 +34,7 @@
 
 #include <sys/bus.h>
 
-#include <bus/u4b/hid_common.h>
+#include <bus/hid/hid_common.h>
 
 INTERFACE hid;
 

@@ -38,7 +38,7 @@
 #include <sys/bus.h>
 #include <sys/malloc.h>
 
-#include <bus/u4b/hid_common.h>
+#include <bus/hid/hid_common.h>
 
 #ifdef HID_DEBUG
 #define DPRINTF(...) do {				\
@@ -955,3 +955,31 @@ hid_is_absmouse(const void *d_ptr, uint16_t d_len)
 	hid_end_parse(hd);
 	return (found);
 }
+
+static int
+hid_modevent(module_t mod, int type, void *unused)
+{
+        int error;
+
+        switch (type) {
+        case MOD_LOAD:
+		error = 0;
+		break;
+	case MOD_UNLOAD:
+		error = 0;
+		break;
+	default:
+		error = EINVAL;
+		break;
+	}
+	return (error);
+}
+
+
+static moduledata_t hid_mod = {
+	"hidbus",
+	hid_modevent,
+	0
+};
+DECLARE_MODULE(hidbus, hid_mod, SI_SUB_DRIVERS, SI_ORDER_FIRST);
+MODULE_VERSION(hidbus, 1);

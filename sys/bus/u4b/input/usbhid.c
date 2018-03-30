@@ -60,7 +60,8 @@
 #include <bus/u4b/input/usb_rdesc.h>
 #include <bus/u4b/quirk/usb_quirk.h>
 
-#include <bus/u4b/hidvar.h>
+#include <bus/hid/hidvar.h>
+#include <bus/hid/hid_common.h>
 #include "hid_if.h"
 
 #ifdef USB_DEBUG
@@ -843,4 +844,5 @@ static driver_t usbhid_driver = {
 
 DRIVER_MODULE(usbhid, uhub, usbhid_driver, usbhid_devclass, NULL, NULL);
 MODULE_DEPEND(usbhid, usb, 1, 1, 1);
+MODULE_DEPEND(usbhid, hidbus, 1, 1, 1);
 MODULE_VERSION(usbhid, 1);
