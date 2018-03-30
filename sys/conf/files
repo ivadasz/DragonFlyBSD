@@ -2946,5 +2946,5 @@ dev/virtual/vmware/vmxnet3/if_vmx.c	optional vmx
 #
 # common HID support
 #
-bus/u4b/hid_if.m			optional hid
-bus/u4b/hid_common.c			optional hid
+bus/hid/hid_if.m			optional hidbus
+bus/hid/hid_common.c			optional hidbus

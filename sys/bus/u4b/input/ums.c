@@ -55,9 +55,8 @@
 #include <sys/flexfifo.h>
 #include <sys/udev.h>
 
-#include <bus/u4b/hid_common.h>
-
-#include <bus/u4b/hidvar.h>
+#include <bus/hid/hid_common.h>
+#include <bus/hid/hidvar.h>
 #include "hid_if.h"
 
 #ifdef EVDEV_SUPPORT
