@@ -564,8 +564,6 @@ uhid_setidle(device_t dev, uint8_t duration, uint8_t id)
 	}
 }
 
-/* XXX Add type argument, which can be hid_output or hid_feature. */
-/* XXX Just KKASSERT that it is a valid type here. */
 static void
 uhid_set_report(device_t dev, uint8_t id, uint8_t *buf, uint16_t len)
 {
@@ -597,17 +595,35 @@ uhid_set_report(device_t dev, uint8_t id, uint8_t *buf, uint16_t len)
 	lockmgr(&sc->sc_lock, LK_RELEASE);
 }
 
-/* XXX Add type argument, which can be hid_input or hid_feature. */
-/* XXX Just KKASSERT that it is a valid type here. */
-/* XXX Add uhid_get_report method. */
+static int
+uhid_set_feature(device_t dev, uint8_t id, uint8_t *buf, uint16_t len)
+{
+	struct uhid_softc *sc = device_get_softc(dev);
+	int err;
 
-/*
- * XXX So GET_REPORT can be used for input and feature reports,
- *     and SET_REPORT can be used for output and feature reports.
- *
- * XXX This requires adding the type argument to the input_handler and
- *     output_handler callbacks, as well.
- */
+	err = usbd_req_set_report(sc->sc_udev, NULL, buf, len,
+	    sc->sc_iface_index, hid_feature, id);
+	if (err)
+		return (ENXIO);
+
+	return 0;
+}
+
+static int
+uhid_get_report(device_t dev, uint8_t id, uint8_t *buf, uint16_t len, int type)
+{
+	struct uhid_softc *sc = device_get_softc(dev);
+	int err;
+
+	KKASSERT(type == hid_input || type == hid_feature);
+
+	err = usbd_req_get_report(sc->sc_udev, NULL, buf, len,
+	    sc->sc_iface_index, hid_feature, id);
+	if (err)
+		return (ENXIO);
+
+	return 0;
+}
 
 static int
 uhid_attach(device_t dev)
@@ -813,6 +829,8 @@ static device_method_t uhid_methods[] = {
 	DEVMETHOD(hid_stop_read, uhid_stop_read),
 	DEVMETHOD(hid_setidle, uhid_setidle),
 	DEVMETHOD(hid_set_report, uhid_set_report),
+	DEVMETHOD(hid_set_feature, uhid_set_feature),
+	DEVMETHOD(hid_get_report, uhid_get_report),
 
 	DEVMETHOD_END
 };
