@@ -551,6 +551,14 @@ usbhid_stop_read(device_t dev)
 }
 
 static void
+usbhid_input_poll(device_t dev)
+{
+	struct usbhid_softc *sc = device_get_softc(dev);
+
+	usbd_transfer_poll(&sc->sc_xfer[USBHID_INTR_DT_RD], 1);
+}
+
+static void
 usbhid_setidle(device_t dev, uint8_t duration, uint8_t id)
 {
 	struct usbhid_softc *sc = device_get_softc(dev);
@@ -841,6 +849,7 @@ static device_method_t usbhid_methods[] = {
 	DEVMETHOD(hid_set_handler, usbhid_set_handler),
 	DEVMETHOD(hid_start_read, usbhid_start_read),
 	DEVMETHOD(hid_stop_read, usbhid_stop_read),
+	DEVMETHOD(hid_input_poll, usbhid_input_poll),
 	DEVMETHOD(hid_setidle, usbhid_setidle),
 	DEVMETHOD(hid_set_report, usbhid_set_report),
 	DEVMETHOD(hid_set_feature, usbhid_set_feature),

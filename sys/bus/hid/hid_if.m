@@ -1,5 +1,5 @@
 #-
-# Copyright (c) 2016 The DragonFly Project.  All rights reserved.
+# Copyright (c) 2018 The DragonFly Project.  All rights reserved.
 #
 # This code is derived from software contributed to The DragonFly Project
 # by Imre Vadász <imre@vdsz.com>
@@ -62,6 +62,11 @@ METHOD void start_read {
 # WARNING: Further input reports may still be delivered via the handler
 #          method after deactivating input with stop().
 METHOD void stop_read {
+	device_t dev;
+};
+
+# Poll for input reports.
+METHOD void input_poll {
 	device_t dev;
 };
 
