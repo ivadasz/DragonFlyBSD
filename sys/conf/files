@@ -2915,7 +2915,7 @@ bus/u4b/misc/ufm.c			optional ufm
 # USB input drivers
 #
 bus/u4b/input/usbhid.c			optional usbhid
-#bus/u4b/input/uep.c			optional uep
+bus/u4b/input/uep.c			optional uep
 #
 # USB quirks
 #
