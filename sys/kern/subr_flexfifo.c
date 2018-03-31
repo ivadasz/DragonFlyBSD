@@ -287,12 +287,16 @@ flexfifo_ioctl(struct dev_ioctl_args *ap)
 		}
 		break;
 	default:
+		if (fifo->ops->ioctl == NULL) {
+			ret = ENXIO;
+			break;
+		}
 		ret = fifo->ops->ioctl(fifo->arg, ap->a_data, ap->a_cmd);
 		break;
 	}
 
 	lockmgr(&fifo->lk, LK_RELEASE);
-	return 0;
+	return ret;
 }
 
 static struct dev_ops flexfifo_ops = {
