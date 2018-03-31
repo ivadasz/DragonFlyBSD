@@ -454,10 +454,7 @@ hidkbd_do_poll(struct hidkbd_softc *sc, uint8_t wait)
 
 	while (sc->sc_inputs == 0) {
 
-#if 0
-		/* XXX Needs a HID_POLL method. */
-		usbd_transfer_poll(sc->sc_xfer, HIDKBD_N_TRANSFER);
-#endif
+		HID_INPUT_POLL(device_get_parent(sc->sc_dev));
 
 		/* Delay-optimised support for repetition of keys */
 		if (hidkbd_any_key_pressed(sc)) {
@@ -1200,12 +1197,8 @@ hidkbd_attach(device_t dev)
 		usbd_xfer_set_interval(sc->sc_xfer[UKBD_INTR_DT], rate);
 	}
 #endif
-	/* start the keyboard */
-	/* XXX mp locking added */
-	UKBD_LOCK(sc);
-	usbd_transfer_start(sc->sc_xfer[UKBD_INTR_DT]);
-	UKBD_UNLOCK(sc);
 #endif
+	/* start the keyboard */
 	HID_START_READ(device_get_parent(dev));
 
 	return (0);			/* success */
