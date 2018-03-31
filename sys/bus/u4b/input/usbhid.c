@@ -85,6 +85,8 @@ enum {
 
 struct usbhid_ivars {
 	uint8_t bootproto;
+	uint16_t product_id;
+	uint16_t vendor_id;
 };
 
 struct usbhid_softc {
@@ -764,6 +766,8 @@ usbhid_attach(device_t dev)
 			    uaa->info.bIfaceIndex, 1);
 		}
 	}
+	sc->ivar.product_id = uaa->info.idProduct;
+	sc->ivar.vendor_id = uaa->info.idVendor;
 	bus_generic_attach(dev);
 
 	return (0);			/* success */
@@ -803,6 +807,15 @@ usbhid_read_ivar(device_t bus, device_t child, int which, uintptr_t *result)
 		return (EINVAL);
 	case HID_IVAR_BOOTPROTO:
 		*(int *)result = ivar->bootproto;
+		break;
+	case HID_IVAR_BUSTYPE:
+		*(int *)result = HID_BUS_USB;
+		break;
+	case HID_IVAR_PRODUCT:
+		*(uint16_t *)result = ivar->product_id;
+		break;
+	case HID_IVAR_VENDOR:
+		*(uint16_t *)result = ivar->vendor_id;
 		break;
 	}
 	return (0);
