@@ -9,8 +9,18 @@ enum hid_bootproto {
 
 enum hid_device_ivars {
 	HID_IVAR_BOOTPROTO,
+	HID_IVAR_BUSTYPE,
+	HID_IVAR_PRODUCT,
+	HID_IVAR_VENDOR,
+};
+
+enum hid_bus_type {
+	HID_BUS_USB, HID_BUS_IIC,
 };
 
 __BUS_ACCESSOR(hid, bootproto, HID, BOOTPROTO, int)
+__BUS_ACCESSOR(hid, bustype, HID, BUSTYPE, int)
+__BUS_ACCESSOR(hid, product, HID, PRODUCT, uint16_t)
+__BUS_ACCESSOR(hid, vendor, HID, VENDOR, uint16_t)
 
 #endif /* BUS_HID_HIDVAR_H */
