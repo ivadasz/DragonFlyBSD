@@ -37,8 +37,11 @@
 #include <sys/kernel.h>
 #include <sys/bus.h>
 #include <sys/malloc.h>
+#include <sys/sysctl.h>
 
 #include <bus/hid/hid_common.h>
+
+SYSCTL_NODE(_hw, OID_AUTO, hid, CTLFLAG_RW, 0, "HID debugging");
 
 #ifdef HID_DEBUG
 #define DPRINTF(...) do {				\
