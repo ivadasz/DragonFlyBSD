@@ -53,6 +53,7 @@
 #include <bus/u4b/usbdi.h>
 #include <bus/u4b/usbdi_util.h>
 #include <bus/u4b/usbhid.h>
+#include <bus/u4b/usb_core.h>
 
 #define	USB_DEBUG_VAR usbhid_debug
 #include <bus/u4b/usb_debug.h>
@@ -88,6 +89,7 @@ struct usbhid_ivars {
 	uint16_t product_id;
 	uint16_t vendor_id;
 	const char *serial_str;
+	int interval_ms;
 };
 
 struct usbhid_softc {
@@ -98,6 +100,8 @@ struct usbhid_softc {
 	struct usb_xfer *sc_xfer[USBHID_N_TRANSFER];
 	struct usb_device *sc_udev;
 	void   *sc_repdesc_ptr;
+
+	usb_timeout_t sc_orig_interval;
 
 	uint32_t sc_isize;
 	uint32_t sc_osize;
@@ -536,6 +540,11 @@ usbhid_start_read(device_t dev)
 
 	device_printf(dev, "starting interrupt input transfer\n");
 	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
+	usbd_transfer_stop(sc->sc_xfer[USBHID_INTR_DT_RD]);
+	if (sc->ivar.interval_ms >= 0 && sc->ivar.interval_ms <= 1000) {
+		usbd_xfer_set_interval(sc->sc_xfer[USBHID_INTR_DT_RD],
+		    sc->ivar.interval_ms);
+	}
 	usbd_transfer_start(sc->sc_xfer[USBHID_INTR_DT_RD]);
 	lockmgr(&sc->sc_lock, LK_RELEASE);
 }
@@ -775,9 +784,11 @@ usbhid_attach(device_t dev)
 			    uaa->info.bIfaceIndex, 1);
 		}
 	}
+	sc->sc_orig_interval = sc->sc_xfer[USBHID_INTR_DT_RD]->interval;
 	sc->ivar.product_id = uaa->info.idProduct;
 	sc->ivar.vendor_id = uaa->info.idVendor;
 	sc->ivar.serial_str = usb_get_serial(uaa->device);
+	sc->ivar.interval_ms = -1;
 	bus_generic_attach(dev);
 
 	return (0);			/* success */
@@ -807,14 +818,26 @@ usbhid_detach(device_t dev)
 	return (0);
 }
 
+static void
+usbhid_child_detached(device_t dev, device_t child __unused)
+{
+	struct usbhid_softc *sc = device_get_softc(dev);
+
+	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
+	sc->ivar.interval_ms = -1;
+	usbd_transfer_stop(sc->sc_xfer[USBHID_INTR_DT_RD]);
+	/* XXX Maybe also restore interval, when cdev is closed. */
+	usbd_xfer_set_interval(sc->sc_xfer[USBHID_INTR_DT_RD],
+	    sc->sc_orig_interval);
+	lockmgr(&sc->sc_lock, LK_RELEASE);
+}
+
 static int
 usbhid_read_ivar(device_t bus, device_t child, int which, uintptr_t *result)
 {
 	struct usbhid_ivars *ivar = device_get_ivars(child);
 
 	switch (which) {
-	default:
-		return (EINVAL);
 	case HID_IVAR_BOOTPROTO:
 		*(int *)result = ivar->bootproto;
 		break;
@@ -830,6 +853,8 @@ usbhid_read_ivar(device_t bus, device_t child, int which, uintptr_t *result)
 	case HID_IVAR_SERIAL:
 		*(const char **)result = ivar->serial_str;
 		break;
+	default:
+		return (EINVAL);
 	}
 	return (0);
 }
@@ -837,7 +862,19 @@ usbhid_read_ivar(device_t bus, device_t child, int which, uintptr_t *result)
 static int
 usbhid_write_ivar(device_t bus, device_t child, int which, uintptr_t value)
 {
-	return (EINVAL);
+	struct usbhid_ivars *ivar = device_get_ivars(child);
+
+	switch (which) {
+	case HID_IVAR_INTERVAL_MS:
+		if (value <= 1000)
+			ivar->interval_ms = value;
+		else
+			return (EINVAL);
+		break;
+	default:
+		return (EINVAL);
+	}
+	return (0);
 }
 
 static devclass_t usbhid_devclass;
@@ -847,6 +884,7 @@ static device_method_t usbhid_methods[] = {
 	DEVMETHOD(device_attach, usbhid_attach),
 	DEVMETHOD(device_detach, usbhid_detach),
 
+	DEVMETHOD(bus_child_detached, usbhid_child_detached),
 	DEVMETHOD(bus_read_ivar, usbhid_read_ivar),
 	DEVMETHOD(bus_write_ivar, usbhid_write_ivar),
 
