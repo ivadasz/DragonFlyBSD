@@ -89,15 +89,15 @@ static int hidkbd_no_leds = 0;
 #ifdef USB_DEBUG
 static int hidkbd_pollrate = 0;
 
-static SYSCTL_NODE(_hw_usb, OID_AUTO, hidkbd, CTLFLAG_RW, 0, "USB keyboard");
-SYSCTL_INT(_hw_usb_hidkbd, OID_AUTO, debug, CTLFLAG_RW,
+static SYSCTL_NODE(_hw_hid, OID_AUTO, hidkbd, CTLFLAG_RW, 0, "USB keyboard");
+SYSCTL_INT(_hw_hid_hidkbd, OID_AUTO, debug, CTLFLAG_RW,
     &hidkbd_debug, 0, "Debug level");
-SYSCTL_INT(_hw_usb_hidkbd, OID_AUTO, no_leds, CTLFLAG_RW,
+SYSCTL_INT(_hw_hid_hidkbd, OID_AUTO, no_leds, CTLFLAG_RW,
     &hidkbd_no_leds, 0, "Disables setting of keyboard leds");
-SYSCTL_INT(_hw_usb_hidkbd, OID_AUTO, pollrate, CTLFLAG_RW,
+SYSCTL_INT(_hw_hid_hidkbd, OID_AUTO, pollrate, CTLFLAG_RW,
     &hidkbd_pollrate, 0, "Force this polling rate, 1-1000Hz");
 
-TUNABLE_INT("hw.usb.hidkbd.pollrate", &hidkbd_pollrate);
+TUNABLE_INT("hw.hid.hidkbd.pollrate", &hidkbd_pollrate);
 #endif
 TUNABLE_INT("hw.hid.hidkbd_no_leds", &hidkbd_no_leds);
 TUNABLE_INT("hw.hid.hidkbd_debug", &hidkbd_debug);
@@ -1434,7 +1434,7 @@ static int
 hidkbd_read(keyboard_t *kbd, int wait)
 {
 	struct hidkbd_softc *sc = kbd->kb_data;
-	int32_t usbcode;
+	int32_t hidcode;
 #ifdef HIDKBD_EMULATE_ATSCANCODE
 	uint32_t keycode;
 	uint32_t scancode;
@@ -1460,21 +1460,21 @@ hidkbd_read(keyboard_t *kbd, int wait)
 #endif					/* HIDKBD_EMULATE_ATSCANCODE */
 
 	/* XXX */
-	usbcode = hidkbd_get_key(sc, (wait == FALSE) ? 0 : 1);
-	if (!KBD_IS_ACTIVE(kbd) || (usbcode == -1))
+	hidcode = hidkbd_get_key(sc, (wait == FALSE) ? 0 : 1);
+	if (!KBD_IS_ACTIVE(kbd) || (hidcode == -1))
 		return (-1);
 
 	++(kbd->kb_count);
 
 #ifdef HIDKBD_EMULATE_ATSCANCODE
-	keycode = hidkbd_trtab[KEY_INDEX(usbcode)];
+	keycode = hidkbd_trtab[KEY_INDEX(hidcode)];
 	if (keycode == NN) {
 		return -1;
 	}
 	return (hidkbd_key2scan(sc, keycode, sc->sc_ndata.modifiers,
-	    (usbcode & KEY_RELEASE)));
+	    (hidcode & KEY_RELEASE)));
 #else					/* !HIDKBD_EMULATE_ATSCANCODE */
-	return (usbcode);
+	return (hidcode);
 #endif					/* HIDKBD_EMULATE_ATSCANCODE */
 }
 
@@ -1485,7 +1485,7 @@ hidkbd_read_char_locked(keyboard_t *kbd, int wait)
 	struct hidkbd_softc *sc = kbd->kb_data;
 	uint32_t action;
 	uint32_t keycode;
-	int32_t usbcode;
+	int32_t hidcode;
 #ifdef HIDKBD_EMULATE_ATSCANCODE
 	uint32_t scancode;
 #endif
@@ -1530,31 +1530,31 @@ next_code:
 
 	/* see if there is something in the keyboard port */
 	/* XXX */
-	usbcode = hidkbd_get_key(sc, (wait == FALSE) ? 0 : 1);
-	if (usbcode == -1) {
+	hidcode = hidkbd_get_key(sc, (wait == FALSE) ? 0 : 1);
+	if (hidcode == -1) {
 		return (NOKEY);
 	}
 	++kbd->kb_count;
 
 #ifdef HIDKBD_EMULATE_ATSCANCODE
 	/* USB key index -> key code -> AT scan code */
-	keycode = hidkbd_trtab[KEY_INDEX(usbcode)];
+	keycode = hidkbd_trtab[KEY_INDEX(hidcode)];
 	if (keycode == NN) {
 		return (NOKEY);
 	}
 	/* return an AT scan code for the K_RAW mode */
 	if (sc->sc_mode == K_RAW) {
 		return (hidkbd_key2scan(sc, keycode, sc->sc_ndata.modifiers,
-		    (usbcode & KEY_RELEASE)));
+		    (hidcode & KEY_RELEASE)));
 	}
 #else					/* !HIDKBD_EMULATE_ATSCANCODE */
 
 	/* return the byte as is for the K_RAW mode */
 	if (sc->sc_mode == K_RAW) {
-		return (usbcode);
+		return (hidcode);
 	}
 	/* USB key index -> key code */
-	keycode = hidkbd_trtab[KEY_INDEX(usbcode)];
+	keycode = hidkbd_trtab[KEY_INDEX(hidcode)];
 	if (keycode == NN) {
 		return (NOKEY);
 	}
@@ -1562,7 +1562,7 @@ next_code:
 
 	switch (keycode) {
 	case 0x38:			/* left alt (compose key) */
-		if (usbcode & KEY_RELEASE) {
+		if (hidcode & KEY_RELEASE) {
 			if (sc->sc_flags & HIDKBD_FLAG_COMPOSE) {
 				sc->sc_flags &= ~HIDKBD_FLAG_COMPOSE;
 
@@ -1591,7 +1591,7 @@ next_code:
 	}
 
 	/* return the key code in the K_CODE mode */
-	if (usbcode & KEY_RELEASE) {
+	if (hidcode & KEY_RELEASE) {
 		keycode |= SCAN_RELEASE;
 	}
 	if (sc->sc_mode == K_CODE) {
