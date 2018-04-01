@@ -67,6 +67,7 @@ __FBSDID("$FreeBSD: head/sys/dev/usb/input/ukbd.c 262972 2014-03-10 08:52:30Z hs
 #ifdef EVDEV_SUPPORT
 #include <dev/misc/evdev/input.h>
 #include <dev/misc/evdev/evdev.h>
+#include <bus/hid/hid_evdev_compat.h>
 #endif
 
 #include <sys/filio.h>
@@ -1151,9 +1152,9 @@ hidkbd_attach(device_t dev)
 	evdev = evdev_alloc();
 	evdev_set_name(evdev, device_get_desc(dev));
 	evdev_set_phys(evdev, device_get_nameunit(dev));
-	evdev_set_id(evdev, BUS_USB, uaa->info.idVendor,
-	   uaa->info.idProduct, 0);
-	evdev_set_serial(evdev, usb_get_serial(uaa->device));
+	evdev_set_id(evdev, hid_bustype_to_evdev(hid_get_bustype(dev)),
+	    hid_get_vendor(dev), hid_get_product(dev), 0);
+	evdev_set_serial(evdev, hid_get_serial(dev));
 	evdev_set_methods(evdev, kbd, &hidkbd_evdev_methods);
 	evdev_support_event(evdev, EV_SYN);
 	evdev_support_event(evdev, EV_KEY);
