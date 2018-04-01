@@ -62,6 +62,7 @@
 #ifdef EVDEV_SUPPORT
 #include <dev/misc/evdev/input.h>
 #include <dev/misc/evdev/evdev.h>
+#include <bus/hid/hid_evdev_compat.h>
 #endif
 
 #include <sys/mouse.h>
@@ -479,11 +480,9 @@ static int
 hidms_attach(device_t dev)
 {
 	struct hidms_softc *sc = device_get_softc(dev);
-#if 0
-	struct hidms_info *info;
-#endif
 	char *d_ptr = NULL;
 #ifdef EVDEV_SUPPORT
+	struct hidms_info *info;
 	int err;
 #endif
 	uint16_t d_len;
@@ -590,11 +589,9 @@ hidms_attach(device_t dev)
 	sc->sc_evdev = evdev_alloc();
 	evdev_set_name(sc->sc_evdev, device_get_desc(dev));
 	evdev_set_phys(sc->sc_evdev, device_get_nameunit(dev));
-#if 0
-	evdev_set_id(sc->sc_evdev, BUS_USB, uaa->info.idVendor,
-	    uaa->info.idProduct, 0);
-	evdev_set_serial(sc->sc_evdev, usb_get_serial(uaa->device));
-#endif
+	evdev_set_id(sc->sc_evdev, hid_bustype_to_evdev(hid_get_bustype(dev)),
+	    hid_get_vendor(dev), hid_get_product(dev), 0);
+	evdev_set_serial(sc->sc_evdev, hid_get_serial(dev));
 	evdev_set_methods(sc->sc_evdev, sc, &hidms_evdev_methods);
 	evdev_support_prop(sc->sc_evdev, INPUT_PROP_POINTER);
 	evdev_support_event(sc->sc_evdev, EV_SYN);
@@ -819,7 +816,7 @@ hidms_ev_close(struct evdev_dev *evdev, void *ev_softc)
 	sc->sc_evflags = 0;
 
 	if (sc->sc_opened == 0) {
-		HID_STOP(device_get_parent(sc->dev));
+		HID_STOP_READ(device_get_parent(sc->dev));
 		callout_stop(&sc->sc_callout);
 	}
 }
