@@ -32,6 +32,7 @@
  * HID spec: http://www.usb.org/developers/devclass_docs/HID1_11.pdf
  */
 
+#include "opt_hid.h"
 #include "opt_evdev.h"
 
 #include <sys/stdint.h>
@@ -484,7 +485,7 @@ hidms_attach(device_t dev)
 #endif
 	uint16_t d_len;
 	uint8_t i;
-#ifdef USB_DEBUG
+#ifdef HID_DEBUG
 	uint8_t j;
 #endif
 
@@ -550,7 +551,7 @@ hidms_attach(device_t dev)
 #endif
 	d_ptr = NULL;
 
-#ifdef USB_DEBUG
+#ifdef HID_DEBUG
 	for (j = 0; j < HIDMS_INFO_MAX; j++) {
 		info = &sc->sc_info[j];
 
@@ -572,7 +573,9 @@ hidms_attach(device_t dev)
 			    info->sc_loc_btn[i].size, info->sc_iid_btn[i]);
 		}
 	}
+#if 0	/* This information is already printed by the HID bus parent. */
 	DPRINTF("size=%d, id=%d\n", isize, sc->sc_iid);
+#endif
 #endif
 
 	char buf[16];

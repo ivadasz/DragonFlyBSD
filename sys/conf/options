@@ -488,6 +488,9 @@ USB_DEBUG		opt_usb.h
 # options for the Realtek RTL8188*U/RTL8192CU driver (urtwn)
 URTWN_WITHOUT_UCODE	opt_urtwn.h
 
+# options for HID support
+HID_DEBUG		opt_hid.h
+
 # Vinum options
 VINUMDEBUG		opt_vinum.h
 

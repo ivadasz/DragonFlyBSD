@@ -39,6 +39,7 @@ __FBSDID("$FreeBSD: head/sys/dev/usb/input/ukbd.c 262972 2014-03-10 08:52:30Z hs
 
 #include "opt_kbd.h"
 #include "opt_hidkbd.h"
+#include "opt_hid.h"
 #include "opt_evdev.h"
 
 #include <sys/stdint.h>
@@ -87,10 +88,10 @@ __FBSDID("$FreeBSD: head/sys/dev/usb/input/ukbd.c 262972 2014-03-10 08:52:30Z hs
 
 static int hidkbd_debug = 0;
 static int hidkbd_no_leds = 0;
-#ifdef USB_DEBUG
+#ifdef HID_DEBUG
 static int hidkbd_pollrate = 0;
 
-static SYSCTL_NODE(_hw_hid, OID_AUTO, hidkbd, CTLFLAG_RW, 0, "USB keyboard");
+static SYSCTL_NODE(_hw_hid, OID_AUTO, hidkbd, CTLFLAG_RW, 0, "HID keyboard");
 SYSCTL_INT(_hw_hid_hidkbd, OID_AUTO, debug, CTLFLAG_RW,
     &hidkbd_debug, 0, "Debug level");
 SYSCTL_INT(_hw_hid_hidkbd, OID_AUTO, no_leds, CTLFLAG_RW,
@@ -767,7 +768,7 @@ hidkbd_input_handler(uint8_t id, uint8_t *buf, int len, void *arg)
 		}
 	}
 
-#ifdef USB_DEBUG
+#ifdef HID_DEBUG
 	DPRINTF("modifiers = 0x%04x\n", (int)sc->sc_modifiers);
 	for (i = 0; i < HIDKBD_NKEYCODE; i++) {
 		if (sc->sc_ndata.keycode[i]) {
@@ -845,7 +846,7 @@ hidkbd_probe(device_t dev)
 			/*
 			 * NOTE: We currently don't support USB mouse
 			 * and USB keyboard on the same USB endpoint.
-			 * Let "ums" driver win.
+			 * Let "hidms" driver win.
 			 */
 			error = ENXIO;
 		} else {
@@ -1038,10 +1039,8 @@ hidkbd_attach(device_t dev)
 	struct evdev_dev *evdev;
 	int i;
 #endif
-#if 0
-#ifdef USB_DEBUG
+#ifdef HID_DEBUG
 	int rate;
-#endif
 #endif
 
 	HIDKBD_LOCK_ASSERT();
@@ -1184,10 +1183,9 @@ hidkbd_attach(device_t dev)
 		genkbd_diag(kbd, bootverbose);
 	}
 
-#if 0
-#ifdef USB_DEBUG
+#ifdef HID_DEBUG
 	/* check for polling rate override */
-	rate = ukbd_pollrate;
+	rate = hidkbd_pollrate;
 	if (rate > 0) {
 		if (rate > 1000)
 			rate = 1;
@@ -1195,9 +1193,8 @@ hidkbd_attach(device_t dev)
 			rate = 1000 / rate;
 
 		/* set new polling interval in ms */
-		usbd_xfer_set_interval(sc->sc_xfer[UKBD_INTR_DT], rate);
+		hid_set_interval_ms(dev, rate);
 	}
-#endif
 #endif
 	/* start the keyboard */
 	HID_START_READ(device_get_parent(dev));
