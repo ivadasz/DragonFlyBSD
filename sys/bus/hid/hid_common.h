@@ -32,6 +32,11 @@
 #include <bus/hid/hid_constants.h>
 
 #ifdef _KERNEL
+/* Declare parent SYSCTL HID node. */
+#ifdef SYSCTL_DECL
+SYSCTL_DECL(_hw_hid);
+#endif
+
 enum hid_kind {
 	hid_input, hid_output, hid_feature, hid_collection, hid_endcollection
 };

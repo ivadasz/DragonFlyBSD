@@ -1983,6 +1983,9 @@ device		hidbus		# HID bus driver
 device		hidkbd		# Keyboard
 device		hidms		# Mouse
 
+# debugging options for the HID subsystem
+options 	HID_DEBUG
+
 # options for hidkbd:
 options 	HIDKBD_DFLT_KEYMAP	# specify the built-in keymap
 makeoptions	HIDKBD_DFLT_KEYMAP=it.iso
