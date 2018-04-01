@@ -126,9 +126,6 @@ struct hidms_softc {
 	mousemode_t sc_mode;
 	mousestatus_t sc_status;
 
-	int sc_pollrate;
-	int sc_read_running;
-
 	int sc_opened;
 #ifdef EVDEV_SUPPORT
 	int sc_evflags;
@@ -884,9 +881,6 @@ hidms_ioctl(void *arg, caddr_t data, u_long cmd)
 			sc->sc_mode.level = mode.level;
 		}
 
-		/* store polling rate */
-		sc->sc_pollrate = mode.rate;
-
 		if (sc->sc_mode.level == 0) {
 			if (sc->sc_buttons > MOUSE_MSC_MAXBUTTON)
 				sc->sc_hw.buttons = MOUSE_MSC_MAXBUTTON;
@@ -905,6 +899,14 @@ hidms_ioctl(void *arg, caddr_t data, u_long cmd)
 			sc->sc_mode.packetsize = MOUSE_SYS_PACKETSIZE;
 			sc->sc_mode.syncmask[0] = MOUSE_SYS_SYNCMASK;
 			sc->sc_mode.syncmask[1] = MOUSE_SYS_SYNC;
+		}
+
+		/* Check if we should override the default polling interval */
+		if (mode.rate > 0) {
+			if (mode.rate > 1000)
+				mode.rate = 1000;
+			hid_set_interval_ms(sc->dev, 1000 / mode.rate);
+			HID_START_READ(device_get_parent(sc->dev));
 		}
 		break;
 
