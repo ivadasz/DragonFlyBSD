@@ -83,7 +83,7 @@ smopen(void *arg)
 }
 
 static int
-smioctl(void *arg, caddr_t data, u_long cmd)
+smioctl(void *arg, caddr_t data, u_long cmd, int fflags)
 {
 	struct sysmouse_state *sc = arg;
 	mousehw_t *hw;
