@@ -90,6 +90,7 @@ struct usbhid_ivars {
 	uint16_t vendor_id;
 	const char *serial_str;
 	int interval_ms;
+	int protocol;
 };
 
 struct usbhid_softc {
@@ -809,6 +810,12 @@ usbhid_attach(device_t dev)
 	sc->ivar.vendor_id = uaa->info.idVendor;
 	sc->ivar.serial_str = usb_get_serial(uaa->device);
 	sc->ivar.interval_ms = -1;
+	if (uaa->info.bInterfaceProtocol == UIPROTO_BOOT_KEYBOARD)
+		sc->ivar.protocol = HID_PROTOCOL_BOOT_KEYBOARD;
+	else if (uaa->info.bInterfaceProtocol == UIPROTO_MOUSE)
+		sc->ivar.protocol = HID_PROTOCOL_MOUSE;
+	else
+		sc->ivar.protocol = HID_PROTOCOL_OTHER;
 	bus_generic_attach(dev);
 
 	return (0);			/* success */
@@ -872,6 +879,9 @@ usbhid_read_ivar(device_t bus, device_t child, int which, uintptr_t *result)
 		break;
 	case HID_IVAR_SERIAL:
 		*(const char **)result = ivar->serial_str;
+		break;
+	case HID_IVAR_PROTOCOL:
+		*(int *)result = ivar->protocol;
 		break;
 	default:
 		return (EINVAL);
