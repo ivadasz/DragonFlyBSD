@@ -333,7 +333,7 @@ repeat:
 static int
 hidms_probe(device_t dev)
 {
-	char *buf;
+	const char *buf;
 	uint16_t len;
 
 	DPRINTFN(11, "\n");
@@ -478,7 +478,7 @@ static int
 hidms_attach(device_t dev)
 {
 	struct hidms_softc *sc = device_get_softc(dev);
-	char *d_ptr = NULL;
+	const char *d_ptr = NULL;
 #ifdef EVDEV_SUPPORT
 	struct hidms_info *info;
 	int err;
@@ -801,7 +801,7 @@ hidms_ev_open(struct evdev_dev *evdev, void *ev_softc)
 	sc->sc_evflags = HIDMS_EVDEV_OPENED;
 
 	if (sc->sc_opened == 0)
-		HID_START_READ(device_get_parent(sc->dev));
+		HID_START_READ(device_get_parent(sc->dev), 0);
 
 	return (0);
 }
@@ -833,7 +833,7 @@ hidms_open(void *arg)
 #ifdef EVDEV_SUPPORT
 	if (sc->sc_evflags == 0)
 #endif
-		HID_START_READ(device_get_parent(sc->dev));
+		HID_START_READ(device_get_parent(sc->dev), 0);
 	lockmgr(&sc->sc_lock, LK_RELEASE);
 }
 
@@ -909,7 +909,7 @@ hidms_ioctl(void *arg, caddr_t data, u_long cmd)
 			if (mode.rate > 1000)
 				mode.rate = 1000;
 			hid_set_interval_ms(sc->dev, 1000 / mode.rate);
-			HID_START_READ(device_get_parent(sc->dev));
+			HID_START_READ(device_get_parent(sc->dev), 0);
 		}
 		break;
 
