@@ -41,7 +41,7 @@ INTERFACE hid;
 # Retrieve HID descriptor.
 METHOD void get_descriptor {
 	device_t dev;
-	char **descp;
+	const char **descp;
 	uint16_t *sizep;
 };
 
@@ -56,6 +56,7 @@ METHOD void set_handler {
 # Activates input from hardware device.
 METHOD void start_read {
 	device_t dev;
+	uint16_t max_len;
 };
 
 # Deactivates input from hardware device.

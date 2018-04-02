@@ -107,6 +107,8 @@ struct usbhid_softc {
 	uint32_t sc_osize;
 	uint32_t sc_fsize;
 
+	uint32_t sc_max_isize;
+
 	uint16_t sc_repdesc_size;
 
 	uint8_t sc_buffer[1024];
@@ -219,11 +221,11 @@ usbhid_intr_read_callback(struct usb_xfer *xfer, usb_error_t error)
 		 * If the ID byte is non zero we allow descriptors
 		 * having multiple sizes:
 		 */
-		if ((actlen >= (int)sc->sc_isize) ||
+		if ((actlen >= (int)sc->sc_max_isize) ||
 		    ((actlen > 0) && (sc->sc_iid != 0))) {
 			/* limit report length to the maximum */
-			if (actlen > (int)sc->sc_isize)
-				actlen = sc->sc_isize;
+			if (actlen > (int)sc->sc_max_isize)
+				actlen = sc->sc_max_isize;
 			/* XXX handle data */
 			usbd_copy_out(pc, 0, sc->sc_buffer, actlen);
 //			usbhid_dump(sc->sc_buffer, actlen);
@@ -235,7 +237,8 @@ usbhid_intr_read_callback(struct usb_xfer *xfer, usb_error_t error)
 					buffer++;
 					actlen--;
 				}
-				usbd_xfer_set_frame_len(xfer, 0, sc->sc_isize);
+				usbd_xfer_set_frame_len(xfer, 0,
+				    sc->sc_max_isize);
 				usbd_transfer_submit(xfer);
 				hid_input_handler_t fn = sc->input_handler;
 				void *arg = sc->handler_arg;
@@ -251,7 +254,7 @@ usbhid_intr_read_callback(struct usb_xfer *xfer, usb_error_t error)
 
 	case USB_ST_SETUP:
 re_submit:
-		usbd_xfer_set_frame_len(xfer, 0, sc->sc_isize);
+		usbd_xfer_set_frame_len(xfer, 0, sc->sc_max_isize);
 		usbd_transfer_submit(xfer);
 		return;
 
@@ -348,22 +351,22 @@ usbhid_read_callback(struct usb_xfer *xfer, usb_error_t error)
 	switch (USB_GET_STATE(xfer)) {
 	case USB_ST_TRANSFERRED:
 		/* XXX handle data */
-		usbd_copy_out(pc, sizeof(req), sc->sc_buffer, sc->sc_isize);
+		usbd_copy_out(pc, sizeof(req), sc->sc_buffer, sc->sc_max_isize);
 		kprintf("usbhid: %s: report (length: %u):\n",
-		    __func__, sc->sc_isize);
-//		usbhid_dump(sc->sc_buffer, sc->sc_isize);
+		    __func__, sc->sc_max_isize);
+//		usbhid_dump(sc->sc_buffer, sc->sc_max_isize);
 		return;
 
 	case USB_ST_SETUP:
 		usbhid_fill_get_report
 		    (&req, sc->sc_iface_no, UHID_INPUT_REPORT,
-		    sc->sc_iid, sc->sc_isize);
+		    sc->sc_iid, sc->sc_max_isize);
 
 		usbd_copy_in(pc, 0, &req, sizeof(req));
 
 		usbd_xfer_set_frame_len(xfer, 0, sizeof(req));
-		usbd_xfer_set_frame_len(xfer, 1, sc->sc_isize);
-		usbd_xfer_set_frames(xfer, sc->sc_isize ? 2 : 1);
+		usbd_xfer_set_frame_len(xfer, 1, sc->sc_max_isize);
+		usbd_xfer_set_frames(xfer, sc->sc_max_isize ? 2 : 1);
 		usbd_transfer_submit(xfer);
 		return;
 
@@ -534,12 +537,29 @@ usbhid_set_handler(device_t dev, hid_input_handler_t input,
 }
 
 static void
-usbhid_start_read(device_t dev)
+usbhid_start_read(device_t dev, uint16_t max_len)
 {
 	struct usbhid_softc *sc = device_get_softc(dev);
 
+	if (max_len > 0 && max_len + (sc->sc_have_multi_id ? 1 : 0) >
+	    (int)usbd_xfer_max_framelen(sc->sc_xfer[USBHID_INTR_DT_RD])) {
+		DPRINTF("WARNING: input report size, %d bytes, is larger "
+		    "than interrupt size, %d bytes!\n", max_len,
+		    usbd_xfer_max_framelen(sc->sc_xfer[USBHID_INTR_DT_RD]));
+	}
+
+	if (max_len > USBHID_BSIZE) {
+		DPRINTF("input size is too large, %d bytes (truncating)\n",
+		    max_len);
+		max_len = USBHID_BSIZE;
+	}
+
+	if (max_len == 0)
+		max_len = sc->sc_isize;
+
 	device_printf(dev, "starting interrupt input transfer\n");
 	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
+	sc->sc_max_isize = max_len;
 	usbd_transfer_stop(sc->sc_xfer[USBHID_INTR_DT_RD]);
 	if (sc->ivar.interval_ms >= 0 && sc->ivar.interval_ms <= 1000) {
 		usbd_xfer_set_interval(sc->sc_xfer[USBHID_INTR_DT_RD],
@@ -735,7 +755,7 @@ usbhid_attach(device_t dev)
 	sc->sc_have_multi_id = usbhid_have_multi_id(sc->sc_repdesc_ptr,
 	    sc->sc_repdesc_size, hid_input);
 
-	if (sc->sc_isize + (sc->sc_have_multi_id ? 1 : 0) >
+	if (sc->sc_isize >
 	    (int)usbd_xfer_max_framelen(sc->sc_xfer[USBHID_INTR_DT_RD])) {
 		DPRINTF("WARNING: input report size, %d bytes, is larger "
 		    "than interrupt size, %d bytes!\n", sc->sc_isize,

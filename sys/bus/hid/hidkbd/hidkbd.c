@@ -489,7 +489,7 @@ hidkbd_get_key(struct hidkbd_softc *sc, uint8_t wait)
 	if (sc->sc_inputs == 0 &&
 	    (sc->sc_flags & HIDKBD_FLAG_GONE) == 0) {
 		/* start transfer, if not already started */
-		HID_START_READ(device_get_parent(sc->sc_dev));
+		HID_START_READ(device_get_parent(sc->sc_dev), 0);
 	}
 
 	if (sc->sc_flags & HIDKBD_FLAG_POLLING)
@@ -818,7 +818,7 @@ static int
 hidkbd_probe(device_t dev)
 {
 	keyboard_switch_t *sw = kbd_get_switch(HIDKBD_DRIVER_NAME);
-	char *d_ptr;
+	const char *d_ptr;
 	int error;
 	uint16_t d_len;
 
@@ -1032,7 +1032,7 @@ hidkbd_attach(device_t dev)
 	struct hidkbd_softc *sc = device_get_softc(dev);
 	int32_t unit = device_get_unit(dev);
 	keyboard_t *kbd = &sc->sc_kbd;
-	char *hid_ptr = NULL;
+	const char *hid_ptr = NULL;
 	uint16_t n;
 	uint16_t hid_len;
 #ifdef EVDEV_SUPPORT
@@ -1197,7 +1197,7 @@ hidkbd_attach(device_t dev)
 	}
 #endif
 	/* start the keyboard */
-	HID_START_READ(device_get_parent(dev));
+	HID_START_READ(device_get_parent(dev), 0);
 
 	return (0);			/* success */
 detach:
