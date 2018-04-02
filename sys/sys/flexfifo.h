@@ -16,4 +16,7 @@ void		flexfifo_destroy(struct flexfifo *fifo);
 cdev_t		flexfifo_get_cdev(struct flexfifo *fifo);
 void		flexfifo_enqueue_ring(struct flexfifo *fifo, uint8_t *chunk);
 
+/* Can only be safely used from flexfifo_ops callbacks. */
+uint8_t		*flexfifo_peek_ring(struct flexfifo *fifo);
+
 #endif /* !_SYS_FLEXFIFO_H_ */

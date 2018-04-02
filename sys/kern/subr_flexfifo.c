@@ -158,6 +158,7 @@ flexfifo_read(struct dev_read_args *ap)
 
 	do {
 		uint8_t *place;
+		char *src;
 
 		/* Buffer too small to fit a complete mouse packet */
 		if (uio->uio_resid < len) {
@@ -166,9 +167,15 @@ flexfifo_read(struct dev_read_args *ap)
 		}
 		place = fifo->mem + fifo->start * fifo->chunksz;
 		KKASSERT(len <= fifo->pktlen);
-		val = fifo->ops->evtopkt(fifo->arg, place, buf);
+		if (fifo->ops->evtopkt == NULL) {
+			val = len;
+			src = place;
+		} else {
+			val = fifo->ops->evtopkt(fifo->arg, place, buf);
+			src = buf;
+		}
 		if (val > 0) {
-			error = uiomove(buf, val, uio);
+			error = uiomove(src, val, uio);
 			if (error != 0)
 				goto done;
 			cnt++;
@@ -404,4 +411,13 @@ flexfifo_enqueue_ring(struct flexfifo *fifo, uint8_t *chunk)
 	lockmgr(&fifo->lk, LK_RELEASE);
 	if (fill == 1)
 		flexfifo_wakeup(fifo);
+}
+
+uint8_t *
+flexfifo_peek_ring(struct flexfifo *fifo)
+{
+	if (fifo->fill == 0)
+		return NULL;
+
+	return fifo->mem + fifo->start * fifo->chunksz;
 }
