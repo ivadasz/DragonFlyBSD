@@ -166,7 +166,7 @@ static int	hidms_sysctl_handler_parseinfo(SYSCTL_HANDLER_ARGS);
 
 static u_int hidms_pktlen(void *arg);
 static u_int hidms_evtopkt(void *arg, uint8_t *ev, uint8_t *pkt);
-static int hidms_ioctl(void *arg, caddr_t data, u_long cmd);
+static int hidms_ioctl(void *arg, caddr_t data, u_long cmd, int fflags);
 static void hidms_open(void *arg);
 static void hidms_close(void *arg);
 
@@ -855,7 +855,7 @@ hidms_close(void *arg)
 }
 
 static int
-hidms_ioctl(void *arg, caddr_t data, u_long cmd)
+hidms_ioctl(void *arg, caddr_t data, u_long cmd, int fflags)
 {
 	struct hidms_softc *sc = arg;
 	mousemode_t mode;
