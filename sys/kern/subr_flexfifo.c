@@ -291,7 +291,8 @@ flexfifo_ioctl(struct dev_ioctl_args *ap)
 			ret = ENXIO;
 			break;
 		}
-		ret = fifo->ops->ioctl(fifo->arg, ap->a_data, ap->a_cmd);
+		ret = fifo->ops->ioctl(fifo->arg, ap->a_data, ap->a_cmd,
+		    ap->a_fflag);
 		break;
 	}
 
