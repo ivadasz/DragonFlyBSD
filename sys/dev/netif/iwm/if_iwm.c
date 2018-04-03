@@ -376,6 +376,7 @@ static uint8_t	iwm_rate_from_ucode_rate(uint32_t);
 static int	iwm_rate2ridx(struct iwm_softc *, uint8_t);
 static void	iwm_setrates(struct iwm_softc *, struct iwm_node *, int);
 static int	iwm_media_change(struct ifnet *);
+static void	iwm_timeout_cb(void *, int);
 static int	iwm_newstate(struct ieee80211vap *, enum ieee80211_state, int);
 static void	iwm_endscan_cb(void *, int);
 static int	iwm_send_bt_init_conf(struct iwm_softc *);
@@ -1302,6 +1303,7 @@ iwm_stop_device(struct iwm_softc *sc)
 		struct iwm_vap *iv = IWM_VAP(vap);
 		iv->phy_ctxt = NULL;
 		iv->is_uploaded = 0;
+		ieee80211_draintask(ic, &sc->sc_timeout_task);
 	}
 	sc->sc_firmware_state = 0;
 	sc->sc_flags &= ~IWM_FLAG_TE_ACTIVE;
@@ -4337,6 +4339,22 @@ iwm_bring_down_firmware(struct iwm_softc *sc, struct ieee80211vap *vap)
 	sc->sc_firmware_state = 0;
 }
 
+static void
+iwm_timeout_cb(void *arg, int pending __unused)
+{
+	struct iwm_softc *sc = arg;
+	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211vap *vap = TAILQ_FIRST(&ic->ic_vaps);
+
+	IEEE80211_LOCK(ic);
+	if (vap->iv_state == IEEE80211_S_AUTH ||
+	    vap->iv_state == IEEE80211_S_ASSOC) {
+		ieee80211_new_state_locked(vap, IEEE80211_S_SCAN,
+		    IEEE80211_SCAN_FAIL_TIMEOUT);
+	}
+	IEEE80211_UNLOCK(ic);
+}
+
 static int
 iwm_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 {
@@ -4354,6 +4372,9 @@ iwm_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 
 	IEEE80211_UNLOCK(ic);
 	IWM_LOCK(sc);
+
+	if (nstate != IEEE80211_S_AUTH && nstate != IEEE80211_S_ASSOC)
+		taskqueue_cancel(ic->ic_tq, &sc->sc_timeout_task, NULL);
 
 	if ((sc->sc_flags & IWM_FLAG_SCAN_RUNNING) &&
 	    (nstate == IEEE80211_S_AUTH ||
@@ -5849,6 +5870,7 @@ iwm_attach(device_t dev)
 #endif
 	callout_init(&sc->sc_led_blink_to);
 	TASK_INIT(&sc->sc_es_task, 0, iwm_endscan_cb, sc);
+	TASK_INIT(&sc->sc_timeout_task, 0, iwm_timeout_cb, sc);
 
 	sc->sc_notif_wait = iwm_notification_wait_init(sc);
 	if (sc->sc_notif_wait == NULL) {
@@ -6418,6 +6440,7 @@ iwm_detach_local(struct iwm_softc *sc, int do_net80211)
 	sc->sc_attached = 0;
 	if (do_net80211) {
 		ieee80211_draintask(&sc->sc_ic, &sc->sc_es_task);
+		ieee80211_draintask(&sc->sc_ic, &sc->sc_timeout_task);
 	}
 	callout_drain(&sc->sc_led_blink_to);
 	callout_drain(&sc->sc_watchdog_to);

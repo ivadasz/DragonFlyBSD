@@ -513,6 +513,7 @@ struct iwm_softc {
 	int			sc_wantresp;
 
 	struct task		sc_es_task;
+	struct task		sc_timeout_task;
 
 	struct iwm_rx_phy_info	sc_last_phy_info;
 	int			sc_ampdu_ref;
