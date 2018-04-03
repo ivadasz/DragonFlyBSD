@@ -503,6 +503,7 @@ struct iwm_softc {
 	struct taskqueue	*sc_tq;
 	struct task		sc_es_task;
 	struct task		sc_rftoggle_task;
+	struct task		sc_timeout_task;
 
 	struct iwm_rx_phy_info	sc_last_phy_info;
 	int			sc_ampdu_ref;
