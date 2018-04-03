@@ -192,6 +192,8 @@ iwm_mvm_te_handle_notif(struct iwm_softc *sc,
 		    ticks, sc->sc_time_event_end_ticks);
 
 		iwm_mvm_te_clear_data(sc);
+		/* This checks whether association succeeded. */
+		ieee80211_runtask(&sc->sc_ic, &sc->sc_timeout_task);
 	} else if (le32toh(notif->action) & IWM_TE_V2_NOTIF_HOST_EVENT_START) {
 		sc->sc_time_event_end_ticks =
 		    ticks + TU_TO_HZ(sc->sc_time_event_duration);
