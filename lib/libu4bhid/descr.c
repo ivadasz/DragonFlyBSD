@@ -37,7 +37,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <sys/ioctl.h>
-#include <bus/u4b/usb_ioctl.h>
+#include <bus/hid/hid_ioctl.h>
 
 #include "usbhid.h"
 #include "usbvar.h"
@@ -45,9 +45,13 @@
 int
 hid_set_immed(int fd, int enable)
 {
+#if 0
 	int ret;
-	ret = ioctl(fd, USB_SET_IMMED, &enable);
+	ret = ioctl(fd, UHID_SET_IMMED, &enable);
 	return (ret);
+#else
+	return (0);
+#endif
 }
 
 int
@@ -58,7 +62,9 @@ hid_get_report_id(int fd)
 	hid_item_t h;
 	int kindset;
 	int temp = -1;
+#if 0
 	int ret;
+#endif
 
 	if ((rep = hid_get_report_desc(fd)) == NULL)
 		goto use_ioctl;
@@ -77,59 +83,58 @@ hid_get_report_id(int fd)
 		return (temp);
 
 use_ioctl:
+#if 0
 	ret = ioctl(fd, USB_GET_REPORT_ID, &temp);
 	ret = temp;
 
 	return (ret);
+#else
+	return (0);
+#endif
 }
 
 report_desc_t
 hid_get_report_desc(int fd)
 {
-	struct usb_gen_descriptor ugd;
+	struct hid_report_desc desc;
 	report_desc_t rep;
 	void *data;
 
-	memset(&ugd, 0, sizeof(ugd));
+	memset(&desc, 0, sizeof(desc));
 
 	/* get actual length first */
-	ugd.ugd_data = hid_pass_ptr(NULL);
-	ugd.ugd_maxlen = 65535;
-	if (ioctl(fd, USB_GET_REPORT_DESC, &ugd) < 0)
+	desc.report_desc = NULL;
+	desc.len = 0;
+	if (ioctl(fd, UHID_GET_REPORT_DESC, &desc) < 0)
 		return (NULL);
 
-	/*
-	 * NOTE: The kernel will return a failure if 
-	 * "ugd_actlen" is zero.
-	 */
-	data = malloc(ugd.ugd_actlen);
+	data = malloc(desc.len);
 	if (data == NULL)
 		return (NULL);
 
 	/* fetch actual descriptor */
-	ugd.ugd_data = hid_pass_ptr(data);
-	ugd.ugd_maxlen = ugd.ugd_actlen;
-	if (ioctl(fd, USB_GET_REPORT_DESC, &ugd) < 0) {
+	desc.report_desc = data;
+	if (ioctl(fd, UHID_GET_REPORT_DESC, &desc) < 0) {
 		/* could not read descriptor */
 		free(data);
 		return (NULL);
 	}
 
 	/* sanity check */
-	if (ugd.ugd_actlen < 1) {
+	if (desc.len < 1) {
 		/* invalid report descriptor */
 		free(data);
 		return (NULL);
 	}
 
 	/* check END_COLLECTION */
-	if (((unsigned char *)data)[ugd.ugd_actlen -1] != 0xC0) {
+	if (((unsigned char *)data)[desc.len -1] != 0xC0) {
 		/* invalid end byte */
 		free(data);
 		return (NULL);
 	}
 
-	rep = hid_use_report_desc(data, ugd.ugd_actlen);
+	rep = hid_use_report_desc(data, desc.len);
 
 	free(data);
 

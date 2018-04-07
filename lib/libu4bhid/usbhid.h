@@ -92,6 +92,8 @@ hid_data_t hid_start_parse(report_desc_t d, int kindset, int id);
 void hid_end_parse(hid_data_t s);
 int hid_get_item(hid_data_t s, hid_item_t *h);
 int hid_report_size(report_desc_t d, enum hid_kind k, int id);
+/* Don't include optional id byte. */
+int hid_report_size_b(report_desc_t d, enum hid_kind k, int id);
 int hid_locate(report_desc_t d, unsigned int usage, enum hid_kind k,
     hid_item_t *h, int id);
 
@@ -105,9 +107,9 @@ int hid_parse_usage_page(const char *name);
 /* Extracting/insertion of data, data.c: */
 int32_t hid_get_data(const void *p, const hid_item_t *h);
 void hid_set_data(void *p, const hid_item_t *h, int32_t data);
-int hid_get_report(int fd, enum hid_kind k,
+int hid_get_report(int fd, enum hid_kind k, int id,
     unsigned char *data, unsigned int size);
-int hid_set_report(int fd, enum hid_kind k,
+int hid_set_report(int fd, enum hid_kind k, int id,
     unsigned char *data, unsigned int size);
 
 __END_DECLS

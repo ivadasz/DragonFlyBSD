@@ -41,6 +41,7 @@
 #include <errno.h>
 #include <usbhid.h>
 #include <bus/u4b/usbhid.h>
+#include <bus/hid/hid_ioctl.h>
 
 static struct variable {
 	char *name;
@@ -301,13 +302,16 @@ dumpdata(int f, report_desc_t rd, int loop)
 {
 	struct variable *var;
 	int dlen, havedata, i, match, r, rid, use_rid;
-	u_char *dbuf;
+	unsigned char *dbuf = NULL;
 	enum hid_kind kind;
 
 	kind = zflag ? 3 : 0;
 	rid = -1;
 	use_rid = !!hid_get_report_id(f);
 	do {
+		int this_rid = 0;
+		unsigned char *report = NULL;
+
 		if (kind < 3) {
 			if (++rid >= 256) {
 				rid = 0;
@@ -323,33 +327,39 @@ dumpdata(int f, report_desc_t rd, int loop)
 			if (var == NULL)
 				continue;
 		}
-		dlen = hid_report_size(rd, kind < 3 ? kind : hid_input, rid);
+		dlen = hid_report_size_b(rd, kind < 3 ? kind : hid_input, rid);
 		if (dlen <= 0)
 			continue;
 		dbuf = malloc(dlen);
 		memset(dbuf, 0, dlen);
 		if (kind < 3) {
-			dbuf[0] = rid;
-			r = hid_get_report(f, kind, dbuf, dlen);
+			r = hid_get_report(f, kind, rid, dbuf, dlen);
 			if (r < 0)
 				warn("hid_get_report(rid %d)", rid);
-			havedata = !r && (rid == 0 || dbuf[0] == rid);
-			if (rid != 0)
-				dbuf[0] = rid;
+			havedata = !r;
+			this_rid = rid;
+			report = dbuf;
 		} else {
 			r = read(f, dbuf, dlen);
 			if (r < 1)
 				err(1, "read error");
+			dlen = r;
 			havedata = 1;
+			if (use_rid) {
+				this_rid = dbuf[0];
+				report = &dbuf[1];
+			} else {
+				report = dbuf;
+			}
 		}
 		if (verbose) {
 			printf("Got %s report %d (%d bytes):",
 			    kind == hid_output ? "output" :
 			    kind == hid_feature ? "feature" : "input",
-			    use_rid ? dbuf[0] : 0, dlen);
+			    this_rid, dlen);
 			if (havedata) {
 				for (i = 0; i < dlen; i++)
-					printf(" %02x", dbuf[i]);
+					printf(" %02x", report[i]);
 			}
 			printf("\n");
 		}
@@ -358,13 +368,13 @@ dumpdata(int f, report_desc_t rd, int loop)
 			if ((kind < 3 ? kind : hid_input) != var->h.kind)
 				continue;
 			if (var->h.report_ID != 0 &&
-			    dbuf[0] != var->h.report_ID)
+			    this_rid != var->h.report_ID)
 				continue;
 			match = 1;
 			if (!noname)
 				printf("%s=", var->name);
 			if (havedata)
-				prdata(dbuf, &var->h);
+				prdata(report, &var->h);
 			printf("\n");
 		}
 		if (match)
@@ -391,13 +401,12 @@ writedata(int f, report_desc_t rd)
 		}
 		if (var == NULL)
 			continue;
-		dlen = hid_report_size(rd, kind, rid);
+		dlen = hid_report_size_b(rd, kind, rid);
 		if (dlen <= 0)
 			continue;
 		dbuf = malloc(dlen);
 		memset(dbuf, 0, dlen);
-		dbuf[0] = rid;
-		if (!zflag && hid_get_report(f, kind, dbuf, dlen) == 0) {
+		if (!zflag && hid_get_report(f, kind, rid, dbuf, dlen) == 0) {
 			if (verbose) {
 				printf("Got %s report %d (%d bytes):",
 				    kind == hid_input ? "input" :
@@ -431,7 +440,7 @@ writedata(int f, report_desc_t rd)
 				printf(" %02x", dbuf[i]);
 			printf("\n");
 		}
-		r = hid_set_report(f, kind, dbuf, dlen);
+		r = hid_set_report(f, kind, rid, dbuf, dlen);
 		if (r != 0)
 			warn("hid_set_report(rid %d)", rid);
 		free(dbuf);
