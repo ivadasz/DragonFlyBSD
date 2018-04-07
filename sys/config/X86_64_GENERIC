@@ -316,6 +316,7 @@ device		kue		# Kawasaki LSI USB ethernet
 device		hidbus		# HID bus driver
 device		hidkbd		# Keyboard
 device		hidms		# Mouse
+device		uhid		# Userspace access
 
 # FireWire support
 device		firewire	# FireWire bus code

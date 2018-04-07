@@ -2914,6 +2914,7 @@ bus/u4b/audio/uaudio_pcm.c		optional snd_uaudio
 #
 bus/hid/hidkbd/hidkbd.c			optional hidkbd
 bus/hid/hidms/hidms.c			optional hidms
+bus/hid/uhid/uhid.c			optional uhid
 
 #
 # Hyper-V support
