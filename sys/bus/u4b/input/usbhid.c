@@ -136,8 +136,6 @@ struct usbhid_softc {
 };
 
 static const uint8_t usbhid_xb360gp_report_descr[] = {USBHID_XB360GP_REPORT_DESCR()};
-static const uint8_t usbhid_graphire_report_descr[] = {USBHID_GRAPHIRE_REPORT_DESCR()};
-static const uint8_t usbhid_graphire3_4x5_report_descr[] = {USBHID_GRAPHIRE3_4X5_REPORT_DESCR()};
 
 /* prototypes */
 
@@ -693,38 +691,7 @@ usbhid_attach(device_t dev)
 		DPRINTF("error=%s\n", usbd_errstr(error));
 		goto detach;
 	}
-	if (uaa->info.idVendor == USB_VENDOR_WACOM) {
-
-		/* the report descriptor for the Wacom Graphire is broken */
-
-		if (uaa->info.idProduct == USB_PRODUCT_WACOM_GRAPHIRE) {
-
-			sc->sc_repdesc_size = sizeof(usbhid_graphire_report_descr);
-			sc->sc_repdesc_ptr = __DECONST(void *, &usbhid_graphire_report_descr);
-			sc->sc_flags |= USBHID_FLAG_STATIC_DESC;
-
-		} else if (uaa->info.idProduct == USB_PRODUCT_WACOM_GRAPHIRE3_4X5) {
-
-			static uint8_t reportbuf[] = {2, 2, 2};
-
-			/*
-			 * The Graphire3 needs 0x0202 to be written to
-			 * feature report ID 2 before it'll start
-			 * returning digitizer data.
-			 */
-			error = usbd_req_set_report(uaa->device, NULL,
-			    reportbuf, sizeof(reportbuf),
-			    uaa->info.bIfaceIndex, UHID_FEATURE_REPORT, 2);
-
-			if (error) {
-				DPRINTF("set report failed, error=%s (ignored)\n",
-				    usbd_errstr(error));
-			}
-			sc->sc_repdesc_size = sizeof(usbhid_graphire3_4x5_report_descr);
-			sc->sc_repdesc_ptr = __DECONST(void *, &usbhid_graphire3_4x5_report_descr);
-			sc->sc_flags |= USBHID_FLAG_STATIC_DESC;
-		}
-	} else if ((uaa->info.bInterfaceClass == UICLASS_VENDOR) &&
+	if ((uaa->info.bInterfaceClass == UICLASS_VENDOR) &&
 		    (uaa->info.bInterfaceSubClass == UISUBCLASS_XBOX360_CONTROLLER) &&
 	    (uaa->info.bInterfaceProtocol == UIPROTO_XBOX360_GAMEPAD)) {
 

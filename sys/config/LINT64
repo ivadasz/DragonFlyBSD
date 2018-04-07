@@ -2006,6 +2006,7 @@ options 	USB_DEBUG
 device		hidbus		# HID bus driver
 device		hidkbd		# Keyboard
 device		hidms		# Mouse
+device		uhid		# Userspace access
 
 # debugging options for the HID subsystem
 options 	HID_DEBUG
