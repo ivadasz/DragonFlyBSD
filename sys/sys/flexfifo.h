@@ -9,9 +9,13 @@ struct flexfifo_ops {
 	void(*close)(void *arg);
 };
 
+/* Only ever read/write a single packet. */
+#define FLEXFIFO_FLAG_SINGLEPKT	0x01
+
 struct flexfifo	*flexfifo_create(u_int chunk, u_int count,
 		    struct flexfifo_ops *ops, int minor, const char *name,
 		    void *arg, u_int max_pktlen);
+void		flexfifo_setflags(struct flexfifo *fifo, int flags);
 void		flexfifo_destroy(struct flexfifo *fifo);
 cdev_t		flexfifo_get_cdev(struct flexfifo *fifo);
 void		flexfifo_enqueue_ring(struct flexfifo *fifo, uint8_t *chunk);
