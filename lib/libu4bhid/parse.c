@@ -559,7 +559,44 @@ hid_report_size(report_desc_t r, enum hid_kind k, int id)
 		temp = hpos - lpos;
 
 	/* return length in bytes rounded up */
-	return ((temp + 7) / 8 + report_id);
+	return ((temp + 7) / 8 + (id == -1 ? report_id : 0));
+}
+
+int
+hid_report_size_b(report_desc_t r, enum hid_kind k, int id)
+{
+	struct hid_data *d;
+	struct hid_item h;
+	uint32_t temp;
+	uint32_t hpos;
+	uint32_t lpos;
+
+	hpos = 0;
+	lpos = 0xFFFFFFFF;
+
+	memset(&h, 0, sizeof h);
+	for (d = hid_start_parse(r, 1 << k, id); hid_get_item(d, &h); ) {
+		if (h.kind == k) {
+			/* compute minimum */
+			if (lpos > h.pos)
+				lpos = h.pos;
+			/* compute end position */
+			temp = h.pos + (h.report_size * h.report_count);
+			/* compute maximum */
+			if (hpos < temp)
+				hpos = temp;
+		}
+	}
+	hid_end_parse(d);
+
+	/* safety check - can happen in case of currupt descriptors */
+	if (lpos > hpos)
+		temp = 0;
+	else
+		temp = hpos - lpos;
+
+	/* return length in bytes rounded up */
+	return ((temp + 7) / 8);
 }
 
 int
