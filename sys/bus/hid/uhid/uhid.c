@@ -51,6 +51,7 @@
 #include <sys/sysctl.h>
 #include <sys/malloc.h>
 #include <sys/fcntl.h>
+#include <sys/queue.h>
 #include <sys/flexfifo.h>
 
 #include <bus/u4b/input/usb_rdesc.h>
@@ -86,12 +87,24 @@ struct hid_stream_report {
 	unsigned char report[];
 };
 
+struct hid_report_list {
+	uint16_t len;
+	uint8_t id;
+	unsigned char *report;
+	int done;
+	void *arg;
+	void(*cb)(void *arg, struct hid_report_list *e);
+	STAILQ_ENTRY(hid_report_list) entries;
+};
+
 struct uhid_softc {
 	device_t sc_dev;
 	struct lock sc_lock;
 	struct flexfifo *sc_fifo;
-	int sc_output_pending;
 	int sc_detaching;
+	int sc_writing;
+	STAILQ_HEAD(, hid_report_list) sc_pending_evs;
+	struct hid_report_list sc_rep;
 
 	uint32_t sc_isize;
 	uint32_t sc_osize;
@@ -121,6 +134,8 @@ static device_detach_t uhid_detach;
 
 static u_int uhid_pktlen(void *arg);
 static u_int uhid_evtopkt(void *arg, uint8_t *ev, uint8_t *pkt);
+static void uhid_sendev(void *arg, u_int8_t *ev);
+static int uhid_pkttoev(void *arg, u_int8_t *ev, u_int8_t *pkt, u_int len);
 static int uhid_ioctl(void *arg, caddr_t data, u_long cmd, int fflags);
 static void uhid_open(void *arg);
 static void uhid_close(void *arg);
@@ -128,6 +143,8 @@ static void uhid_close(void *arg);
 static struct flexfifo_ops uhid_fifo_ops = {
 	.pktlen = uhid_pktlen,
 	.evtopkt = uhid_evtopkt,
+	.sendev = uhid_sendev,
+	.pkttoev = uhid_pkttoev,
 	.ioctl = uhid_ioctl,
 	.open = uhid_open,
 	.close = uhid_close,
@@ -150,10 +167,27 @@ uhid_output_handler(uint8_t *buf, int len, void *arg)
 	struct uhid_softc *sc = arg;
 
 	if (buf != NULL) {
+		struct hid_report_list *rep;
+
 		lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
-		sc->sc_output_pending = 0;
+		rep = STAILQ_FIRST(&sc->sc_pending_evs);
+		if (rep->report == buf) {
+			STAILQ_REMOVE_HEAD(&sc->sc_pending_evs, entries);
+			rep->done = 1;
+			rep->cb(rep->arg, rep);
+		}
+		if (sc->sc_detaching) {
+			lockmgr(&sc->sc_lock, LK_RELEASE);
+			return;
+		}
+		rep = STAILQ_FIRST(&sc->sc_pending_evs);
+		if (rep == NULL) {
+			sc->sc_writing = 0;
+		} else {
+			HID_SET_REPORT(device_get_parent(sc->sc_dev),
+			    rep->id, rep->report, rep->len);
+		}
 		lockmgr(&sc->sc_lock, LK_RELEASE);
-		wakeup(&sc->sc_output_pending);
 	}
 }
 
@@ -188,6 +222,81 @@ uhid_evtopkt(void *arg, uint8_t *ev, uint8_t *pkt)
 		memcpy(pkt, buf->report, buf->len);
 	}
 	return len;
+}
+
+static void
+uhid_output_write_done(void *arg, struct hid_report_list *e)
+{
+	struct uhid_softc *sc = arg;
+
+	flexfifo_write_done(sc->sc_fifo);
+}
+
+static void
+uhid_start_writing(struct uhid_softc *sc)
+{
+	struct hid_report_list *rep;
+
+	if (sc->sc_writing == 0) {
+		sc->sc_writing = 1;
+		rep = STAILQ_FIRST(&sc->sc_pending_evs);
+		if (rep != NULL) {
+			HID_SET_REPORT(device_get_parent(sc->sc_dev),
+			    rep->id, rep->report, rep->len);
+		}
+	}
+}
+
+static void
+uhid_sendev(void *arg, u_int8_t *ev)
+{
+	struct uhid_softc *sc = arg;
+	struct hid_report_list *rep = &sc->sc_rep;
+	struct hid_stream_report *buf = (void *)ev;
+
+	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
+	if (sc->sc_detaching) {
+		lockmgr(&sc->sc_lock, LK_RELEASE);
+		return;
+	}
+
+	rep->len = buf->len;
+	rep->id = buf->id;
+	rep->report = buf->report;
+	rep->done = 0;
+	rep->arg = sc;
+	rep->cb = uhid_output_write_done;
+	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
+	STAILQ_INSERT_TAIL(&sc->sc_pending_evs, rep, entries);
+	uhid_start_writing(sc);
+	lockmgr(&sc->sc_lock, LK_RELEASE);
+}
+
+static int
+uhid_pkttoev(void *arg, u_int8_t *ev, u_int8_t *pkt, u_int len)
+{
+	struct uhid_softc *sc = arg;
+	struct hid_stream_report *buf = (void *)ev;
+
+	/* XXX Check that len matches the length for the Report ID */
+	if (sc->sc_iid != 0) {
+		KKASSERT(len > 0);
+		buf->len = len - 1;
+		buf->id = pkt[0];
+		memcpy(buf->report, &pkt[1], len - 1);
+	} else {
+		buf->len = len;
+		buf->id = 0;
+		memcpy(buf->report, pkt, len);
+	}
+	return 0;
+}
+
+static void
+uhid_output_ioctl_done(void *arg, struct hid_report_list *e)
+{
+	kfree(e->report, M_DEVBUF);
+	wakeup(e);
 }
 
 static int
@@ -283,37 +392,29 @@ uhid_ioctl(void *arg, caddr_t data, u_long cmd, int fflags)
 			error = HID_SET_FEATURE(device_get_parent(sc->sc_dev),
 			    request->id, repbuf, request->len);
 		} else if (error == 0 && request->kind == UHID_OUTPUT_REPORT) {
+			struct hid_report_list rep;
+
+			rep.len = request->len;
+			rep.id = request->id;
+			rep.report = repbuf;
+			rep.done = 0;
+			rep.arg = NULL;
+			rep.cb = uhid_output_ioctl_done;
 			lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
-			while (sc->sc_output_pending != 0) {
-				if (sc->sc_detaching) {
-					lockmgr(&sc->sc_lock, LK_RELEASE);
-					return (EIO);
-				}
-				lksleep(&sc->sc_output_pending, &sc->sc_lock,
-				    0, "uhid-wait", 0);
-			}
-			if (sc->sc_detaching) {
-				lockmgr(&sc->sc_lock, LK_RELEASE);
-				return (EIO);
-			}
-			sc->sc_output_pending = 1;
-			tsleep_interlock(&sc->sc_output_pending, 0);
-			lockmgr(&sc->sc_lock, LK_RELEASE);
-			HID_SET_REPORT(device_get_parent(sc->sc_dev),
-			    request->id, repbuf, request->len);
-			lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
-			while (sc->sc_output_pending != 0 &&
-			    sc->sc_detaching == 0) {
-				lksleep(&sc->sc_output_pending,
-				    &sc->sc_lock, PINTERLOCKED,
-				    "uhid-out", 0);
+			STAILQ_INSERT_TAIL(&sc->sc_pending_evs, &rep, entries);
+			uhid_start_writing(sc);
+			while (rep.done == 0 && sc->sc_detaching == 0) {
+				lksleep(&sc->sc_pending_evs, &sc->sc_lock,
+				    PCATCH, "uhid-wait", 0);
 			}
 			lockmgr(&sc->sc_lock, LK_RELEASE);
-			wakeup(&sc->sc_output_pending);
+			break;
 		}
 		if (repbuf != NULL)
 			kfree(repbuf, M_DEVBUF);
 		break;
+
+	/* XXX Add an ioctl for changing the in/out FIFO length. */
 
 	default:
 		error = EINVAL;
@@ -341,6 +442,8 @@ uhid_close(void *arg)
 
 	HID_STOP_READ(device_get_parent(sc->sc_dev));
 	HID_SET_HANDLER(device_get_parent(sc->sc_dev), NULL, NULL, NULL);
+	STAILQ_INIT(&sc->sc_pending_evs);
+	sc->sc_writing = 0;
 }
 
 static int
@@ -377,6 +480,7 @@ uhid_attach(device_t dev)
 	lockinit(&sc->sc_lock, "uhid lock", 0, LK_CANRECURSE);
 
 	sc->sc_dev = dev;
+	STAILQ_INIT(&sc->sc_pending_evs);
 
 	if (hid_get_bustype(dev) == HID_BUS_USB &&
 	    hid_get_vendor(dev) == USB_VENDOR_WACOM) {
@@ -453,7 +557,7 @@ uhid_detach(device_t dev)
 	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
 	sc->sc_detaching = 1;
 	lockmgr(&sc->sc_lock, LK_RELEASE);
-	wakeup(&sc->sc_output_pending);
+	wakeup(&sc->sc_pending_evs);
 
 	HID_STOP_READ(device_get_parent(dev));
 	HID_SET_HANDLER(device_get_parent(dev), NULL, NULL, NULL);
