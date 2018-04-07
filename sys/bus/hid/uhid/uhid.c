@@ -106,7 +106,6 @@ struct uhid_softc {
 	uint8_t	sc_oid;
 	uint8_t	sc_fid;
 	uint8_t	sc_flags;
-#define	UHID_FLAG_IMMED        0x01	/* set if read should be immediate */
 #define	UHID_FLAG_STATIC_DESC  0x04	/* set if report descriptors are
 					 * static */
 };
@@ -157,41 +156,6 @@ uhid_output_handler(uint8_t *buf, int len, void *arg)
 		wakeup(&sc->sc_output_pending);
 	}
 }
-
-#if 0
-static int
-uhid_set_report(struct uhid_softc *sc, uint8_t type,
-    uint8_t id, void *kern_data, void *user_data,
-    uint16_t len)
-{
-	int err;
-	uint8_t free_data = 0;
-
-	if (kern_data == NULL) {
-		kern_data = kmalloc(len, M_DEVBUF, M_WAITOK);
-		if (kern_data == NULL) {
-			err = ENOMEM;
-			goto done;
-		}
-		free_data = 1;
-		err = copyin(user_data, kern_data, len);
-		if (err) {
-			goto done;
-		}
-	}
-	err = usbd_req_set_report(sc->sc_udev, NULL, kern_data,
-	    len, sc->sc_iface_index, type, id);
-	if (err) {
-		err = ENXIO;
-		goto done;
-	}
-done:
-	if (free_data) {
-		kfree(kern_data, M_DEVBUF);
-	}
-	return (err);
-}
-#endif
 
 static u_int
 uhid_pktlen(void *arg)
@@ -250,32 +214,6 @@ uhid_ioctl(void *arg, caddr_t data, u_long cmd, int fflags)
 		error = copyout(sc->sc_repdesc_ptr, repdesc->report_desc,
 		    repdesc->len);
 		break;
-
-#if 0
-	case UHID_SET_IMMED:
-		if (!(fflags & FREAD)) {
-			error = EPERM;
-			break;
-		}
-		if (*(int *)addr) {
-
-			/* do a test read */
-
-			error = uhid_get_report(sc, UHID_INPUT_REPORT,
-			    sc->sc_iid, NULL, NULL, sc->sc_isize);
-			if (error) {
-				break;
-			}
-			lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
-			sc->sc_flags |= UHID_FLAG_IMMED;
-			lockmgr(&sc->sc_lock, LK_RELEASE);
-		} else {
-			lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
-			sc->sc_flags &= ~UHID_FLAG_IMMED;
-			lockmgr(&sc->sc_lock, LK_RELEASE);
-		}
-		break;
-#endif
 
 	case UHID_GET_REPORT:
 		if (!(fflags & FREAD)) {
