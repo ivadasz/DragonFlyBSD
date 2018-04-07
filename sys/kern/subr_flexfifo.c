@@ -297,6 +297,10 @@ flexfifo_ioctl(struct dev_ioctl_args *ap)
 			fifo->async = 0;
 		break;
 	case FIONREAD:
+		if (fifo->flags & FLEXFIFO_FLAG_SINGLEPKT) {
+			ret = ENXIO;
+			break;
+		}
 		if (fifo->fill == 0) {
 			*(int *)ap->a_data = 0;
 		} else if (fifo->ops->pktlen == NULL) {
