@@ -2922,6 +2922,7 @@ dev/virtual/amazon/ena/ena-com/ena_eth_com.c optional ena
 #
 bus/hid/hidkbd/hidkbd.c			optional hidkbd
 bus/hid/hidms/hidms.c			optional hidms
+bus/hid/uhid/uhid.c			optional uhid
 
 #
 # Hyper-V support
