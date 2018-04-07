@@ -18,6 +18,7 @@ MALLOC_DEFINE(M_FLEXFIFO, "flexfifo", "Flexfifo FIFO device allocations");
 
 struct flexfifo {
 	cdev_t dev;
+	int flags;
 	u_int chunksz;
 	u_int length;
 	u_int start;
@@ -57,7 +58,12 @@ flexfifo_open(struct dev_open_args *ap)
 		goto done;
 	}
 
-	fifo->temp = kmalloc(fifo->pktlen, M_FLEXFIFO, M_WAITOK | M_ZERO);
+	if (fifo->ops->evtopkt != NULL) {
+		fifo->temp = kmalloc(fifo->pktlen, M_FLEXFIFO,
+		    M_WAITOK | M_ZERO);
+	} else {
+		fifo->temp = NULL;
+	}
 	fifo->opened = 1;
 	fifo->sigio = NULL;
 	KKASSERT(fifo->mem == NULL);
@@ -94,10 +100,14 @@ flexfifo_close(struct dev_close_args *ap)
 	if (fifo->ops->close != NULL)
 		fifo->ops->close(fifo->arg);
 
-	kfree(fifo->mem, M_FLEXFIFO);
-	fifo->mem = NULL;
-	kfree(fifo->temp, M_FLEXFIFO);
-	fifo->temp = NULL;
+	if (fifo->mem != NULL) {
+		kfree(fifo->mem, M_FLEXFIFO);
+		fifo->mem = NULL;
+	}
+	if (fifo->temp != NULL) {
+		kfree(fifo->temp, M_FLEXFIFO);
+		fifo->temp = NULL;
+	}
 
 	funsetown(&fifo->sigio);
 	fifo->opened = 0;
@@ -182,6 +192,9 @@ flexfifo_read(struct dev_read_args *ap)
 		}
 		fifo->fill--;
 		fifo->start = (fifo->start + 1) % fifo->length;
+
+		if (fifo->flags & FLEXFIFO_FLAG_SINGLEPKT)
+			goto done;
 	} while (fifo->fill > 0);
 
 done:
@@ -323,6 +336,7 @@ flexfifo_create(u_int chunk, u_int count, struct flexfifo_ops *ops, int minor,
 	struct flexfifo *f;
 
 	f = kmalloc(sizeof(struct flexfifo), M_FLEXFIFO, M_WAITOK | M_ZERO);
+	f->flags = 0;
 	f->chunksz = chunk;
 	f->length = count;
 	f->start = 0;
@@ -340,6 +354,14 @@ flexfifo_create(u_int chunk, u_int count, struct flexfifo_ops *ops, int minor,
 	    name);
 	f->dev->si_drv1 = f;
 	return f;
+}
+
+void
+flexfifo_setflags(struct flexfifo *fifo, int flags)
+{
+	lockmgr(&fifo->lk, LK_EXCLUSIVE);
+	fifo->flags = flags;
+	lockmgr(&fifo->lk, LK_RELEASE);
 }
 
 cdev_t
