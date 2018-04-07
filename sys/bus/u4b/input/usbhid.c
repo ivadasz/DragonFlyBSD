@@ -658,7 +658,7 @@ usbhid_get_report(device_t dev, uint8_t id, uint8_t *buf, uint16_t len, int type
 	KKASSERT(type == hid_input || type == hid_feature);
 
 	err = usbd_req_get_report(sc->sc_udev, NULL, buf, len,
-	    sc->sc_iface_index, hid_feature, id);
+	    sc->sc_iface_index, type, id);
 	if (err)
 		return (ENXIO);
 
