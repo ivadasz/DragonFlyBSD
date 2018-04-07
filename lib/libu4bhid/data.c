@@ -32,7 +32,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include <bus/u4b/usb_ioctl.h>
+#include <bus/hid/hid_ioctl.h>
 #include "usbhid.h"
 #include "usbvar.h"
 
@@ -118,25 +118,29 @@ hid_set_data(void *p, const hid_item_t *h, int32_t data)
 }
 
 int
-hid_get_report(int fd, enum hid_kind k, unsigned char *data, unsigned int size)
+hid_get_report(int fd, enum hid_kind k, int id, unsigned char *data,
+    unsigned int size)
 {
-	struct usb_gen_descriptor ugd;
+	struct hid_report_request req;
 
-	memset(&ugd, 0, sizeof(ugd));
-	ugd.ugd_data = hid_pass_ptr(data);
-	ugd.ugd_maxlen = size;
-	ugd.ugd_report_type = k + 1;
-	return (ioctl(fd, USB_GET_REPORT, &ugd));
+	memset(&req, 0, sizeof(req));
+	req.len = size;
+	req.kind = k + 1;
+	req.id = id;
+	req.report = data;
+	return (ioctl(fd, UHID_GET_REPORT, &req));
 }
 
 int
-hid_set_report(int fd, enum hid_kind k, unsigned char *data, unsigned int size)
+hid_set_report(int fd, enum hid_kind k, int id, unsigned char *data,
+    unsigned int size)
 {
-	struct usb_gen_descriptor ugd;
+	struct hid_report_request req;
 
-	memset(&ugd, 0, sizeof(ugd));
-	ugd.ugd_data = hid_pass_ptr(data);
-	ugd.ugd_maxlen = size;
-	ugd.ugd_report_type = k + 1;
-	return (ioctl(fd, USB_SET_REPORT, &ugd));
+	memset(&req, 0, sizeof(req));
+	req.len = size;
+	req.kind = k + 1;
+	req.id = id;
+	req.report = data;
+	return (ioctl(fd, UHID_SET_REPORT, &req));
 }
