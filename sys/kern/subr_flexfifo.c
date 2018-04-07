@@ -34,6 +34,12 @@ struct flexfifo {
 	struct flexfifo_ops *ops;
 	u_int8_t *mem;
 	u_int8_t *temp;
+
+	struct lock write_lk;
+	u_int write_length;
+	u_int write_start;
+	u_int write_fill;
+	u_int8_t *write_mem;
 };
 
 static int
@@ -58,7 +64,7 @@ flexfifo_open(struct dev_open_args *ap)
 		goto done;
 	}
 
-	if (fifo->ops->evtopkt != NULL) {
+	if (fifo->ops->evtopkt != NULL || fifo->ops->pkttoev != NULL) {
 		fifo->temp = kmalloc(fifo->pktlen, M_FLEXFIFO,
 		    M_WAITOK | M_ZERO);
 	} else {
@@ -69,6 +75,12 @@ flexfifo_open(struct dev_open_args *ap)
 	KKASSERT(fifo->mem == NULL);
 	fifo->mem = kmalloc(fifo->chunksz * fifo->length, M_FLEXFIFO,
 	    M_WAITOK | M_ZERO);
+
+	if (fifo->ops->sendev != NULL) {
+		KKASSERT(fifo->write_mem == NULL);
+		fifo->mem = kmalloc(fifo->chunksz * fifo->write_length,
+		    M_FLEXFIFO, M_WAITOK | M_ZERO);
+	}
 
 	if (fifo->ops->open != NULL)
 		fifo->ops->open(fifo->arg);
@@ -108,10 +120,19 @@ flexfifo_close(struct dev_close_args *ap)
 		kfree(fifo->temp, M_FLEXFIFO);
 		fifo->temp = NULL;
 	}
+	if (fifo->write_mem != NULL) {
+		kfree(fifo->write_mem, M_FLEXFIFO);
+		fifo->write_mem = NULL;
+	}
 
 	funsetown(&fifo->sigio);
 	fifo->opened = 0;
 	fifo->async = 0;
+
+	fifo->fill = 0;
+	fifo->start = 0;
+	fifo->write_fill = 0;
+	fifo->write_start = 0;
 	ret = 0;
 
 done:
@@ -157,7 +178,7 @@ flexfifo_read(struct dev_read_args *ap)
 			error = EAGAIN;
 			goto done;
 		}
-		error = lksleep(fifo, &fifo->lk, PCATCH, "fiforead", 0);
+		error = lksleep(&fifo->fill, &fifo->lk, PCATCH, "fiforead", 0);
 		if (error == EINTR || error == ERESTART) {
 			goto done;
 		}
@@ -204,6 +225,105 @@ done:
 	return error;
 }
 
+static int
+flexfifo_write(struct dev_write_args *ap)
+{
+	struct uio *uio = ap->a_uio;
+	cdev_t dev = ap->a_head.a_dev;
+	struct flexfifo *fifo;
+	uint8_t *place;
+	size_t sz;
+	int error, cnt = 0;
+
+	if (dev->si_drv1 == NULL)
+		return EIO;
+
+	fifo = dev->si_drv1;
+	lockmgr(&fifo->lk, LK_EXCLUSIVE);
+	if (dev->si_drv1 == NULL) {
+		lockmgr(&fifo->lk, LK_RELEASE);
+		return EIO;
+	}
+
+	if (fifo->ops->pktlen == NULL) {
+		sz = fifo->pktlen;
+		if ((fifo->flags & FLEXFIFO_FLAG_SINGLEPKT) &&
+		    uio->uio_resid > sz) {
+			error = EIO;
+			goto done;
+		} else {
+			sz = uio->uio_resid;
+		}
+	} else {
+		sz = fifo->ops->pktlen(fifo->arg);
+		if ((fifo->flags & FLEXFIFO_FLAG_SINGLEPKT) &&
+		    uio->uio_resid != sz) {
+			error = EIO;
+			goto done;
+		} else {
+			sz = uio->uio_resid;
+		}
+	}
+
+	while (fifo->write_fill >= fifo->write_length) {
+		if (ap->a_ioflag & IO_NDELAY) {
+			error = EAGAIN;
+			goto done;
+		}
+		error = lksleep(&fifo->write_fill, &fifo->lk, PCATCH,
+		    "fifowrite", 0);
+		if (error == EINTR || error == ERESTART) {
+			goto done;
+		}
+		/* Output package size may have changed. */
+		if (fifo->ops->pktlen != NULL) {
+			sz = fifo->ops->pktlen(fifo->arg);
+			if ((fifo->flags & FLEXFIFO_FLAG_SINGLEPKT) &&
+			    uio->uio_resid != sz) {
+				error = EIO;
+				goto done;
+			} else {
+				sz = uio->uio_resid;
+			}
+		}
+	}
+	do {
+		u_int pos;
+
+		if (uio->uio_resid < sz) {
+			error = EIO;
+			goto done;
+		}
+		pos = (fifo->write_start + fifo->write_fill) %
+		    fifo->write_length;
+		place = fifo->write_mem + pos * fifo->chunksz;
+		if (fifo->ops->pkttoev != NULL) {
+			error = uiomove(fifo->temp, sz, uio);
+			if (error != 0)
+				goto done;
+			if (fifo->ops->pkttoev(fifo, place, fifo->temp, sz)
+			    != 0) {
+				error = EIO;
+				goto done;
+			}
+		} else {
+			error = uiomove(place, sz, uio);
+			if (error != 0)
+				goto done;
+		}
+		cnt++;
+		fifo->write_fill++;
+		if (fifo->flags & FLEXFIFO_FLAG_SINGLEPKT)
+			goto done;
+	} while (fifo->write_fill < fifo->write_length);
+
+done:
+	lockmgr(&fifo->lk, LK_RELEASE);
+	if (cnt > 0 && error != EFAULT)
+		return 0;
+	return error;
+}
+
 static void
 flexfifo_filter_detach(struct knote *kn)
 {
@@ -213,7 +333,7 @@ flexfifo_filter_detach(struct knote *kn)
 }
 
 static int
-flexfifo_filter(struct knote *kn, long hint)
+flexfifo_filter_read(struct knote *kn, long hint)
 {
 	struct flexfifo *fifo = (void *)kn->kn_hook;
 	int ready = 0;
@@ -228,9 +348,29 @@ flexfifo_filter(struct knote *kn, long hint)
 	return ready;
 }
 
-static struct filterops flexfifo_filtops =
+static struct filterops flexfifo_filtops_read =
     { FILTEROP_MPSAFE | FILTEROP_ISFD, NULL, flexfifo_filter_detach,
-      flexfifo_filter };
+      flexfifo_filter_read };
+
+static int
+flexfifo_filter_write(struct knote *kn, long hint)
+{
+	struct flexfifo *fifo = (void *)kn->kn_hook;
+	int ready = 0;
+
+	lockmgr(&fifo->lk, LK_EXCLUSIVE);
+	if (fifo->write_fill < fifo->write_length) {
+		ready = 1;
+		kn->kn_data = 0;
+	}
+	lockmgr(&fifo->lk, LK_RELEASE);
+
+	return ready;
+}
+
+static struct filterops flexfifo_filtops_write =
+    { FILTEROP_MPSAFE | FILTEROP_ISFD, NULL, flexfifo_filter_detach,
+      flexfifo_filter_write };
 
 static int
 flexfifo_kqfilter(struct dev_kqfilter_args *ap)
@@ -253,7 +393,12 @@ flexfifo_kqfilter(struct dev_kqfilter_args *ap)
 
 	switch (kn->kn_filter) {
 	case EVFILT_READ:
-		kn->kn_fop = &flexfifo_filtops;
+		kn->kn_fop = &flexfifo_filtops_read;
+		kn->kn_hook = (caddr_t)fifo;
+		knote_insert(&fifo->rkq.ki_note, kn);
+		break;
+	case EVFILT_WRITE:
+		kn->kn_fop = &flexfifo_filtops_write;
 		kn->kn_hook = (caddr_t)fifo;
 		knote_insert(&fifo->rkq.ki_note, kn);
 		break;
@@ -324,7 +469,17 @@ flexfifo_ioctl(struct dev_ioctl_args *ap)
 	return ret;
 }
 
-static struct dev_ops flexfifo_ops = {
+static struct dev_ops flexfifo_ops_rw = {
+	{ "flexfifo", 0, D_MPSAFE },
+	.d_open =	flexfifo_open,
+	.d_close =	flexfifo_close,
+	.d_read =	flexfifo_read,
+	.d_write =	flexfifo_write,
+	.d_ioctl =	flexfifo_ioctl,
+	.d_kqfilter =	flexfifo_kqfilter,
+};
+
+static struct dev_ops flexfifo_ops_rd = {
 	{ "flexfifo", 0, D_MPSAFE },
 	.d_open =	flexfifo_open,
 	.d_close =	flexfifo_close,
@@ -354,8 +509,19 @@ flexfifo_create(u_int chunk, u_int count, struct flexfifo_ops *ops, int minor,
 	f->mem = NULL;
 	f->temp = NULL;
 	lockinit(&f->lk, "flexfifo", 0, LK_CANRECURSE);
-	f->dev = make_dev(&flexfifo_ops, minor, UID_ROOT, GID_WHEEL, 0600,
-	    name);
+
+	/* Separate count value for write buffer.*/
+	f->write_length = count;
+	f->write_start = 0;
+	f->write_fill = 0;
+	lockinit(&f->write_lk, "wr-flexfifo", 0, LK_CANRECURSE);
+	if (ops->sendev != NULL) {
+		f->dev = make_dev(&flexfifo_ops_rw, minor, UID_ROOT, GID_WHEEL,
+		    0600, name);
+	} else {
+		f->dev = make_dev(&flexfifo_ops_rd, minor, UID_ROOT, GID_WHEEL,
+		    0600, name);
+	}
 	f->dev->si_drv1 = f;
 	return f;
 }
@@ -385,7 +551,8 @@ flexfifo_destroy(struct flexfifo *fifo)
 	lockmgr(&fifo->lk, LK_EXCLUSIVE);
 	funsetown(&fifo->sigio);
 	lockmgr(&fifo->lk, LK_RELEASE);
-	wakeup(fifo);
+	wakeup(&fifo->fill);
+	wakeup(&fifo->write_fill);
 	devfs_assume_knotes(fifo->dev, &fifo->rkq);
 	if (fifo->mem != NULL)
 		kfree(fifo->mem, M_FLEXFIFO);
@@ -401,7 +568,7 @@ flexfifo_destroy(struct flexfifo *fifo)
 static void
 flexfifo_wakeup(struct flexfifo *fifo)
 {
-	wakeup(fifo);
+	wakeup(&fifo->fill);
 	KNOTE(&fifo->rkq.ki_note, 0);
 }
 
@@ -437,6 +604,27 @@ flexfifo_enqueue_ring(struct flexfifo *fifo, uint8_t *chunk)
 	lockmgr(&fifo->lk, LK_RELEASE);
 	if (fill == 1)
 		flexfifo_wakeup(fifo);
+}
+
+void
+flexfifo_write_done(struct flexfifo *fifo)
+{
+	u_int fill;
+
+	lockmgr(&fifo->write_lk, LK_EXCLUSIVE);
+	KKASSERT(fifo->write_fill > 0);
+	fifo->write_fill--;
+	fifo->write_start = (fifo->write_start + 1) % fifo->write_length;
+	if (fifo->write_fill > 0) {
+		fifo->ops->sendev(fifo,
+		    fifo->write_mem + fifo->write_start * fifo->chunksz);
+	}
+	fill = fifo->write_fill;
+	lockmgr(&fifo->write_lk, LK_RELEASE);
+	if (fill == fifo->write_length - 1) {
+		wakeup(&fifo->write_fill);
+		KNOTE(&fifo->rkq.ki_note, 0);
+	}
 }
 
 uint8_t *
