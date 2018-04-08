@@ -88,13 +88,12 @@ enum {
 };
 
 struct usbhid_ivars {
-	uint8_t bootproto;
 	uint16_t product_id;
 	uint16_t vendor_id;
 	uint16_t revision;
 	const char *serial_str;
 	int interval_ms;
-	int protocol;
+	int uiproto;
 };
 
 struct usbhid_softc {
@@ -524,11 +523,10 @@ usbhid_parse_descriptor(device_t dev)
 
 	for (i = 0; i <= maxid; i++) {
 		sz = hid_report_size(buf, len, hid_input, i);
-		device_printf(dev, "usbhid: report id=%d size=%d\n", i, sz);
-	}
-	if (sc->child == NULL) {
-		sc->child = device_add_child(dev, NULL, -1);
-		device_set_ivars(sc->child, &sc->ivar);
+		if (sz != 0) {
+			device_printf(dev, "usbhid: report id=%d size=%d\n",
+			    i, sz);
+		}
 	}
 }
 
@@ -741,7 +739,21 @@ usbhid_attach(device_t dev)
 
 		if (error) {
 			device_printf(dev, "no report descriptor\n");
-			goto detach;
+			/* This allows keyboards to work with Boot protocol. */
+			if ((uaa->info.bInterfaceSubClass == UISUBCLASS_BOOT) &&
+			    (uaa->info.bInterfaceProtocol == UIPROTO_BOOT_KEYBOARD)) {
+				sc->sc_isize = 8;
+				sc->sc_osize = 1;
+				sc->sc_fsize = 0;
+				sc->sc_iid = 0;
+				sc->sc_oid = 0;
+				sc->sc_fid = 0;
+				sc->sc_repdesc_ptr = NULL;
+				sc->sc_repdesc_size = 0;
+				goto skip;
+			} else {
+				goto detach;
+			}
 		}
 	}
 
@@ -793,18 +805,10 @@ usbhid_attach(device_t dev)
 	usbhid_dump(sc->sc_repdesc_ptr, sc->sc_repdesc_size);
 
 	usbhid_parse_descriptor(dev);
-	sc->ivar.bootproto = HID_BOOTPROTO_OTHER;
-	if (uaa->info.bInterfaceSubClass == UISUBCLASS_BOOT) {
-		if (uaa->info.bInterfaceProtocol == UIPROTO_BOOT_KEYBOARD &&
-		    usb_test_quirk(uaa, UQ_KBD_BOOTPROTO)) {
-			/* Prefer boot protocol for quirked devices. */
-			usbd_req_set_protocol(uaa->device, NULL,
-			    uaa->info.bIfaceIndex, 0);
-			sc->ivar.bootproto = HID_BOOTPROTO_KEYBOARD;
-		} else {
-			usbd_req_set_protocol(uaa->device, NULL,
-			    uaa->info.bIfaceIndex, 1);
-		}
+skip:
+	if (sc->child == NULL) {
+		sc->child = device_add_child(dev, NULL, -1);
+		device_set_ivars(sc->child, &sc->ivar);
 	}
 	sc->sc_orig_interval = sc->sc_xfer[USBHID_INTR_DT_RD]->interval;
 	sc->ivar.product_id = uaa->info.idProduct;
@@ -813,11 +817,12 @@ usbhid_attach(device_t dev)
 	sc->ivar.serial_str = usb_get_serial(uaa->device);
 	sc->ivar.interval_ms = -1;
 	if (uaa->info.bInterfaceProtocol == UIPROTO_BOOT_KEYBOARD)
-		sc->ivar.protocol = HID_PROTOCOL_BOOT_KEYBOARD;
+		sc->ivar.uiproto = HID_UIPROTO_BOOT_KEYBOARD;
 	else if (uaa->info.bInterfaceProtocol == UIPROTO_MOUSE)
-		sc->ivar.protocol = HID_PROTOCOL_MOUSE;
+		sc->ivar.uiproto = HID_UIPROTO_MOUSE;
 	else
-		sc->ivar.protocol = HID_PROTOCOL_OTHER;
+		sc->ivar.uiproto = HID_UIPROTO_OTHER;
+	usbd_req_set_protocol(uaa->device, NULL, uaa->info.bIfaceIndex, 1);
 	bus_generic_attach(dev);
 
 	return (0);			/* success */
@@ -870,9 +875,6 @@ usbhid_read_ivar(device_t bus, device_t child, int which, uintptr_t *result)
 	struct usbhid_ivars *ivar = device_get_ivars(child);
 
 	switch (which) {
-	case HID_IVAR_BOOTPROTO:
-		*(int *)result = ivar->bootproto;
-		break;
 	case HID_IVAR_BUSTYPE:
 		*(int *)result = HID_BUS_USB;
 		break;
@@ -888,8 +890,8 @@ usbhid_read_ivar(device_t bus, device_t child, int which, uintptr_t *result)
 	case HID_IVAR_SERIAL:
 		*(const char **)result = ivar->serial_str;
 		break;
-	case HID_IVAR_PROTOCOL:
-		*(int *)result = ivar->protocol;
+	case HID_IVAR_UIPROTO:
+		*(int *)result = ivar->uiproto;
 		break;
 	default:
 		return (EINVAL);

@@ -337,7 +337,7 @@ hidms_probe(device_t dev)
 	const char *buf;
 	uint16_t len;
 
-	if (hid_get_protocol(dev) == HID_PROTOCOL_MOUSE) {
+	if (hid_get_uiproto(dev) == HID_UIPROTO_MOUSE) {
 		device_set_desc(dev, "HID Mouse device");
 		return (BUS_PROBE_DEFAULT);
 	}
