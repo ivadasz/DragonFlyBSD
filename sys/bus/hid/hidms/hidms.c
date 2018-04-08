@@ -349,12 +349,6 @@ hidms_probe(device_t dev)
 	else
 		return (ENXIO);
 
-#if 0
-	/* XXX Do equivalent check in parent uhid driver. */
-	if (usb_test_quirk(uaa, UQ_HIDMS_IGNORE))
-		return (ENXIO);
-#endif
-
 	return (BUS_PROBE_DEFAULT);
 }
 
