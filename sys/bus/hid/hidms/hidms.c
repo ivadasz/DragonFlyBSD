@@ -77,10 +77,18 @@
 #define	HIDMS_BUT(i) ((i) < 3 ? (((i) + 2) % 3) : (i))
 #define	HIDMS_INFO_MAX	  2		/* maximum number of HID sets */
 
-#define DPRINTFN(l, f, ...)	\
-    do { if (hidms_debug >= (l)) { kprintf(f,## __VA_ARGS__); } } while(0)
+#ifdef HID_DEBUG
+#define DPRINTFN(s, l, f, ...)						\
+	do {								\
+		if ((s)->sc_debug >= (l))				\
+			device_printf((s)->dev, f,## __VA_ARGS__);	\
+	} while(0)
 
-#define DPRINTF(f, ...) DPRINTFN(1, f,## __VA_ARGS__)
+#define DPRINTF(s, f, ...) DPRINTFN(s, 1, f,## __VA_ARGS__)
+#else
+#define DPRINTFN(s, l, f, ...) do {} while (0)
+#define DPRINTF(s, f, ...) do {} while (0)
+#endif
 
 struct hidms_status {
 	uint32_t buttons;
@@ -122,6 +130,9 @@ struct hidms_softc {
 	struct lock sc_lock;
 	struct callout sc_callout;
 	struct hidms_info sc_info[HIDMS_INFO_MAX];
+#ifdef HID_DEBUG
+	int sc_debug;
+#endif
 
 	mousehw_t sc_hw;
 	mousemode_t sc_mode;
@@ -141,9 +152,6 @@ struct hidms_softc {
 	struct evdev_dev *sc_evdev;
 #endif
 };
-
-static int hidms_debug = 0;
-TUNABLE_INT("hw.hid.hidms_debug", &hidms_debug);
 
 static void hidms_put_queue_timeout(void *__sc);
 
@@ -215,7 +223,7 @@ hidms_input_handler(uint8_t id, uint8_t *buf, int len, void *arg)
 	int32_t dt = 0;
 	uint8_t i;
 
-	DPRINTFN(6, "sc=%p actlen=%d\n", sc, len);
+	DPRINTFN(sc, 6, "actlen=%d\n", len);
 
 	if (len == 0)
 		return;
@@ -276,7 +284,7 @@ repeat:
 	if (dx || dy || dz || dt || dw ||
 	    (buttons != sc->sc_status.button)) {
 
-		DPRINTFN(6, "x:%d y:%d z:%d t:%d w:%d buttons:0x%08x\n",
+		DPRINTFN(sc, 6, "x:%d y:%d z:%d t:%d w:%d buttons:0x%08x\n",
 		    dx, dy, dz, dt, dw, buttons);
 
 		/* translate T-axis into button presses until further */
@@ -328,8 +336,6 @@ hidms_probe(device_t dev)
 {
 	const char *buf;
 	uint16_t len;
-
-	DPRINTFN(11, "\n");
 
 	if (hid_get_bootproto(dev) == HID_BOOTPROTO_MOUSE) {
 		device_set_desc(dev, "HID Mouse device");
@@ -483,9 +489,10 @@ hidms_attach(device_t dev)
 	uint8_t j;
 #endif
 
-	DPRINTFN(11, "sc=%p\n", sc);
-
 	sc->dev = dev;
+#ifdef HID_DEBUG
+	TUNABLE_INT_FETCH("hw.hid.hidms.debug", &sc->sc_debug);
+#endif
 	lockinit(&sc->sc_lock, "hidms lock", 0, LK_CANRECURSE);
 	callout_init_lk(&sc->sc_callout, &sc->sc_lock);
 
@@ -502,20 +509,20 @@ hidms_attach(device_t dev)
 	for (j = 0; j < HIDMS_INFO_MAX; j++) {
 		info = &sc->sc_info[j];
 
-		DPRINTF("sc=%p, index=%d\n", sc, j);
-		DPRINTF("X\t%d/%d id=%d\n", info->sc_loc_x.pos,
+		DPRINTF(sc, "index=%d\n", j);
+		DPRINTF(sc, "X\t%d/%d id=%d\n", info->sc_loc_x.pos,
 		    info->sc_loc_x.size, info->sc_iid_x);
-		DPRINTF("Y\t%d/%d id=%d\n", info->sc_loc_y.pos,
+		DPRINTF(sc, "Y\t%d/%d id=%d\n", info->sc_loc_y.pos,
 		    info->sc_loc_y.size, info->sc_iid_y);
-		DPRINTF("Z\t%d/%d id=%d\n", info->sc_loc_z.pos,
+		DPRINTF(sc, "Z\t%d/%d id=%d\n", info->sc_loc_z.pos,
 		    info->sc_loc_z.size, info->sc_iid_z);
-		DPRINTF("T\t%d/%d id=%d\n", info->sc_loc_t.pos,
+		DPRINTF(sc, "T\t%d/%d id=%d\n", info->sc_loc_t.pos,
 		    info->sc_loc_t.size, info->sc_iid_t);
-		DPRINTF("W\t%d/%d id=%d\n", info->sc_loc_w.pos,
+		DPRINTF(sc, "W\t%d/%d id=%d\n", info->sc_loc_w.pos,
 		    info->sc_loc_w.size, info->sc_iid_w);
 
 		for (i = 0; i < info->sc_buttons; i++) {
-			DPRINTF("B%d\t%d/%d id=%d\n",
+			DPRINTF(sc, "B%d\t%d/%d id=%d\n",
 			    i + 1, info->sc_loc_btn[i].pos,
 			    info->sc_loc_btn[i].size, info->sc_iid_btn[i]);
 		}
@@ -570,6 +577,11 @@ hidms_attach(device_t dev)
 	    sc, 0, hidms_sysctl_handler_parseinfo,
 	    "", "Dump of parsed HID report descriptor");
 #endif
+#ifdef IWM_DEBUG
+	SYSCTL_ADD_INT(device_get_sysctl_ctx(dev),
+	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)), OID_AUTO, "debug",
+	    CTLFLAG_RW, &sc->sc_debug, 0, "Debug level");
+#endif
 
 	HID_SET_HANDLER(device_get_parent(dev), hidms_input_handler, NULL, sc);
 
@@ -586,8 +598,6 @@ static int
 hidms_detach(device_t self)
 {
 	struct hidms_softc *sc = device_get_softc(self);
-
-	DPRINTF("sc=%p\n", sc);
 
 	HID_STOP_READ(device_get_parent(self));
 	HID_SET_HANDLER(device_get_parent(self), NULL, NULL, NULL);
