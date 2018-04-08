@@ -685,6 +685,20 @@ usbhid_get_report(device_t dev, uint8_t id, uint8_t *buf, uint16_t len, int type
 }
 
 static int
+usbhid_set_protocol(device_t dev, int protocol)
+{
+	struct usb_attach_arg *uaa = device_get_ivars(dev);
+
+	if (protocol == HID_PROTOCOL_BOOT) {
+		return usbd_req_set_protocol(uaa->device, NULL,
+		    uaa->info.bIfaceIndex, 0);
+	} else {
+		return usbd_req_set_protocol(uaa->device, NULL,
+		    uaa->info.bIfaceIndex, 1);
+	}
+}
+
+static int
 usbhid_attach(device_t dev)
 {
 	struct usb_attach_arg *uaa = device_get_ivars(dev);
@@ -837,8 +851,11 @@ static void
 usbhid_child_detached(device_t dev, device_t child __unused)
 {
 	struct usbhid_softc *sc = device_get_softc(dev);
+	struct usb_attach_arg *uaa = device_get_ivars(dev);
 
 	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
+	/* We expect the device to be in Report Protocol mode. */
+	usbd_req_set_protocol(uaa->device, NULL, uaa->info.bIfaceIndex, 1);
 	sc->ivar.interval_ms = -1;
 	usbd_transfer_stop(sc->sc_xfer[USBHID_INTR_DT_RD]);
 	/* XXX Maybe also restore interval, when cdev is closed. */
@@ -918,6 +935,7 @@ static device_method_t usbhid_methods[] = {
 	DEVMETHOD(hid_set_report, usbhid_set_report),
 	DEVMETHOD(hid_set_feature, usbhid_set_feature),
 	DEVMETHOD(hid_get_report, usbhid_get_report),
+	DEVMETHOD(hid_set_protocol, usbhid_set_protocol),
 
 	DEVMETHOD_END
 };

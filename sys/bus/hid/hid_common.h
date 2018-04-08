@@ -88,6 +88,11 @@ struct hid_device_quirk {
 #define USB_HID_QUIRK(v, p, l, h)	\
 	{HID_BUS_USB, USB_VENDOR_##v, USB_PRODUCT_##v##_##p, l, h}
 
+enum hid_bootproto {
+	HID_PROTOCOL_BOOT,
+	HID_PROTOCOL_REPORT,
+};
+
 /* prototypes from "hid_common.c" */
 
 struct hid_data *hid_start_parse(const void *d, uint32_t len, int kindset);
