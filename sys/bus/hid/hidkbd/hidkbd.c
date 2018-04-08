@@ -834,7 +834,7 @@ hidkbd_probe(device_t dev)
 		return (ENXIO);
 #endif
 
-	if (hid_get_bootproto(dev) == HID_BOOTPROTO_KEYBOARD) {
+	if (hid_get_protocol(dev) == HID_PROTOCOL_BOOT_KEYBOARD) {
 		device_set_desc(dev, "HID Keyboard device");
 		return (BUS_PROBE_DEFAULT);
 	}
