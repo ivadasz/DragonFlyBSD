@@ -40,6 +40,7 @@
 #include <sys/sysctl.h>
 
 #include <bus/hid/hid_common.h>
+#include <bus/hid/hidvar.h>
 
 SYSCTL_NODE(_hw, OID_AUTO, hid, CTLFLAG_RW, 0, "HID debugging");
 
@@ -957,6 +958,28 @@ hid_is_absmouse(const void *d_ptr, uint16_t d_len)
 	}
 	hid_end_parse(hd);
 	return (found);
+}
+
+static int
+hid_match_quirk(device_t dev, struct hid_device_quirk *q)
+{
+	return hid_get_bustype(dev) == q->bustype &&
+	       hid_get_vendor(dev) == q->vendor &&
+	       hid_get_product(dev) == q->product &&
+	       hid_get_revision(dev) >= q->rev_start &&
+	       hid_get_revision(dev) <= q->rev_end;
+}
+
+int
+hid_match_quirks(device_t dev, struct hid_device_quirk *q, int cnt)
+{
+	int i;
+
+	for (i = 0; i < cnt; i++) {
+		if (hid_match_quirk(dev, &q[i]))
+			return 1;
+	}
+	return 0;
 }
 
 static int

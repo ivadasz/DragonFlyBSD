@@ -91,6 +91,7 @@ struct usbhid_ivars {
 	uint8_t bootproto;
 	uint16_t product_id;
 	uint16_t vendor_id;
+	uint16_t revision;
 	const char *serial_str;
 	int interval_ms;
 	int protocol;
@@ -794,6 +795,7 @@ usbhid_attach(device_t dev)
 	sc->sc_orig_interval = sc->sc_xfer[USBHID_INTR_DT_RD]->interval;
 	sc->ivar.product_id = uaa->info.idProduct;
 	sc->ivar.vendor_id = uaa->info.idVendor;
+	sc->ivar.revision = uaa->info.bcdDevice;
 	sc->ivar.serial_str = usb_get_serial(uaa->device);
 	sc->ivar.interval_ms = -1;
 	if (uaa->info.bInterfaceProtocol == UIPROTO_BOOT_KEYBOARD)
@@ -862,6 +864,9 @@ usbhid_read_ivar(device_t bus, device_t child, int which, uintptr_t *result)
 		break;
 	case HID_IVAR_VENDOR:
 		*(uint16_t *)result = ivar->vendor_id;
+		break;
+	case HID_IVAR_REVISION:
+		*(uint16_t *)result = ivar->revision;
 		break;
 	case HID_IVAR_SERIAL:
 		*(const char **)result = ivar->serial_str;
