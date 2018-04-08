@@ -65,6 +65,8 @@ __FBSDID("$FreeBSD: head/sys/dev/usb/input/ukbd.c 262972 2014-03-10 08:52:30Z hs
 #include <bus/hid/hidvar.h>
 #include "hid_if.h"
 
+#include "usbdevs.h"
+
 #ifdef EVDEV_SUPPORT
 #include <dev/misc/evdev/input.h>
 #include <dev/misc/evdev/evdev.h>
@@ -132,6 +134,29 @@ struct hidkbd_data {
 #define	MOD_EJECT	0x0100
 #define	MOD_FN		0x0200
 	uint8_t	keycode[HIDKBD_NKEYCODE];
+};
+
+static struct hid_device_quirk hidkbd_ignore_quirks[] = {
+	/* Devices which should be ignored by both ukbd and uhid */
+	USB_HID_QUIRK(CYPRESS, WISPY1A, 0x0000, 0xffff),
+	USB_HID_QUIRK(METAGEEK, WISPY1B, 0x0000, 0xffff),
+	USB_HID_QUIRK(METAGEEK, WISPY24X, 0x0000, 0xffff),
+	USB_HID_QUIRK(METAGEEK2, WISPYDBX, 0x0000, 0xffff),
+};
+
+static struct hid_device_quirk hidkbd_bootproto_quirks[] = {
+	/* MS keyboards do weird things */
+	USB_HID_QUIRK(MICROSOFT, NATURAL4000, 0x0000, 0xFFFF),
+	/* Quirk for Corsair Vengeance K60 keyboard */
+	USB_HID_QUIRK(CORSAIR, K60, 0x0000, 0xffff),
+	/* Quirk for Corsair Vengeance K70 keyboard */
+	USB_HID_QUIRK(CORSAIR, K70, 0x0000, 0xffff),
+	/* Quirk for Corsair K70 RGB keyboard */
+	USB_HID_QUIRK(CORSAIR, K70_RGB, 0x0000, 0xffff),
+	/* Quirk for Corsair STRAFE Gaming keyboard */
+	USB_HID_QUIRK(CORSAIR, STRAFE, 0x0000, 0xffff),
+	/* Holtek USB gaming keyboard */
+	USB_HID_QUIRK(HOLTEK, F85, 0x0000, 0xffff),
 };
 
 struct hidkbd_softc {
@@ -829,12 +854,12 @@ hidkbd_probe(device_t dev)
 		return (ENXIO);
 	}
 
-#if 0
-	if (usb_test_quirk(uaa, UQ_KBD_IGNORE))
+	if (hid_match_quirks(dev, hidkbd_ignore_quirks,
+	    NELEM(hidkbd_ignore_quirks))) {
 		return (ENXIO);
-#endif
+	}
 
-	if (hid_get_protocol(dev) == HID_PROTOCOL_BOOT_KEYBOARD) {
+	if (hid_get_uiproto(dev) == HID_UIPROTO_BOOT_KEYBOARD) {
 		device_set_desc(dev, "HID Keyboard device");
 		return (BUS_PROBE_DEFAULT);
 	}
@@ -1079,35 +1104,27 @@ hidkbd_attach(device_t dev)
 	/* get HID descriptor */
 	HID_GET_DESCRIPTOR(device_get_parent(dev), &hid_ptr, &hid_len);
 
-	if (hid_get_bootproto(dev) == HID_BOOTPROTO_KEYBOARD) {
-		DPRINTF("Using boot protocol\n");
-
-		hidkbd_parse_hid(sc, hidkbd_boot_desc, sizeof(hidkbd_boot_desc));
-	} else {
-		DPRINTF("Parsing HID descriptor of %d bytes\n",
-		    (int)hid_len);
-
-		hidkbd_parse_hid(sc, hid_ptr, hid_len);
-	}
-
-#if 0
 	/* check if we should use the boot protocol */
-	if (usb_test_quirk(uaa, UQ_KBD_BOOTPROTO) ||
-	    (err != 0) || (!(sc->sc_flags & HIDKBD_FLAG_EVENTS))) {
+	if (hid_match_quirks(dev, hidkbd_bootproto_quirks,
+			     NELEM(hidkbd_bootproto_quirks)) ||
+	    (hid_len == 0) || (!(sc->sc_flags & HIDKBD_FLAG_EVENTS))) {
+		int err;
 
 		DPRINTF("Forcing boot protocol\n");
 
-		err = usbd_req_set_protocol(sc->sc_udev, NULL,
-			sc->sc_iface_index, 0);
-
+		err = HID_SET_PROTOCOL(device_get_parent(dev),
+		    HID_PROTOCOL_BOOT);
 		if (err != 0) {
+#if 0
 			DPRINTF("Set protocol error=%s (ignored)\n",
 			    usbd_errstr(err));
+#else
+			DPRINTF("Set protocol error=%d (ignored)\n", err);
+#endif
 		}
 
 		hidkbd_parse_hid(sc, hidkbd_boot_desc, sizeof(hidkbd_boot_desc));
 	}
-#endif
 
 	if (sc->sc_led_size > 0) {
 		/*

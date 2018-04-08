@@ -471,8 +471,8 @@ uhid_probe(device_t dev)
 	 * attach properly when loaded.
 	 */
 	if (uhid_probe_kbd_ms == 0 &&
-	    (hid_get_protocol(dev) == HID_PROTOCOL_BOOT_KEYBOARD ||
-	     hid_get_protocol(dev) == HID_PROTOCOL_MOUSE))
+	    (hid_get_uiproto(dev) == HID_UIPROTO_BOOT_KEYBOARD ||
+	     hid_get_uiproto(dev) == HID_UIPROTO_MOUSE))
 		return (ENXIO);
 
 	device_set_desc(dev, "Generic HID device");
