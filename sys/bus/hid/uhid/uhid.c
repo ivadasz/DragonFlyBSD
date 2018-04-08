@@ -403,9 +403,9 @@ uhid_ioctl(void *arg, caddr_t data, u_long cmd, int fflags)
 			lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
 			STAILQ_INSERT_TAIL(&sc->sc_pending_evs, &rep, entries);
 			uhid_start_writing(sc);
-			while (rep.done == 0 && sc->sc_detaching == 0) {
+			while (rep.done == 0) {
 				lksleep(&sc->sc_pending_evs, &sc->sc_lock,
-				    PCATCH, "uhid-wait", 0);
+				    0, "uhid-wait", 0);
 			}
 			lockmgr(&sc->sc_lock, LK_RELEASE);
 			break;
@@ -423,6 +423,17 @@ uhid_ioctl(void *arg, caddr_t data, u_long cmd, int fflags)
 	return (error);
 }
 
+static void
+uhid_cancel_pending_evs(struct uhid_softc *sc)
+{
+	struct hid_report_list *rep;
+
+	while ((rep = STAILQ_FIRST(&sc->sc_pending_evs)) != NULL) {
+		STAILQ_REMOVE_HEAD(&sc->sc_pending_evs, entries);
+		rep->done = 1;
+		rep->cb(rep->arg, rep);
+	}
+}
 
 static void
 uhid_open(void *arg)
@@ -442,6 +453,7 @@ uhid_close(void *arg)
 
 	HID_STOP_READ(device_get_parent(sc->sc_dev));
 	HID_SET_HANDLER(device_get_parent(sc->sc_dev), NULL, NULL, NULL);
+	uhid_cancel_pending_evs(sc);
 	STAILQ_INIT(&sc->sc_pending_evs);
 	sc->sc_writing = 0;
 }
@@ -561,6 +573,7 @@ uhid_detach(device_t dev)
 
 	HID_STOP_READ(device_get_parent(dev));
 	HID_SET_HANDLER(device_get_parent(dev), NULL, NULL, NULL);
+	uhid_cancel_pending_evs(sc);
 
 	if (sc->sc_fifo != NULL)
 		flexfifo_destroy(sc->sc_fifo);
