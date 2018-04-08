@@ -81,7 +81,9 @@ enum {
 	USBHID_INTR_DT_WR,
 	USBHID_INTR_DT_RD,
 	USBHID_CTRL_DT_WR,
+#if 0
 	USBHID_CTRL_DT_RD,
+#endif
 	USBHID_N_TRANSFER,
 };
 
@@ -148,7 +150,9 @@ static device_detach_t usbhid_detach;
 static usb_callback_t usbhid_intr_write_callback;
 static usb_callback_t usbhid_intr_read_callback;
 static usb_callback_t usbhid_write_callback;
+#if 0
 static usb_callback_t usbhid_read_callback;
+#endif
 
 static void usbhid_dump(u_char *ptr, uint16_t len);
 
@@ -287,6 +291,7 @@ usbhid_fill_set_report(struct usb_device_request *req, uint8_t iface_no,
 	USETW(req->wLength, size);
 }
 
+#if 0
 static void
 usbhid_fill_get_report(struct usb_device_request *req, uint8_t iface_no,
     uint8_t type, uint8_t id, uint16_t size)
@@ -298,6 +303,7 @@ usbhid_fill_get_report(struct usb_device_request *req, uint8_t iface_no,
 	req->wIndex[1] = 0;
 	USETW(req->wLength, size);
 }
+#endif
 
 static void
 usbhid_write_callback(struct usb_xfer *xfer, usb_error_t error)
@@ -346,6 +352,7 @@ usbhid_write_callback(struct usb_xfer *xfer, usb_error_t error)
 	}
 }
 
+#if 0
 static void
 usbhid_read_callback(struct usb_xfer *xfer, usb_error_t error)
 {
@@ -383,6 +390,7 @@ usbhid_read_callback(struct usb_xfer *xfer, usb_error_t error)
 		return;
 	}
 }
+#endif
 
 static const struct usb_config usbhid_config[USBHID_N_TRANSFER] = {
 
@@ -413,6 +421,7 @@ static const struct usb_config usbhid_config[USBHID_N_TRANSFER] = {
 		.timeout = 1000,	/* 1 second */
 	},
 
+#if 0
 	[USBHID_CTRL_DT_RD] = {
 		.type = UE_CONTROL,
 		.endpoint = 0x00,	/* Control pipe */
@@ -421,6 +430,7 @@ static const struct usb_config usbhid_config[USBHID_N_TRANSFER] = {
 		.callback = &usbhid_read_callback,
 		.timeout = 1000,	/* 1 second */
 	},
+#endif
 };
 
 static void
