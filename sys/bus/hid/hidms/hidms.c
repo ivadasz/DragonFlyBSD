@@ -220,13 +220,6 @@ hidms_input_handler(uint8_t id, uint8_t *buf, int len, void *arg)
 	if (len == 0)
 		return;
 
-	DPRINTFN(6, "data = %02x %02x %02x %02x "
-	    "%02x %02x %02x %02x\n",
-	    (len > 0) ? buf[0] : 0, (len > 1) ? buf[1] : 0,
-	    (len > 2) ? buf[2] : 0, (len > 3) ? buf[3] : 0,
-	    (len > 4) ? buf[4] : 0, (len > 5) ? buf[5] : 0,
-	    (len > 6) ? buf[6] : 0, (len > 7) ? buf[7] : 0);
-
 	if (sc->sc_info[0].sc_flags & HIDMS_FLAG_SBU) {
 		if ((*buf == 0x14) || (*buf == 0x15))
 			return;
@@ -479,6 +472,7 @@ hidms_attach(device_t dev)
 {
 	struct hidms_softc *sc = device_get_softc(dev);
 	const char *d_ptr = NULL;
+	char buf[16];
 #ifdef EVDEV_SUPPORT
 	struct hidms_info *info;
 	int err;
@@ -497,58 +491,11 @@ hidms_attach(device_t dev)
 
 	HID_GET_DESCRIPTOR(device_get_parent(dev), &d_ptr, &d_len);
 
-	/*
-	 * The Microsoft Wireless Notebook Optical Mouse seems to be in worse
-	 * shape than the Wireless Intellimouse 2.0, as its X, Y, wheel, and
-	 * all of its other button positions are all off. It also reports that
-	 * it has two addional buttons and a tilt wheel.
-	 */
-#if 0
-	if (usb_test_quirk(uaa, UQ_MS_BAD_CLASS)) {
-
-		sc->sc_iid = 0;
-
-		info = &sc->sc_info[0];
-		info->sc_flags = (HIDMS_FLAG_X_AXIS |
-		    HIDMS_FLAG_Y_AXIS |
-		    HIDMS_FLAG_Z_AXIS |
-		    HIDMS_FLAG_SBU);
-		info->sc_buttons = 3;
-		isize = 5;
-		/* 1st byte of descriptor report contains garbage */
-		info->sc_loc_x.pos = 16;
-		info->sc_loc_x.size = 8;
-		info->sc_loc_y.pos = 24;
-		info->sc_loc_y.size = 8;
-		info->sc_loc_z.pos = 32;
-		info->sc_loc_z.size = 8;
-		info->sc_loc_btn[0].pos = 8;
-		info->sc_loc_btn[0].size = 1;
-		info->sc_loc_btn[1].pos = 9;
-		info->sc_loc_btn[1].size = 1;
-		info->sc_loc_btn[2].pos = 10;
-		info->sc_loc_btn[2].size = 1;
-
-		/* Announce device */
-		device_printf(dev, "3 buttons and [XYZ] "
-		    "coordinates ID=0\n");
-
-	} else
-#endif
-	{
-		/* Search the HID descriptor and announce device */
-		for (i = 0; i < HIDMS_INFO_MAX; i++) {
-			hidms_hid_parse(sc, dev, d_ptr, d_len, i);
-		}
+	/* Search the HID descriptor and announce device */
+	for (i = 0; i < HIDMS_INFO_MAX; i++) {
+		hidms_hid_parse(sc, dev, d_ptr, d_len, i);
 	}
 
-#if 0
-	if (usb_test_quirk(uaa, UQ_MS_REVZ)) {
-		info = &sc->sc_info[0];
-		/* Some wheels need the Z axis reversed. */
-		info->sc_flags |= HIDMS_FLAG_REVZ;
-	}
-#endif
 	d_ptr = NULL;
 
 #ifdef HID_DEBUG
@@ -573,12 +520,8 @@ hidms_attach(device_t dev)
 			    info->sc_loc_btn[i].size, info->sc_iid_btn[i]);
 		}
 	}
-#if 0	/* This information is already printed by the HID bus parent. */
-	DPRINTF("size=%d, id=%d\n", isize, sc->sc_iid);
-#endif
 #endif
 
-	char buf[16];
 	ksnprintf(buf, sizeof(buf), "hidms%d", device_get_unit(dev));
 	sc->sc_fifo = flexfifo_create(sizeof(struct hidms_status), 256,
 	    &hidms_fifo_ops, device_get_unit(dev), buf, sc, 8);
