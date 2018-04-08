@@ -71,6 +71,7 @@ static int usbhid_debug = 0;
 static SYSCTL_NODE(_hw_usb, OID_AUTO, usbhid, CTLFLAG_RW, 0, "USB usbhid");
 SYSCTL_INT(_hw_usb_usbhid, OID_AUTO, debug, CTLFLAG_RW,
     &usbhid_debug, 0, "Debug level");
+TUNABLE_INT("hw.usb.usbhid.debug", &usbhid_debug);
 #endif
 
 #define	USBHID_BSIZE	1024		/* bytes, buffer size */
@@ -94,6 +95,7 @@ struct usbhid_ivars {
 };
 
 struct usbhid_softc {
+	device_t sc_dev;
 	struct lock sc_lock;
 
 	struct usbhid_ivars ivar;
@@ -225,9 +227,15 @@ usbhid_intr_read_callback(struct usb_xfer *xfer, usb_error_t error)
 			/* limit report length to the maximum */
 			if (actlen > (int)sc->sc_max_isize)
 				actlen = sc->sc_max_isize;
-			/* XXX handle data */
 			usbd_copy_out(pc, 0, sc->sc_buffer, actlen);
-//			usbhid_dump(sc->sc_buffer, actlen);
+#ifdef USB_DEBUG
+			if (usbhid_debug >= 6) {
+				device_printf(sc->sc_dev,
+				    "report (length: %u):\n",
+				    sc->sc_max_isize);
+				usbhid_dump(sc->sc_buffer, actlen);
+			}
+#endif
 			if (sc->input_handler != NULL) {
 				uint8_t id = 0;
 				uint8_t *buffer = sc->sc_buffer;
@@ -501,11 +509,11 @@ usbhid_parse_descriptor(device_t dev)
 	int i, maxid, sz;
 
 	maxid = usbhid_maxrepid(buf, len);
-	kprintf("usbhid: max report id: %d\n", maxid);
+	device_printf(dev, "max report id: %d\n", maxid);
 
 	for (i = 0; i <= maxid; i++) {
 		sz = hid_report_size(buf, len, hid_input, i);
-		kprintf("usbhid: report id=%d size=%d\n", i, sz);
+		device_printf(dev, "usbhid: report id=%d size=%d\n", i, sz);
 	}
 	if (sc->child == NULL) {
 		sc->child = device_add_child(dev, NULL, -1);
@@ -674,6 +682,7 @@ usbhid_attach(device_t dev)
 
 	DPRINTFN(10, "sc=%p\n", sc);
 
+	sc->sc_dev = dev;
 	device_set_usb_desc(dev);
 
 	lockinit(&sc->sc_lock, "usbhid lock", 0, LK_CANRECURSE);
