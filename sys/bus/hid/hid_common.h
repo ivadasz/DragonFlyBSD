@@ -77,7 +77,18 @@ struct hid_item {
 	struct hid_location loc;
 };
 
-/* prototypes from "hid.c" */
+struct hid_device_quirk {
+	int bustype;
+	uint16_t vendor;
+	uint16_t product;
+	uint16_t rev_start;
+	uint16_t rev_end;
+};
+
+#define USB_HID_QUIRK(v, p, l, h)	\
+	{HID_BUS_USB, USB_VENDOR_##v, USB_PRODUCT_##v##_##p, l, h}
+
+/* prototypes from "hid_common.c" */
 
 struct hid_data *hid_start_parse(const void *d, uint32_t len, int kindset);
 void	hid_end_parse(struct hid_data *s);
@@ -104,6 +115,7 @@ int	hid_is_mouse(const void *d_ptr, uint16_t d_len);
 int	hid_is_keyboard(const void *d_ptr, uint16_t d_len);
 int	hid_is_digitizer(const void *d_ptr, uint16_t d_len);
 int	hid_is_absmouse(const void *d_ptr, uint16_t d_len);
+int	hid_match_quirks(device_t dev, struct hid_device_quirk *q, int cnt);
 
 typedef void (*hid_input_handler_t)(uint8_t id, uint8_t *buf, int count,
 				    void *arg);
