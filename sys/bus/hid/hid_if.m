@@ -108,3 +108,9 @@ METHOD int get_report {
 	uint16_t len;
 	int type;
 }
+
+# SET_PROTOCOL
+METHOD int set_protocol {
+	device_t dev;
+	int protocol;
+}
