@@ -281,27 +281,13 @@ struct hidkbd_softc {
 			 SCAN_PREFIX_CTL | SCAN_PREFIX_SHIFT)
 #define	SCAN_CHAR(c)	((c) & 0x7f)
 
-#define	HIDKBD_LOCK(sc)	lockmgr(&(sc)->sc_kbd.kb_lock, LK_EXCLUSIVE)
-#define	HIDKBD_UNLOCK(sc)	lockmgr(&(sc)->sc_kbd.kb_lock, LK_RELEASE)
+#define	HIDKBD_LOCK(s)	lockmgr(&(s)->sc_kbd.kb_lock, LK_EXCLUSIVE)
+#define	HIDKBD_UNLOCK(s)	lockmgr(&(s)->sc_kbd.kb_lock, LK_RELEASE)
 
 #ifdef	INVARIANTS
-
-/*
- * Assert that the lock is held in all contexts
- * where the code can be executed.
- */
-#define	HIDKBD_LOCK_ASSERT()
-
-/*
- * Assert that the lock is held in the contexts
- * where it really has to be so.
- */
-#define	HIDKBD_CTX_LOCK_ASSERT()
+#define	HIDKBD_LOCK_ASSERT(s)	KKASSERT(lockowned(&(s)->sc_kbd.kb_lock))
 #else
-
-#define HIDKBD_LOCK_ASSERT()	(void)0
-#define HIDKBD_CTX_LOCK_ASSERT()	(void)0
-
+#define HIDKBD_LOCK_ASSERT(s)	do { } while (0)
 #endif
 
 struct hidkbd_mods {
@@ -431,7 +417,9 @@ static void
 hidkbd_put_key(struct hidkbd_softc *sc, uint32_t key)
 {
 
-	HIDKBD_CTX_LOCK_ASSERT();
+#if 0
+	HIDKBD_LOCK_ASSERT(sc);
+#endif
 
 	DPRINTF(sc, "0x%02x (%d) %s\n", key, key,
 	    (key & KEY_RELEASE) ? "released" : "pressed");
@@ -460,7 +448,9 @@ static void
 hidkbd_do_poll(struct hidkbd_softc *sc, uint8_t wait)
 {
 
-	HIDKBD_CTX_LOCK_ASSERT();
+#if 0
+	HIDKBD_LOCK_ASSERT(sc);
+#endif
 	KASSERT((sc->sc_flags & HIDKBD_FLAG_POLLING) != 0,
 	    ("hidkbd_do_poll called when not polling\n"));
 	DPRINTFN(sc, 2, "polling\n");
@@ -511,7 +501,9 @@ hidkbd_get_key(struct hidkbd_softc *sc, uint8_t wait)
 {
 	int32_t c;
 
-	HIDKBD_CTX_LOCK_ASSERT();
+#if 0
+	HIDKBD_LOCK_ASSERT(sc);
+#endif
 #if 0
 	KASSERT((!kdb_active && !SCHEDULER_STOPPED())
 	    || (sc->sc_flags & HIDKBD_FLAG_POLLING) != 0,
@@ -551,7 +543,9 @@ hidkbd_interrupt(struct hidkbd_softc *sc)
 	uint8_t i;
 	uint8_t j;
 
-	HIDKBD_CTX_LOCK_ASSERT();
+#if 0
+	HIDKBD_LOCK_ASSERT(sc);
+#endif
 
 	if (sc->sc_ndata.keycode[0] == KEY_ERROR)
 		return;
@@ -638,7 +632,9 @@ hidkbd_event_keyinput(struct hidkbd_softc *sc)
 {
 	int c;
 
-	HIDKBD_CTX_LOCK_ASSERT();
+#if 0
+	HIDKBD_LOCK_ASSERT(sc);
+#endif
 
 	if ((sc->sc_flags & HIDKBD_FLAG_POLLING) != 0)
 		return;
@@ -664,7 +660,7 @@ hidkbd_timeout(void *arg)
 {
 	struct hidkbd_softc *sc = arg;
 
-	HIDKBD_LOCK_ASSERT();
+	HIDKBD_LOCK_ASSERT(sc);
 
 	sc->sc_time_ms += 25;	/* milliseconds */
 
@@ -853,8 +849,6 @@ hidkbd_probe(device_t dev)
 	const char *d_ptr;
 	int error;
 	uint16_t d_len;
-
-	HIDKBD_LOCK_ASSERT();
 
 	if (sw == NULL) {
 		return (ENXIO);
@@ -1074,8 +1068,6 @@ hidkbd_attach(device_t dev)
 	int rate;
 #endif
 
-	HIDKBD_LOCK_ASSERT();
-
 	kbd_init_struct(kbd, HIDKBD_DRIVER_NAME, KB_OTHER,
             unit, 0, KB_PRI_USB, 0, 0);
 
@@ -1102,7 +1094,9 @@ hidkbd_attach(device_t dev)
 
 	KBD_FOUND_DEVICE(kbd);
 
+	HIDKBD_LOCK(sc);
 	hidkbd_clear_state(kbd);
+	HIDKBD_UNLOCK(sc);
 
 	/*
 	 * FIXME: set the initial value for lock keys in "sc_state"
@@ -1243,8 +1237,6 @@ hidkbd_detach(device_t dev)
 	struct hidkbd_softc *sc = device_get_softc(dev);
 	int error;
 
-	HIDKBD_LOCK_ASSERT();
-
 	HID_STOP_READ(device_get_parent(dev));
 	HID_SET_HANDLER(device_get_parent(dev), NULL, NULL, NULL);
 
@@ -1313,9 +1305,9 @@ hidkbd_resume(device_t dev)
 {
 	struct hidkbd_softc *sc = device_get_softc(dev);
 
-	HIDKBD_LOCK_ASSERT();
-
+	HIDKBD_LOCK(sc);
 	hidkbd_clear_state(&sc->sc_kbd);
+	HIDKBD_UNLOCK(sc);
 
 	return (0);
 }
@@ -1401,7 +1393,9 @@ hidkbd_check(keyboard_t *kbd)
 {
 	struct hidkbd_softc *sc = kbd->kb_data;
 
-	HIDKBD_CTX_LOCK_ASSERT();
+#if 0
+	HIDKBD_LOCK_ASSERT(sc);
+#endif
 
 	if (!KBD_IS_ACTIVE(kbd))
 		return (0);
@@ -1426,7 +1420,9 @@ hidkbd_check_char_locked(keyboard_t *kbd)
 {
 	struct hidkbd_softc *sc = kbd->kb_data;
 
-	HIDKBD_CTX_LOCK_ASSERT();
+#if 0
+	HIDKBD_LOCK_ASSERT(sc);
+#endif
 
 	if (!KBD_IS_ACTIVE(kbd))
 		return (0);
@@ -1468,7 +1464,7 @@ hidkbd_read(keyboard_t *kbd, int wait)
 
 #endif
 
-	HIDKBD_CTX_LOCK_ASSERT();
+	HIDKBD_LOCK_ASSERT(sc);
 
 	if (!KBD_IS_ACTIVE(kbd))
 		return (-1);
@@ -1517,7 +1513,9 @@ hidkbd_read_char_locked(keyboard_t *kbd, int wait)
 	uint32_t scancode;
 #endif
 
-	HIDKBD_CTX_LOCK_ASSERT();
+#if 0
+	HIDKBD_LOCK_ASSERT(sc);
+#endif
 
 	if (!KBD_IS_ACTIVE(kbd))
 		return (NOKEY);
@@ -1857,7 +1855,7 @@ hidkbd_clear_state(keyboard_t *kbd)
 {
 	struct hidkbd_softc *sc = kbd->kb_data;
 
-	HIDKBD_CTX_LOCK_ASSERT();
+	HIDKBD_LOCK_ASSERT(sc);
 
 	sc->sc_flags &= ~(HIDKBD_FLAG_COMPOSE | HIDKBD_FLAG_POLLING);
 	sc->sc_state &= LOCK_MASK;	/* preserve locking key state */
@@ -1910,7 +1908,7 @@ hidkbd_poll(keyboard_t *kbd, int on)
 static void
 hidkbd_set_leds(struct hidkbd_softc *sc, uint8_t leds)
 {
-	HIDKBD_LOCK_ASSERT();
+	HIDKBD_LOCK_ASSERT(sc);
 	DPRINTF(sc, "leds=0x%02x\n", leds);
 	uint8_t *buf = NULL;
 
