@@ -88,28 +88,31 @@ __FBSDID("$FreeBSD: head/sys/dev/usb/input/ukbd.c 262972 2014-03-10 08:52:30Z hs
 /* the following file must be included after "hidkbdmap.h" */
 #include <dev/misc/kbd/kbdtables.h>
 
-static int hidkbd_debug = 0;
 static int hidkbd_no_leds = 0;
-#ifdef HID_DEBUG
-static int hidkbd_pollrate = 0;
-
 static SYSCTL_NODE(_hw_hid, OID_AUTO, hidkbd, CTLFLAG_RW, 0, "HID keyboard");
-SYSCTL_INT(_hw_hid_hidkbd, OID_AUTO, debug, CTLFLAG_RW,
-    &hidkbd_debug, 0, "Debug level");
 SYSCTL_INT(_hw_hid_hidkbd, OID_AUTO, no_leds, CTLFLAG_RW,
     &hidkbd_no_leds, 0, "Disables setting of keyboard leds");
+TUNABLE_INT("hw.hid.hidkbd.no_leds", &hidkbd_no_leds);
+
+#ifdef HID_DEBUG
+static int hidkbd_pollrate = 0;
 SYSCTL_INT(_hw_hid_hidkbd, OID_AUTO, pollrate, CTLFLAG_RW,
     &hidkbd_pollrate, 0, "Force this polling rate, 1-1000Hz");
-
 TUNABLE_INT("hw.hid.hidkbd.pollrate", &hidkbd_pollrate);
 #endif
-TUNABLE_INT("hw.hid.hidkbd_no_leds", &hidkbd_no_leds);
-TUNABLE_INT("hw.hid.hidkbd_debug", &hidkbd_debug);
 
-#define DPRINTFN(l, f, ...)	\
-    do { if (hidkbd_debug >= (l)) { kprintf(f,## __VA_ARGS__); } } while(0)
+#ifdef HID_DEBUG
+#define DPRINTFN(s, l, f, ...)					\
+	do {							\
+		if ((s)->sc_debug >= (l))			\
+			device_printf((s)->sc_dev, f,## __VA_ARGS__);	\
+	} while(0)
 
-#define DPRINTF(f, ...) DPRINTFN(1, f,## __VA_ARGS__)
+#define DPRINTF(s, f, ...) DPRINTFN(s, 1, f,## __VA_ARGS__)
+#else
+#define DPRINTFN(s, l, f, ...)	do { } while (0)
+#define DPRINTF(s, f, ...)	do { } while (0)
+#endif
 
 #define	HIDKBD_EMULATE_ATSCANCODE       1
 #define	HIDKBD_DRIVER_NAME		"hidkbd"
@@ -256,6 +259,10 @@ struct hidkbd_softc {
 	uint8_t sc_id_scrolllock;
 	uint8_t sc_id_events;
 	uint8_t sc_kbd_id;
+
+#ifdef HID_DEBUG
+	int sc_debug;
+#endif
 };
 
 #define	KEY_ERROR	  0x01
@@ -426,7 +433,7 @@ hidkbd_put_key(struct hidkbd_softc *sc, uint32_t key)
 
 	HIDKBD_CTX_LOCK_ASSERT();
 
-	DPRINTF("0x%02x (%d) %s\n", key, key,
+	DPRINTF(sc, "0x%02x (%d) %s\n", key, key,
 	    (key & KEY_RELEASE) ? "released" : "pressed");
 
 #ifdef EVDEV_SUPPORT
@@ -445,7 +452,7 @@ hidkbd_put_key(struct hidkbd_softc *sc, uint32_t key)
 			sc->sc_inputtail = 0;
 		}
 	} else {
-		DPRINTF("input buffer is full\n");
+		DPRINTF(sc, "input buffer is full\n");
 	}
 }
 
@@ -456,7 +463,7 @@ hidkbd_do_poll(struct hidkbd_softc *sc, uint8_t wait)
 	HIDKBD_CTX_LOCK_ASSERT();
 	KASSERT((sc->sc_flags & HIDKBD_FLAG_POLLING) != 0,
 	    ("hidkbd_do_poll called when not polling\n"));
-	DPRINTFN(2, "polling\n");
+	DPRINTFN(sc, 2, "polling\n");
 #if 0 /* XXX */
 	if (!kdb_active && !SCHEDULER_STOPPED()) {
 		/*
@@ -701,10 +708,10 @@ hidkbd_input_handler(uint8_t id, uint8_t *buf, int len, void *arg)
 	struct hidkbd_softc *sc = arg;
 	uint8_t i;
 
-	DPRINTF("actlen=%d bytes\n", len);
+	DPRINTF(sc, "actlen=%d bytes\n", len);
 
 	if (len == 0) {
-		DPRINTF("zero length data\n");
+		DPRINTF(sc, "zero length data\n");
 		return;
 	}
 
@@ -794,10 +801,10 @@ hidkbd_input_handler(uint8_t id, uint8_t *buf, int len, void *arg)
 	}
 
 #ifdef HID_DEBUG
-	DPRINTF("modifiers = 0x%04x\n", (int)sc->sc_modifiers);
+	DPRINTF(sc, "modifiers = 0x%04x\n", (int)sc->sc_modifiers);
 	for (i = 0; i < HIDKBD_NKEYCODE; i++) {
 		if (sc->sc_ndata.keycode[i]) {
-			DPRINTF("[%d] = 0x%02x\n",
+			DPRINTF(sc, "[%d] = 0x%02x\n",
 			    (int)i, (int)sc->sc_ndata.keycode[i]);
 		}
 	}
@@ -848,7 +855,6 @@ hidkbd_probe(device_t dev)
 	uint16_t d_len;
 
 	HIDKBD_LOCK_ASSERT();
-	DPRINTFN(11, "\n");
 
 	if (sw == NULL) {
 		return (ENXIO);
@@ -906,7 +912,7 @@ hidkbd_parse_hid(struct hidkbd_softc *sc, const uint8_t *ptr, uint32_t len)
 		if (flags & HIO_VARIABLE)
 			sc->sc_flags |= HIDKBD_FLAG_APPLE_EJECT |
 			    HIDKBD_FLAG_APPLE_SWAP;
-		DPRINTFN(1, "Found Apple eject-key\n");
+		DPRINTFN(sc, 1, "Found Apple eject-key\n");
 	}
 	if (hid_locate(ptr, len,
 	    HID_USAGE2(0xFFFF, 0x0003),
@@ -914,7 +920,7 @@ hidkbd_parse_hid(struct hidkbd_softc *sc, const uint8_t *ptr, uint32_t len)
 	    &sc->sc_id_apple_fn)) {
 		if (flags & HIO_VARIABLE)
 			sc->sc_flags |= HIDKBD_FLAG_APPLE_FN;
-		DPRINTFN(1, "Found Apple FN-key\n");
+		DPRINTFN(sc, 1, "Found Apple FN-key\n");
 	}
 	/* figure out some keys */
 	if (hid_locate(ptr, len,
@@ -923,7 +929,7 @@ hidkbd_parse_hid(struct hidkbd_softc *sc, const uint8_t *ptr, uint32_t len)
 	    &sc->sc_id_ctrl_l)) {
 		if (flags & HIO_VARIABLE)
 			sc->sc_flags |= HIDKBD_FLAG_CTRL_L;
-		DPRINTFN(1, "Found left control\n");
+		DPRINTFN(sc, 1, "Found left control\n");
 	}
 	if (hid_locate(ptr, len,
 	    HID_USAGE2(HUP_KEYBOARD, 0xE4),
@@ -931,7 +937,7 @@ hidkbd_parse_hid(struct hidkbd_softc *sc, const uint8_t *ptr, uint32_t len)
 	    &sc->sc_id_ctrl_r)) {
 		if (flags & HIO_VARIABLE)
 			sc->sc_flags |= HIDKBD_FLAG_CTRL_R;
-		DPRINTFN(1, "Found right control\n");
+		DPRINTFN(sc, 1, "Found right control\n");
 	}
 	if (hid_locate(ptr, len,
 	    HID_USAGE2(HUP_KEYBOARD, 0xE1),
@@ -939,7 +945,7 @@ hidkbd_parse_hid(struct hidkbd_softc *sc, const uint8_t *ptr, uint32_t len)
 	    &sc->sc_id_shift_l)) {
 		if (flags & HIO_VARIABLE)
 			sc->sc_flags |= HIDKBD_FLAG_SHIFT_L;
-		DPRINTFN(1, "Found left shift\n");
+		DPRINTFN(sc, 1, "Found left shift\n");
 	}
 	if (hid_locate(ptr, len,
 	    HID_USAGE2(HUP_KEYBOARD, 0xE5),
@@ -947,7 +953,7 @@ hidkbd_parse_hid(struct hidkbd_softc *sc, const uint8_t *ptr, uint32_t len)
 	    &sc->sc_id_shift_r)) {
 		if (flags & HIO_VARIABLE)
 			sc->sc_flags |= HIDKBD_FLAG_SHIFT_R;
-		DPRINTFN(1, "Found right shift\n");
+		DPRINTFN(sc, 1, "Found right shift\n");
 	}
 	if (hid_locate(ptr, len,
 	    HID_USAGE2(HUP_KEYBOARD, 0xE2),
@@ -955,7 +961,7 @@ hidkbd_parse_hid(struct hidkbd_softc *sc, const uint8_t *ptr, uint32_t len)
 	    &sc->sc_id_alt_l)) {
 		if (flags & HIO_VARIABLE)
 			sc->sc_flags |= HIDKBD_FLAG_ALT_L;
-		DPRINTFN(1, "Found left alt\n");
+		DPRINTFN(sc, 1, "Found left alt\n");
 	}
 	if (hid_locate(ptr, len,
 	    HID_USAGE2(HUP_KEYBOARD, 0xE6),
@@ -963,7 +969,7 @@ hidkbd_parse_hid(struct hidkbd_softc *sc, const uint8_t *ptr, uint32_t len)
 	    &sc->sc_id_alt_r)) {
 		if (flags & HIO_VARIABLE)
 			sc->sc_flags |= HIDKBD_FLAG_ALT_R;
-		DPRINTFN(1, "Found right alt\n");
+		DPRINTFN(sc, 1, "Found right alt\n");
 	}
 	if (hid_locate(ptr, len,
 	    HID_USAGE2(HUP_KEYBOARD, 0xE3),
@@ -971,7 +977,7 @@ hidkbd_parse_hid(struct hidkbd_softc *sc, const uint8_t *ptr, uint32_t len)
 	    &sc->sc_id_win_l)) {
 		if (flags & HIO_VARIABLE)
 			sc->sc_flags |= HIDKBD_FLAG_WIN_L;
-		DPRINTFN(1, "Found left GUI\n");
+		DPRINTFN(sc, 1, "Found left GUI\n");
 	}
 	if (hid_locate(ptr, len,
 	    HID_USAGE2(HUP_KEYBOARD, 0xE7),
@@ -979,7 +985,7 @@ hidkbd_parse_hid(struct hidkbd_softc *sc, const uint8_t *ptr, uint32_t len)
 	    &sc->sc_id_win_r)) {
 		if (flags & HIO_VARIABLE)
 			sc->sc_flags |= HIDKBD_FLAG_WIN_R;
-		DPRINTFN(1, "Found right GUI\n");
+		DPRINTFN(sc, 1, "Found right GUI\n");
 	}
 	/* figure out event buffer */
 	if (hid_locate(ptr, len,
@@ -987,10 +993,10 @@ hidkbd_parse_hid(struct hidkbd_softc *sc, const uint8_t *ptr, uint32_t len)
 	    hid_input, 0, &sc->sc_loc_events, &flags,
 	    &sc->sc_id_events)) {
 		if (flags & HIO_VARIABLE) {
-			DPRINTFN(1, "Ignoring keyboard event control\n");
+			DPRINTFN(sc, 1, "Ignoring keyboard event control\n");
 		} else {
 			sc->sc_flags |= HIDKBD_FLAG_EVENTS;
-			DPRINTFN(1, "Found keyboard event array\n");
+			DPRINTFN(sc, 1, "Found keyboard event array\n");
 		}
 	}
 
@@ -1002,7 +1008,7 @@ hidkbd_parse_hid(struct hidkbd_softc *sc, const uint8_t *ptr, uint32_t len)
 	    &sc->sc_id_numlock)) {
 		if (flags & HIO_VARIABLE)
 			sc->sc_flags |= HIDKBD_FLAG_NUMLOCK;
-		DPRINTFN(1, "Found keyboard numlock\n");
+		DPRINTFN(sc, 1, "Found keyboard numlock\n");
 		if (any == 0) {
 			outid = sc->sc_id_numlock;
 			any = 1;
@@ -1014,12 +1020,12 @@ hidkbd_parse_hid(struct hidkbd_softc *sc, const uint8_t *ptr, uint32_t len)
 	    &sc->sc_id_capslock)) {
 		if (flags & HIO_VARIABLE)
 			sc->sc_flags |= HIDKBD_FLAG_CAPSLOCK;
-		DPRINTFN(1, "Found keyboard capslock\n");
+		DPRINTFN(sc, 1, "Found keyboard capslock\n");
 		if (any == 0) {
 			outid = sc->sc_id_capslock;
 			any = 1;
 		} else if (outid != sc->sc_id_capslock) {
-			DPRINTFN(1, "Capslock on different id %d\n",
+			DPRINTFN(sc, 1, "Capslock on different id %d\n",
 			    sc->sc_id_capslock);
 			sc->sc_flags &= ~HIDKBD_FLAG_CAPSLOCK;
 		}
@@ -1030,12 +1036,12 @@ hidkbd_parse_hid(struct hidkbd_softc *sc, const uint8_t *ptr, uint32_t len)
 	    &sc->sc_id_scrolllock)) {
 		if (flags & HIO_VARIABLE)
 			sc->sc_flags |= HIDKBD_FLAG_SCROLLLOCK;
-		DPRINTFN(1, "Found keyboard scrolllock\n");
+		DPRINTFN(sc, 1, "Found keyboard scrolllock\n");
 		if (any == 0) {
 			outid = sc->sc_id_scrolllock;
 			any = 1;
 		} else if (outid != sc->sc_id_capslock) {
-			DPRINTFN(1, "Scrolllock on different id %d\n",
+			DPRINTFN(sc, 1, "Scrolllock on different id %d\n",
 			    sc->sc_id_scrolllock);
 			sc->sc_flags &= ~HIDKBD_FLAG_SCROLLLOCK;
 		}
@@ -1076,6 +1082,9 @@ hidkbd_attach(device_t dev)
 	kbd->kb_data = (void *)sc;
 
 	sc->sc_dev = dev;
+#ifdef HID_DEBUG
+	TUNABLE_INT_FETCH("hw.hid.hidkbd.debug", &sc->sc_debug);
+#endif
 	sc->sc_mode = K_XLATE;
 
 	callout_init_lk(&sc->sc_callout, &kbd->kb_lock);
@@ -1110,16 +1119,16 @@ hidkbd_attach(device_t dev)
 	    (hid_len == 0) || (!(sc->sc_flags & HIDKBD_FLAG_EVENTS))) {
 		int err;
 
-		DPRINTF("Forcing boot protocol\n");
+		DPRINTF(sc, "Forcing boot protocol\n");
 
 		err = HID_SET_PROTOCOL(device_get_parent(dev),
 		    HID_PROTOCOL_BOOT);
 		if (err != 0) {
 #if 0
-			DPRINTF("Set protocol error=%s (ignored)\n",
+			DPRINTF(sc, "Set protocol error=%s (ignored)\n",
 			    usbd_errstr(err));
 #else
-			DPRINTF("Set protocol error=%d (ignored)\n", err);
+			DPRINTF(sc, "Set protocol error=%d (ignored)\n", err);
 #endif
 		}
 
@@ -1194,6 +1203,12 @@ hidkbd_attach(device_t dev)
 		sc->sc_evdev = evdev;
 #endif
 
+#ifdef HID_DEBUG
+	SYSCTL_ADD_INT(device_get_sysctl_ctx(dev),
+	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)), OID_AUTO, "debug",
+	    CTLFLAG_RW, &sc->sc_debug, 0, "Debug level");
+#endif
+
 	sc->sc_flags |= HIDKBD_FLAG_ATTACHED;
 
 	if (bootverbose) {
@@ -1229,8 +1244,6 @@ hidkbd_detach(device_t dev)
 	int error;
 
 	HIDKBD_LOCK_ASSERT();
-
-	DPRINTF("\n");
 
 	HID_STOP_READ(device_get_parent(dev));
 	HID_SET_HANDLER(device_get_parent(dev), NULL, NULL, NULL);
@@ -1285,8 +1298,7 @@ hidkbd_detach(device_t dev)
 
 	crit_exit();
 
-	DPRINTF("%s: disconnected\n",
-	    device_get_nameunit(dev));
+	DPRINTF(sc, "disconnected\n");
 
 	if (sc->sc_outbuf[0] != NULL)
 		kfree(sc->sc_outbuf[0], M_DEVBUF);
@@ -1899,7 +1911,7 @@ static void
 hidkbd_set_leds(struct hidkbd_softc *sc, uint8_t leds)
 {
 	HIDKBD_LOCK_ASSERT();
-	DPRINTF("leds=0x%02x\n", leds);
+	DPRINTF(sc, "leds=0x%02x\n", leds);
 	uint8_t *buf = NULL;
 
 	sc->sc_leds = leds;
