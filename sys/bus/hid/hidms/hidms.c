@@ -571,7 +571,7 @@ hidms_attach(device_t dev)
 	    sc, 0, hidms_sysctl_handler_parseinfo,
 	    "", "Dump of parsed HID report descriptor");
 #endif
-#ifdef IWM_DEBUG
+#ifdef HID_DEBUG
 	SYSCTL_ADD_INT(device_get_sysctl_ctx(dev),
 	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)), OID_AUTO, "debug",
 	    CTLFLAG_RW, &sc->sc_debug, 0, "Debug level");
