@@ -283,7 +283,7 @@ prdata(u_char *buf, struct hid_item *h)
 
 	pos = h->pos;
 	for (i = 0; i < h->report_count; i++) {
-		data = hid_get_data(buf, h);
+		data = hid_get_data_b(buf, h);
 		if (i > 0)
 			printf(" ");
 		if (h->logical_minimum < 0)
@@ -330,9 +330,9 @@ dumpdata(int f, report_desc_t rd, int loop)
 		dlen = hid_report_size_b(rd, kind < 3 ? kind : hid_input, rid);
 		if (dlen <= 0)
 			continue;
-		dbuf = malloc(dlen);
-		memset(dbuf, 0, dlen);
 		if (kind < 3) {
+			dbuf = malloc(dlen);
+			memset(dbuf, 0, dlen);
 			r = hid_get_report(f, kind, rid, dbuf, dlen);
 			if (r < 0)
 				warn("hid_get_report(rid %d)", rid);
@@ -340,7 +340,9 @@ dumpdata(int f, report_desc_t rd, int loop)
 			this_rid = rid;
 			report = dbuf;
 		} else {
-			r = read(f, dbuf, dlen);
+			dbuf = malloc(dlen + (use_rid ? 1 : 0));
+			memset(dbuf, 0, dlen + (use_rid ? 1 : 0));
+			r = read(f, dbuf, dlen) + (use_rid ? 1 : 0);
 			if (r < 1)
 				err(1, "read error");
 			dlen = r;

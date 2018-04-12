@@ -106,6 +106,7 @@ int hid_parse_usage_page(const char *name);
 
 /* Extracting/insertion of data, data.c: */
 int32_t hid_get_data(const void *p, const hid_item_t *h);
+int32_t hid_get_data_b(const void *p, const hid_item_t *h);
 void hid_set_data(void *p, const hid_item_t *h, int32_t data);
 int hid_get_report(int fd, enum hid_kind k, int id,
     unsigned char *data, unsigned int size);
