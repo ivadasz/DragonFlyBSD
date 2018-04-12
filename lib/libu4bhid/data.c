@@ -40,16 +40,26 @@ int32_t
 hid_get_data(const void *p, const hid_item_t *h)
 {
 	const uint8_t *buf;
-	uint32_t hpos;
-	uint32_t hsize;
-	uint32_t data;
-	int i, end, offs;
 
 	buf = p;
 
 	/* Skip report ID byte. */
 	if (h->report_ID > 0)
 		buf++;
+
+	return hid_get_data_b(buf, h);
+}
+
+int32_t
+hid_get_data_b(const void *p, const hid_item_t *h)
+{
+	const uint8_t *buf;
+	uint32_t hpos;
+	uint32_t hsize;
+	uint32_t data;
+	int i, end, offs;
+
+	buf = p;
 
 	hpos = h->pos;			/* bit position of data */
 	hsize = h->report_size;		/* bit length of data */
