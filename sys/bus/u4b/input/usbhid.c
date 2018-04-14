@@ -685,14 +685,14 @@ usbhid_get_report(device_t dev, uint8_t id, uint8_t *buf, uint16_t len, int type
 static int
 usbhid_set_protocol(device_t dev, int protocol)
 {
-	struct usb_attach_arg *uaa = device_get_ivars(dev);
+	struct usbhid_softc *sc = device_get_softc(dev);
 
 	if (protocol == HID_PROTOCOL_BOOT) {
-		return usbd_req_set_protocol(uaa->device, NULL,
-		    uaa->info.bIfaceIndex, 0);
+		return usbd_req_set_protocol(sc->sc_udev, NULL,
+		    sc->sc_iface_index, 0);
 	} else {
-		return usbd_req_set_protocol(uaa->device, NULL,
-		    uaa->info.bIfaceIndex, 1);
+		return usbd_req_set_protocol(sc->sc_udev, NULL,
+		    sc->sc_iface_index, 1);
 	}
 }
 
@@ -711,7 +711,6 @@ usbhid_attach(device_t dev)
 	lockinit(&sc->sc_lock, "usbhid lock", 0, LK_CANRECURSE);
 
 	sc->sc_udev = uaa->device;
-
 	sc->sc_iface_no = uaa->info.bIfaceNum;
 	sc->sc_iface_index = uaa->info.bIfaceIndex;
 
@@ -856,11 +855,10 @@ static void
 usbhid_child_detached(device_t dev, device_t child __unused)
 {
 	struct usbhid_softc *sc = device_get_softc(dev);
-	struct usb_attach_arg *uaa = device_get_ivars(dev);
 
 	lockmgr(&sc->sc_lock, LK_EXCLUSIVE);
 	/* We expect the device to be in Report Protocol mode. */
-	usbd_req_set_protocol(uaa->device, NULL, uaa->info.bIfaceIndex, 1);
+	usbd_req_set_protocol(sc->sc_udev, NULL, sc->sc_iface_index, 1);
 	sc->ivar.interval_ms = -1;
 	usbd_transfer_stop(sc->sc_xfer[USBHID_INTR_DT_RD]);
 	/* XXX Maybe also restore interval, when cdev is closed. */
