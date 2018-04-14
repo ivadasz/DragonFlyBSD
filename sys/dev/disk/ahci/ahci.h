@@ -661,4 +661,4 @@ extern u_int32_t AhciNoFeatures;
 extern int ahci_synchronous_boot;
 
 enum {AHCI_LINK_PWR_MGMT_NONE, AHCI_LINK_PWR_MGMT_MEDIUM,
-      AHCI_LINK_PWR_MGMT_AGGR};
+      AHCI_LINK_PWR_MGMT_AGGR, AHCI_LINK_PWR_MGMT_DEVSLEEP};

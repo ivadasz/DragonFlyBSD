@@ -564,13 +564,52 @@ ahci_port_interrupt_enable(struct ahci_port *ap)
 	ahci_pwrite(ap, AHCI_PREG_IE, ap->ap_intmask);
 }
 
+static void
+ahci_port_enable_devsleep(struct ahci_port *ap)
+{
+	u_int32_t devslp;
+
+	/* Enable Device Sleep Feature */
+	devslp = ahci_pread(ap, AHCI_PREG_DEVSLP);
+	kprintf("%s: devslp=0x%08x\n", PORTNAME(ap), devslp);
+	if ((devslp & AHCI_PREG_DEVSLP_DSP) &&
+	    (ap->ap_ata[0]->at_identify.satafsup &
+	     SATA_FEATURE_SUP_DEVSLEEP)) {
+		kprintf("%s: Trying to enable devsleep feature\n", PORTNAME(ap));
+		ahci_port_stop(ap, 0);
+		devslp &= ~AHCI_PREG_DEVSLP_ADSE;
+		ahci_pwrite(ap, AHCI_PREG_DEVSLP, devslp);
+		devslp |= AHCI_PREG_DEVSLP_ADSE;
+		ahci_pwrite(ap, AHCI_PREG_DEVSLP, devslp);
+		ahci_port_start(ap);
+		if (ahci_set_feature(ap, NULL, ATA_SATAFT_DEVSLEEP, 1)) {
+			kprintf("%s: Could not enable device sleep "
+			    "feature.\n",
+			    PORTNAME(ap));
+		}
+	}
+}
+
+static void
+ahci_port_disable_devsleep(struct ahci_port *ap)
+{
+	/* Disable devsleep power management */
+	if (ap->ap_type != ATA_PORT_T_PM &&
+	    (ap->ap_ata[0]->at_identify.satafsup &
+	    SATA_FEATURE_SUP_DEVSLEEP)) {
+		kprintf("%s: Disabling devsleep power management.\n",
+		    PORTNAME(ap));
+		ahci_set_feature(ap, NULL, ATA_SATAFT_DEVSLEEP, 0);
+	}
+}
+
 /*
  * Manage the agressive link power management capability.
  */
 void
 ahci_port_link_pwr_mgmt(struct ahci_port *ap, int link_pwr_mgmt)
 {
-	u_int32_t cmd, sctl;
+	u_int32_t cmd, sctl, ssts;
 
 	if (link_pwr_mgmt == ap->link_pwr_mgmt)
 		return;
@@ -583,7 +622,79 @@ ahci_port_link_pwr_mgmt(struct ahci_port *ap, int link_pwr_mgmt)
 
 	ahci_os_lock_port(ap);
 
-	if (link_pwr_mgmt == AHCI_LINK_PWR_MGMT_AGGR &&
+	if (link_pwr_mgmt == AHCI_LINK_PWR_MGMT_DEVSLEEP &&
+	    (ap->ap_sc->sc_cap2 & AHCI_REG_CAP2_SDS)) {
+		kprintf("%s: enabling devsleep link power management.\n",
+			PORTNAME(ap));
+
+		ap->link_pwr_mgmt = link_pwr_mgmt;
+
+		ap->ap_intmask &= ~AHCI_PREG_IE_PRCE;
+		ahci_port_interrupt_enable(ap);
+
+		/*
+		 * Disable device initiated link power management for
+		 * directly attached devices that support it.
+		 */
+		kprintf("%s: ap_type=%d\n", PORTNAME(ap), ap->ap_type);
+		kprintf("%s: ap->ap_ata[0]->at_identify.satafsup=%x\n", PORTNAME(ap), ap->ap_ata[0]->at_identify.satafsup);
+		if (ap->ap_type != ATA_PORT_T_PM &&
+		    (ap->ap_ata[0]->at_identify.satafsup &
+		    SATA_FEATURE_SUP_DEVIPS)) {
+			kprintf("%s: Disabling device initiated "
+			    "link power management.\n", PORTNAME(ap));
+			if (ahci_set_feature(ap, NULL, ATA_SATAFT_DEVIPS, 0))
+				kprintf("%s: Could not disable device "
+				    "initiated link power management.\n",
+				    PORTNAME(ap));
+		}
+
+		sctl = ahci_pread(ap, AHCI_PREG_SCTL);
+		sctl &= ~(AHCI_PREG_SCTL_IPM);
+
+		/* This checks whether any device is connected here */
+		ssts = ahci_pread(ap, AHCI_PREG_SSTS);
+		if ((ssts & AHCI_PREG_SSTS_IPM) == 0) {
+			if (ahci_pread(ap, AHCI_PREG_CMD) & AHCI_PREG_CMD_ST) {
+				kprintf("%s: Can't put phy offline, because "
+				    "PxCMD.ST is set\n", __func__);
+			} else {
+				sctl &= ~(AHCI_PREG_SCTL_DET);
+				sctl |= AHCI_PREG_SCTL_DET_DISABLE;
+			}
+		}
+		ahci_pwrite(ap, AHCI_PREG_SCTL, sctl);
+
+		/* clear PhyRdy Change from SError */
+		ahci_pwrite(ap, AHCI_PREG_SERR, AHCI_PREG_SERR_DIAG_N);
+
+		/* Enable ALPM */
+		cmd = ahci_pread(ap, AHCI_PREG_CMD);
+		cmd |= AHCI_PREG_CMD_ASP;
+		cmd |= AHCI_PREG_CMD_ALPE;
+		ahci_pwrite(ap, AHCI_PREG_CMD, cmd);
+
+		ahci_port_enable_devsleep(ap);
+
+		/*
+		 * Enable device initiated link power management for
+		 * directly attached devices that support it.
+		 */
+		kprintf("%s: ap_type=%d\n", PORTNAME(ap), ap->ap_type);
+		kprintf("%s: ap->ap_ata[0]->at_identify.satafsup=%x\n", PORTNAME(ap), ap->ap_ata[0]->at_identify.satafsup);
+		if (ap->ap_type != ATA_PORT_T_PM &&
+		    (ap->ap_ata[0]->at_identify.satafsup &
+		    SATA_FEATURE_SUP_DEVIPS)) {
+			kprintf("%s: Enabling device initiated "
+			    "link power management.\n", PORTNAME(ap));
+			if (ahci_set_feature(ap, NULL, ATA_SATAFT_DEVIPS, 1)) {
+				kprintf("%s: Could not enable device initiated "
+				    "link power management.\n",
+				    PORTNAME(ap));
+			}
+		}
+
+	} else if (link_pwr_mgmt == AHCI_LINK_PWR_MGMT_AGGR &&
 	    (ap->ap_sc->sc_cap & AHCI_REG_CAP_SSC)) {
 		kprintf("%s: enabling aggressive link power management.\n",
 			PORTNAME(ap));
@@ -593,33 +704,79 @@ ahci_port_link_pwr_mgmt(struct ahci_port *ap, int link_pwr_mgmt)
 		ap->ap_intmask &= ~AHCI_PREG_IE_PRCE;
 		ahci_port_interrupt_enable(ap);
 
+		/*
+		 * Disable device initiated link power management for
+		 * directly attached devices that support it.
+		 */
+		kprintf("%s: ap_type=%d\n", PORTNAME(ap), ap->ap_type);
+		kprintf("%s: ap->ap_ata[0]->at_identify.satafsup=%x\n", PORTNAME(ap), ap->ap_ata[0]->at_identify.satafsup);
+		if (ap->ap_type != ATA_PORT_T_PM &&
+		    (ap->ap_ata[0]->at_identify.satafsup &
+		    SATA_FEATURE_SUP_DEVIPS)) {
+			kprintf("%s: Disabling device initiated "
+			    "link power management.\n", PORTNAME(ap));
+			if (ahci_set_feature(ap, NULL, ATA_SATAFT_DEVIPS, 0))
+				kprintf("%s: Could not disable device "
+				    "initiated link power management.\n",
+				    PORTNAME(ap));
+		}
+
 		sctl = ahci_pread(ap, AHCI_PREG_SCTL);
 		sctl &= ~(AHCI_PREG_SCTL_IPM);
 		if (ap->ap_sc->sc_cap2 & AHCI_REG_CAP2_SDS)
 			sctl |= AHCI_PREG_SCTL_IPM_NODEVSLP;
+
+		/* This checks whether any device is connected here */
+		ssts = ahci_pread(ap, AHCI_PREG_SSTS);
+		if ((ssts & AHCI_PREG_SSTS_IPM) == 0) {
+			if (ahci_pread(ap, AHCI_PREG_CMD) & AHCI_PREG_CMD_ST) {
+				kprintf("%s: Can't put phy offline, because "
+				    "PxCMD.ST is set\n", __func__);
+			} else {
+				sctl &= ~(AHCI_PREG_SCTL_DET);
+				sctl |= AHCI_PREG_SCTL_DET_DISABLE;
+			}
+		}
 		ahci_pwrite(ap, AHCI_PREG_SCTL, sctl);
+
+		/* clear PhyRdy Change from SError */
+		ahci_pwrite(ap, AHCI_PREG_SERR, AHCI_PREG_SERR_DIAG_N);
+
+		/* Enable ALPM */
+		cmd = ahci_pread(ap, AHCI_PREG_CMD);
+		cmd |= AHCI_PREG_CMD_ASP;
+		cmd |= AHCI_PREG_CMD_ALPE;
+		ahci_pwrite(ap, AHCI_PREG_CMD, cmd);
+
+		if (ap->ap_sc->sc_cap2 & AHCI_REG_CAP2_SDS)
+			ahci_port_disable_devsleep(ap);
 
 		/*
 		 * Enable device initiated link power management for
 		 * directly attached devices that support it.
 		 */
+		kprintf("%s: ap_type=%d\n", PORTNAME(ap), ap->ap_type);
+		kprintf("%s: ap->ap_ata[0]->at_identify.satafsup=%x\n", PORTNAME(ap), ap->ap_ata[0]->at_identify.satafsup);
 		if (ap->ap_type != ATA_PORT_T_PM &&
 		    (ap->ap_ata[0]->at_identify.satafsup &
 		    SATA_FEATURE_SUP_DEVIPS)) {
-			if (ahci_set_feature(ap, NULL, ATA_SATAFT_DEVIPS, 1))
+			kprintf("%s: Enabling device initiated "
+			    "link power management.\n", PORTNAME(ap));
+			if (ahci_set_feature(ap, NULL, ATA_SATAFT_DEVIPS, 1)) {
 				kprintf("%s: Could not enable device initiated "
 				    "link power management.\n",
 				    PORTNAME(ap));
+			}
 		}
 
-		cmd = ahci_pread(ap, AHCI_PREG_CMD);
-		cmd |= AHCI_PREG_CMD_ASP;
-		cmd |= AHCI_PREG_CMD_ALPE;
-		ahci_pwrite(ap, AHCI_PREG_CMD, cmd);
 	} else if (link_pwr_mgmt == AHCI_LINK_PWR_MGMT_MEDIUM &&
 	           (ap->ap_sc->sc_cap & AHCI_REG_CAP_PSC)) {
 		kprintf("%s: enabling medium link power management.\n",
 			PORTNAME(ap));
+
+		if (ahci_set_feature(ap, NULL, ATA_SATAFT_DEVSLEEP, 0))
+			kprintf("%s: Could not disable device sleep feature.\n",
+			    PORTNAME(ap));
 
 		ap->link_pwr_mgmt = link_pwr_mgmt;
 
@@ -638,6 +795,9 @@ ahci_port_link_pwr_mgmt(struct ahci_port *ap, int link_pwr_mgmt)
 		cmd |= AHCI_PREG_CMD_ALPE;
 		ahci_pwrite(ap, AHCI_PREG_CMD, cmd);
 
+		if (ap->ap_sc->sc_cap2 & AHCI_REG_CAP2_SDS)
+			ahci_port_disable_devsleep(ap);
+
 	} else if (link_pwr_mgmt == AHCI_LINK_PWR_MGMT_NONE) {
 		kprintf("%s: disabling link power management.\n",
 			PORTNAME(ap));
@@ -646,8 +806,14 @@ ahci_port_link_pwr_mgmt(struct ahci_port *ap, int link_pwr_mgmt)
 		if (ap->ap_type != ATA_PORT_T_PM &&
 		    (ap->ap_ata[0]->at_identify.satafsup &
 		    SATA_FEATURE_SUP_DEVIPS)) {
+			kprintf("%s: Disabling device initiated "
+			    "link power management.\n", PORTNAME(ap));
 			ahci_set_feature(ap, NULL, ATA_SATAFT_DEVIPS, 0);
 		}
+
+
+		if (ap->ap_sc->sc_cap2 & AHCI_REG_CAP2_SDS)
+			ahci_port_disable_devsleep(ap);
 
 		cmd = ahci_pread(ap, AHCI_PREG_CMD);
 		cmd &= ~(AHCI_PREG_CMD_ALPE | AHCI_PREG_CMD_ASP);
@@ -688,6 +854,8 @@ ahci_port_link_pwr_state(struct ahci_port *ap)
 	uint32_t r;
 
 	r = ahci_pread(ap, AHCI_PREG_SSTS);
+	if (r & AHCI_PREG_SSTS_DET_PHYOFFLINE)
+		return 5;
 	switch (r & AHCI_PREG_SSTS_IPM) {
 	case AHCI_PREG_SSTS_IPM_ACTIVE:
 		return 1;
