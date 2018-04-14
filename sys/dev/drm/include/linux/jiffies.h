@@ -38,7 +38,6 @@
 #define MAX_JIFFY_OFFSET	((LONG_MAX >> 1) - 1)
 
 #define jiffies_to_msecs(x)	(((int64_t)(x)) * 1000 / hz)
-#define msecs_to_jiffies(x)	(((int64_t)(x)) * hz / 1000)
 #define jiffies			ticks
 #define jiffies_64		ticks /* XXX hmmm */
 #define time_after(a,b)		((long)(b) - (long)(a) < 0)
@@ -60,6 +59,19 @@ timespec_to_jiffies(const struct timespec *ts)
 		result = LONG_MAX;
 
 	return result;
+}
+
+static inline
+unsigned long msecs_to_jiffies(const unsigned int u)
+{
+	unsigned long jiffies;
+
+	jiffies = ((uint64_t)(u)) * hz / 1000;
+
+	if (jiffies < 1)
+		return 1;
+	else
+		return jiffies;
 }
 
 static inline
