@@ -89,6 +89,15 @@ struct acpi_softc {
     struct callout	susp_force_to;		/* Force suspend if no acks. */
 };
 
+struct acpi_iic_resource {
+    SLIST_ENTRY(acpi_iic_resource) entries;
+    ACPI_HANDLE	handle;
+    uint16_t	address;
+    int		rid;
+};
+
+SLIST_HEAD(acpi_iic_resource_list, acpi_iic_resource);
+
 struct acpi_device {
     /* ACPI ivars */
     ACPI_HANDLE			ad_handle;
@@ -99,6 +108,9 @@ struct acpi_device {
 
     /* Resources */
     struct resource_list	ad_rl;
+
+    /* Some new ACPI Resources */
+    struct acpi_iic_resource_list ad_iic;
 };
 
 /* Track device (/dev/{apm,apmctl} and /dev/acpi) notification status. */
@@ -388,6 +400,8 @@ struct acpi_parse_resource_set {
     void	(*set_start_dependent)(device_t dev, void *context,
 		    int preference);
     void	(*set_end_dependent)(device_t dev, void *context);
+    void	(*set_iic_serialbus)(device_t dev, void *context, char *name,
+		    uint16_t address);
 };
 
 extern struct	acpi_parse_resource_set acpi_res_parse_set;
