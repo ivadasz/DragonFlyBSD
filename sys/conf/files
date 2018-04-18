@@ -2957,3 +2957,8 @@ dev/virtual/vmware/vmxnet3/if_vmx.c	optional vmx
 #
 bus/hid/hid_if.m			optional hidbus
 bus/hid/hid_common.c			optional hidbus
+
+#
+# I2C HID support
+#
+bus/hid/iichid/iichid.c			optional iichid
