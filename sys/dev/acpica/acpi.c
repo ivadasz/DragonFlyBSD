@@ -822,12 +822,44 @@ acpi_add_child(device_t bus, device_t parent, int order, const char *name, int u
 	return (NULL);
 
     resource_list_init(&ad->ad_rl);
+    SLIST_INIT(&ad->ad_iic);
     child = device_add_child_ordered(parent, order, name, unit);
     if (child != NULL)
 	device_set_ivars(child, ad);
     else
 	kfree(ad, M_ACPIDEV);
     return (child);
+}
+
+static int
+acpi_iic_resource_print(struct acpi_iic_resource_list *ls, const char *n,
+    const char *fmt)
+{
+    struct acpi_iic_resource *res;
+    int cnt = 0;
+    ACPI_BUFFER buf;
+    static char data[256];
+    ACPI_STATUS status;
+
+    SLIST_FOREACH(res, ls, entries) {
+	if (res->handle == NULL)
+	    continue;
+
+	buf.Length = sizeof(data);
+	buf.Pointer = data;
+	status = AcpiGetName(res->handle, ACPI_FULL_PATHNAME, &buf);
+	if (ACPI_FAILURE(status))
+	    continue;
+
+	if (cnt == 0) {
+	    cnt += kprintf(" %s ", n);
+	} else {
+	    cnt += kprintf(",");
+	}
+	cnt += kprintf(fmt, data, res->address);
+    }
+
+    return cnt;
 }
 
 static int
@@ -842,6 +874,7 @@ acpi_print_child(device_t bus, device_t child)
     retval += resource_list_print_type(rl, "iomem", SYS_RES_MEMORY, "%#lx");
     retval += resource_list_print_type(rl, "irq",   SYS_RES_IRQ,    "%ld");
     retval += resource_list_print_type(rl, "drq",   SYS_RES_DRQ,    "%ld");
+    retval += acpi_iic_resource_print(&adev->ad_iic, "iic", "%s:%u");
     if (device_get_flags(child))
 	retval += kprintf(" flags %#x", device_get_flags(child));
     retval += bus_print_child_footer(bus, child);
