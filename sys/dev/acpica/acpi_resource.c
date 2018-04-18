@@ -46,6 +46,8 @@
 #define _COMPONENT	ACPI_BUS
 ACPI_MODULE_NAME("RESOURCE")
 
+MALLOC_DEFINE(M_ACPIRES, "acpires", "ACPI Resource Information");
+
 struct lookup_irq_request {
     ACPI_RESOURCE *acpi_res;
     struct resource *res;
@@ -399,6 +401,16 @@ acpi_parse_resource(ACPI_RESOURCE *res, void *context)
 	ACPI_DEBUG_PRINT((ACPI_DB_RESOURCES,
 	    "unimplemented VendorSpecific resource\n"));
 	break;
+    case ACPI_RESOURCE_TYPE_SERIAL_BUS:
+	if (res->Data.I2cSerialBus.Type != ACPI_RESOURCE_SERIAL_TYPE_I2C) {
+	    ACPI_DEBUG_PRINT((ACPI_DB_RESOURCES,
+		"ignored non I2C serial bus\n"));
+	    break;
+	}
+	set->set_iic_serialbus(dev, arc->context,
+	    res->Data.I2cSerialBus.ResourceSource.StringPtr,
+	    res->Data.I2cSerialBus.SlaveAddress);
+	break;
     default:
 	break;
     }
@@ -462,6 +474,8 @@ static void	acpi_res_set_drq(device_t dev, void *context, uint8_t *drq,
 static void	acpi_res_set_start_dependent(device_t dev, void *context,
 					     int preference);
 static void	acpi_res_set_end_dependent(device_t dev, void *context);
+static void	acpi_res_set_iic_serialbus(device_t dev, void *context,
+					   char *name, uint16_t address);
 
 struct acpi_parse_resource_set acpi_res_parse_set = {
     acpi_res_set_init,
@@ -474,7 +488,8 @@ struct acpi_parse_resource_set acpi_res_parse_set = {
     acpi_res_set_ext_irq,
     acpi_res_set_drq,
     acpi_res_set_start_dependent,
-    acpi_res_set_end_dependent
+    acpi_res_set_end_dependent,
+    acpi_res_set_iic_serialbus,
 };
 
 struct acpi_res_context {
@@ -482,6 +497,7 @@ struct acpi_res_context {
     int		ar_nmem;
     int		ar_nirq;
     int		ar_ndrq;
+    int		ar_niic;
     void 	*ar_parent;
 };
 
@@ -636,6 +652,33 @@ acpi_res_set_end_dependent(device_t dev, void *context)
     if (cp == NULL)
 	return;
     device_printf(dev, "dependent functions not supported\n");
+}
+
+static void
+acpi_res_set_iic_serialbus(device_t dev, void *context, char *name,
+    uint16_t address)
+{
+    struct acpi_res_context	*cp = (struct acpi_res_context *)context;
+    struct acpi_device		*adev;
+    struct acpi_iic_resource	*res;
+    ACPI_STATUS			status;
+    ACPI_HANDLE			h;
+
+    if (cp == NULL)
+	return;
+
+    adev = device_get_ivars(dev);
+    status = AcpiGetHandle(adev->ad_handle, name, &h);
+    if (ACPI_FAILURE(status))
+	return;
+
+    res = kmalloc(sizeof(*res), M_ACPIRES, M_WAITOK | M_ZERO);
+    /* XXX Maybe directly resolve the name, to an ACPI_HANDLE ?? */
+    res->handle = h;
+    res->address = address;
+    res->rid = cp->ar_niic++;
+    SLIST_INSERT_HEAD(&adev->ad_iic, res, entries);
+    /* XXX How can this be freed again later? */
 }
 
 /*
