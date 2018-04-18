@@ -1,3 +1,3 @@
-SUBDIR=	hidbus hidkbd hidms uhid
+SUBDIR=	hidbus hidkbd hidms uhid iichid
 
 .include <bsd.subdir.mk>
