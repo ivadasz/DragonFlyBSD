@@ -54,6 +54,8 @@ HEADER {
 
 	struct acpi_bif;
 	struct acpi_bst;
+
+	struct acpi_new_resource;
 };
 
 #
@@ -221,4 +223,23 @@ METHOD int batt_get_info {
 METHOD int batt_get_status {
 	device_t	dev;
 	struct acpi_bst	*bst;
+};
+
+#
+# Allocate I2C connection, or GPIO pin, or GPIO interrupt
+# This should eventually merged with the traditional struct resource bus stuff.
+#
+METHOD struct acpi_new_resource * alloc_new_resource {
+	device_t	dev;
+	device_t	child;
+	int		type;
+	int		rid;
+};
+
+#
+# Release the acpi resource.
+#
+METHOD void release_new_resource {
+	device_t	dev;
+	struct acpi_new_resource *res;
 };

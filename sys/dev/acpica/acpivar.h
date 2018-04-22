@@ -89,6 +89,15 @@ struct acpi_softc {
     struct callout	susp_force_to;		/* Force suspend if no acks. */
 };
 
+struct acpi_new_resource {
+        int type;
+#define NEW_RES_IIC 1
+#define NEW_RES_GPIOINT 2
+#define NEW_RES_GPIOIO 3
+        device_t dev;
+        uint16_t address;
+};
+
 struct acpi_iic_resource {
     SLIST_ENTRY(acpi_iic_resource) entries;
     ACPI_HANDLE	handle;

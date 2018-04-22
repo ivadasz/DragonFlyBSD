@@ -168,6 +168,11 @@ static int	acpi_child_pnpinfo_str_method(device_t acdev, device_t child,
 static void	acpi_enable_pcie(void);
 static void	acpi_reset_interfaces(device_t dev);
 
+static struct acpi_new_resource *acpi_device_alloc_new_resource(device_t dev,
+		    device_t child, int type, int rid);
+static void	acpi_device_release_new_resource(device_t dev,
+		    struct acpi_new_resource *res);
+
 static device_method_t acpi_methods[] = {
     /* Device interface */
     DEVMETHOD(device_identify,		acpi_identify),
@@ -203,6 +208,8 @@ static device_method_t acpi_methods[] = {
     DEVMETHOD(acpi_evaluate_object,	acpi_device_eval_obj),
     DEVMETHOD(acpi_pwr_for_sleep,	acpi_device_pwr_for_sleep),
     DEVMETHOD(acpi_scan_children,	acpi_device_scan_children),
+    DEVMETHOD(acpi_alloc_new_resource,	acpi_device_alloc_new_resource),
+    DEVMETHOD(acpi_release_new_resource, acpi_device_release_new_resource),
 
     /* PCI emulation */
     DEVMETHOD(pci_set_powerstate,	acpi_set_powerstate_method),
@@ -863,6 +870,42 @@ acpi_get_iic_provider(ACPI_HANDLE h)
 		return value;
 
 	return NULL;
+}
+
+/* XXX Doesn't work well as a DEVMETHOD. */
+static struct acpi_new_resource *
+acpi_device_alloc_new_resource(device_t dev, device_t child,
+     int type, int rid)
+{
+	struct acpi_device	 *adev = device_get_ivars(child);
+	struct acpi_new_resource *res;
+	struct acpi_iic_resource *e;
+	device_t provider;
+
+	SLIST_FOREACH(e, &adev->ad_iic, entries) {
+		if (e->rid == rid)
+			break;
+	}
+	if (e == NULL)
+		return NULL;
+
+	provider = acpi_get_iic_provider(e->handle);
+	if (provider == NULL)
+		return NULL;
+
+	res = kmalloc(sizeof(*res), M_DEVBUF, M_WAITOK | M_ZERO);
+	res->type = NEW_RES_IIC;
+	res->dev = provider;
+	res->address = e->address;
+	device_busy(res->dev);
+	return res;
+}
+
+static void
+acpi_device_release_new_resource(device_t dev, struct acpi_new_resource *res)
+{
+	device_unbusy(res->dev);
+	kfree(res, M_DEVBUF);
 }
 
 static int
