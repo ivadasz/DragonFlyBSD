@@ -479,6 +479,10 @@ void		acpi_ec_ecdt_probe(device_t);
 /* AC adapter interface. */
 int		acpi_acad_get_acline(int *);
 
+/* New style ACPI device type registration. */
+void acpi_register_iic_provider(ACPI_HANDLE h, device_t dev);
+void acpi_unregister_iic_provider(ACPI_HANDLE h, device_t dev);
+
 /* Package manipulation convenience functions. */
 #define ACPI_PKG_VALID(pkg, size)				\
     ((pkg) != NULL && (pkg)->Type == ACPI_TYPE_PACKAGE &&	\
