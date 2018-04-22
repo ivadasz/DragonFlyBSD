@@ -831,6 +831,40 @@ acpi_add_child(device_t bus, device_t parent, int order, const char *name, int u
     return (child);
 }
 
+static void
+acpi_iic_objhandler(ACPI_HANDLE h, void *data)
+{
+}
+
+void
+acpi_register_iic_provider(ACPI_HANDLE h, device_t dev)
+{
+	ACPI_STATUS status;
+
+	status = AcpiAttachData(h, acpi_iic_objhandler, dev);
+	if (ACPI_FAILURE(status))
+		device_printf(dev, "Failed to register as iic handler\n");
+}
+
+void
+acpi_unregister_iic_provider(ACPI_HANDLE h, device_t dev)
+{
+	AcpiDetachData(h, acpi_iic_objhandler);
+}
+
+static device_t
+acpi_get_iic_provider(ACPI_HANDLE h)
+{
+	ACPI_STATUS status;
+	void *value;
+
+	status = AcpiGetData(h, acpi_iic_objhandler, &value);
+	if (ACPI_SUCCESS(status))
+		return value;
+
+	return NULL;
+}
+
 static int
 acpi_iic_resource_print(struct acpi_iic_resource_list *ls, const char *n,
     const char *fmt)
