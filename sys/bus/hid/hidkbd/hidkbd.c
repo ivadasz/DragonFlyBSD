@@ -2106,6 +2106,8 @@ static driver_t hidkbd_driver = {
 
 DRIVER_MODULE(hidkbd, usbhid, hidkbd_driver, hidkbd_devclass,
     hidkbd_driver_load, NULL);
+DRIVER_MODULE(hidkbd, iichid, hidkbd_driver, hidkbd_devclass,
+    hidkbd_driver_load, NULL);
 #ifdef EVDEV_SUPPORT
 MODULE_DEPEND(hidkbd, evdev, 1, 1, 1);
 #endif

@@ -1001,6 +1001,7 @@ static driver_t hidms_driver = {
 };
 
 DRIVER_MODULE(hidms, usbhid, hidms_driver, hidms_devclass, NULL, NULL);
+DRIVER_MODULE(hidms, iichid, hidms_driver, hidms_devclass, NULL, NULL);
 #ifdef EVDEV_SUPPORT
 MODULE_DEPEND(hidms, evdev, 1, 1, 1);
 #endif

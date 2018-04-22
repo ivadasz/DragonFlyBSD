@@ -603,5 +603,6 @@ static driver_t uhid_driver = {
 };
 
 DRIVER_MODULE(uhid, usbhid, uhid_driver, uhid_devclass, NULL, NULL);
+DRIVER_MODULE(uhid, iichid, uhid_driver, uhid_devclass, NULL, NULL);
 MODULE_DEPEND(uhid, hidbus, 1, 1, 1);
 MODULE_VERSION(uhid, 1);
