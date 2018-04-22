@@ -23,6 +23,8 @@
         ppbus
         ..
         smbus
+            smbacpi
+            ..
         ..
         u4b
         ..
