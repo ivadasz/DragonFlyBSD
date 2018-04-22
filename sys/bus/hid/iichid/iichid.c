@@ -37,6 +37,7 @@
 #include <sys/kernel.h>
 #include <sys/module.h>
 #include <sys/lock.h>
+#include <sys/uuid.h>
 #include <sys/bus.h>
 
 #include "opt_acpi.h"
@@ -57,6 +58,7 @@ static int iichid_detach(device_t dev);
 
 struct iichid_softc {
 	device_t dev;
+	uint16_t desc_reg;	/* I2C-HID descriptor register address. */
 	struct acpi_new_resource *iic_res;
 };
 
@@ -64,6 +66,49 @@ static char *iichid_ids[] = {
 	"PNP0C50",
 	NULL
 };
+
+static int
+iichid_get_descriptor_address(struct iichid_softc *sc, uint16_t *addr)
+{
+	ACPI_BUFFER retbuf = { ACPI_ALLOCATE_BUFFER, NULL };
+	ACPI_OBJECT_LIST arglist;
+	ACPI_OBJECT arg[4];
+	ACPI_STATUS status;
+	ACPI_OBJECT *retobj;
+	const char *uuidstr = "3cdff6f7-4267-4555-ad05-b30a3d8938de";
+	struct uuid uuid;
+	uint8_t dsmuuid[16];
+
+	if (parse_uuid(uuidstr, &uuid) != 0)
+		return (1);
+	le_uuid_enc(dsmuuid, &uuid);
+
+	arglist.Pointer = arg;
+	arglist.Count = 4;
+	arg[0].Type = ACPI_TYPE_BUFFER;
+	arg[0].Buffer.Length = sizeof(dsmuuid);
+	arg[0].Buffer.Pointer = dsmuuid;
+	arg[1].Type = ACPI_TYPE_INTEGER;
+	arg[1].Integer.Value = 0;
+	arg[2].Type = ACPI_TYPE_INTEGER;
+	arg[2].Integer.Value = 1;
+	arg[3].Type = ACPI_TYPE_PACKAGE;
+	arg[3].Package.Count = 0;
+	arg[3].Package.Elements = NULL;
+
+	status = AcpiEvaluateObject(acpi_get_handle(sc->dev), "_DSM", &arglist,
+	    &retbuf);
+	if (ACPI_FAILURE(status))
+		return (1);
+	retobj = retbuf.Pointer;
+	if (retobj->Type != ACPI_TYPE_INTEGER) {
+		AcpiOsFree(retbuf.Pointer);
+		return (1);
+	}
+	*addr = retobj->Integer.Value;
+
+	return (0);
+}
 
 static int
 iichid_probe(device_t dev)
@@ -85,6 +130,10 @@ iichid_attach(device_t dev)
 	struct acpi_new_resource *ires;
 
 	sc->dev = dev;
+	if (iichid_get_descriptor_address(sc, &sc->desc_reg) != 0) {
+		device_printf(dev, "Failed to find descriptor register\n");
+		return ENXIO;
+	}
 
 	ires = ACPI_ALLOC_NEW_RESOURCE(device_get_parent(dev), dev,
 	    NEW_RES_IIC, 0);
