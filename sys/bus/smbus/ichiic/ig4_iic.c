@@ -55,6 +55,10 @@
 
 #include "smbus_if.h"
 
+#include "opt_acpi.h"
+#include "acpi.h"
+#include <dev/acpica/acpivar.h>
+
 #include "ig4_reg.h"
 #include "ig4_var.h"
 
@@ -483,6 +487,7 @@ done:
 int
 ig4iic_attach(ig4iic_softc_t *sc)
 {
+	ACPI_HANDLE h;
 	int error;
 	uint32_t v;
 
@@ -639,6 +644,10 @@ ig4iic_attach(ig4iic_softc_t *sc)
 	}
 	sc->generic_attached = 1;
 
+	h = acpi_get_handle(sc->dev);
+	if (h != NULL)
+		acpi_register_iic_provider(h, sc->dev);
+
 done:
 	lockmgr(&sc->lk, LK_RELEASE);
 	return error;
@@ -647,6 +656,7 @@ done:
 int
 ig4iic_detach(ig4iic_softc_t *sc)
 {
+	ACPI_HANDLE h;
 	int error;
 
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
@@ -660,6 +670,9 @@ ig4iic_detach(ig4iic_softc_t *sc)
 			goto done;
 		sc->generic_attached = 0;
 	}
+        h = acpi_get_handle(sc->dev);
+        if (h != NULL)
+                acpi_unregister_iic_provider(h, sc->dev);
 	if (sc->smb) {
 		device_delete_child(sc->dev, sc->smb);
 		sc->smb = NULL;
