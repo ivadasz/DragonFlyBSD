@@ -48,6 +48,7 @@
 #include <contrib/dev/acpica/source/include/amlcode.h>
 
 #include <bus/smbus/smbconf.h>
+#include <bus/smbus/smbacpi/smbacpi.h>
 
 #include "smbus_if.h"
 
@@ -83,7 +84,22 @@ static ACPI_STATUS	smbus_acpi_space_handler(UINT32 Function,
 			    void *RegionContext);
 
 /*
- * SMBUS Address space handler
+ * I2CSerialBus ACPI Resource Handling
+ */
+
+int
+smbus_acpi_rawtrans(struct acpi_new_resource *res, char *wbuf, int wcount,
+    char *rbuf, int rcount, int *actualp)
+{
+	KKASSERT(res->type == NEW_RES_IIC);
+
+	return SMBUS_TRANS(res->dev, res->address, 0,
+			   SMB_TRANS_NOCMD | SMB_TRANS_NOCNT | SMB_TRANS_7BIT,
+			   wbuf, wcount, rbuf, rcount, actualp);
+}
+
+/*
+ * SMBUS Address Space Handler
  */
 
 static void
