@@ -57,6 +57,7 @@ static int iichid_detach(device_t dev);
 
 struct iichid_softc {
 	device_t dev;
+	struct acpi_new_resource *iic_res;
 };
 
 static char *iichid_ids[] = {
@@ -81,9 +82,17 @@ static int
 iichid_attach(device_t dev)
 {
 	struct iichid_softc *sc = device_get_softc(dev);
+	struct acpi_new_resource *ires;
 
 	sc->dev = dev;
 
+	ires = ACPI_ALLOC_NEW_RESOURCE(device_get_parent(dev), dev,
+	    NEW_RES_IIC, 0);
+	if (ires == NULL) {
+		device_printf(dev, "Failed to allocate I2C resource\n");
+		return ENXIO;
+	}
+	sc->iic_res = ires;
 	pci_set_powerstate(dev, PCI_POWERSTATE_D0);
 
 	return 0;
@@ -94,7 +103,9 @@ iichid_detach(device_t dev)
 {
 	struct iichid_softc *sc = device_get_softc(dev);
 
-	(void)sc;
+	if (sc->iic_res != NULL) {
+		ACPI_RELEASE_NEW_RESOURCE(device_get_parent(dev), sc->iic_res);
+	}
 	pci_set_powerstate(dev, PCI_POWERSTATE_D3);
 
 	return 0;
