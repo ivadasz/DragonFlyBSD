@@ -107,6 +107,18 @@ struct acpi_iic_resource {
 
 SLIST_HEAD(acpi_iic_resource_list, acpi_iic_resource);
 
+struct acpi_gpio_int_resource {
+    SLIST_ENTRY(acpi_gpio_int_resource) entries;
+    ACPI_HANDLE	handle;
+    uint16_t	pin;
+    uint8_t	triggering;
+    uint8_t	polarity;
+    uint8_t	pinconfig;
+    int		rid;
+};
+
+SLIST_HEAD(acpi_gpio_int_resource_list, acpi_gpio_int_resource);
+
 struct acpi_device {
     /* ACPI ivars */
     ACPI_HANDLE			ad_handle;
@@ -120,6 +132,7 @@ struct acpi_device {
 
     /* Some new ACPI Resources */
     struct acpi_iic_resource_list ad_iic;
+    struct acpi_gpio_int_resource_list ad_gpio_int;
 };
 
 /* Track device (/dev/{apm,apmctl} and /dev/acpi) notification status. */
@@ -411,6 +424,9 @@ struct acpi_parse_resource_set {
     void	(*set_end_dependent)(device_t dev, void *context);
     void	(*set_iic_serialbus)(device_t dev, void *context, char *name,
 		    uint16_t address);
+    void	(*set_gpio_int)(device_t dev, void *context, char *name,
+		    uint16_t pin, uint8_t triggering, uint8_t polarity,
+		    uint8_t pinconfig);
 };
 
 extern struct	acpi_parse_resource_set acpi_res_parse_set;
