@@ -411,6 +411,17 @@ acpi_parse_resource(ACPI_RESOURCE *res, void *context)
 	    res->Data.I2cSerialBus.ResourceSource.StringPtr,
 	    res->Data.I2cSerialBus.SlaveAddress);
 	break;
+    case ACPI_RESOURCE_TYPE_GPIO:
+	if (res->Data.Gpio.ConnectionType != ACPI_RESOURCE_GPIO_TYPE_INT) {
+	    ACPI_DEBUG_PRINT((ACPI_DB_RESOURCES,
+		"ignored non Interrupt GPIO resource\n"));
+	    break;
+	}
+	set->set_gpio_int(dev, arc->context,
+	    res->Data.Gpio.ResourceSource.StringPtr,
+	    res->Data.Gpio.PinTable[0], res->Data.Gpio.Triggering,
+	    res->Data.Gpio.Polarity, res->Data.Gpio.PinConfig);
+	break;
     default:
 	break;
     }
@@ -476,6 +487,9 @@ static void	acpi_res_set_start_dependent(device_t dev, void *context,
 static void	acpi_res_set_end_dependent(device_t dev, void *context);
 static void	acpi_res_set_iic_serialbus(device_t dev, void *context,
 					   char *name, uint16_t address);
+static void	acpi_res_set_gpio_int(device_t dev, void *context, char *name,
+				      uint16_t pin, uint8_t triggering,
+				      uint8_t polarity, uint8_t pinconfig);
 
 struct acpi_parse_resource_set acpi_res_parse_set = {
     acpi_res_set_init,
@@ -490,6 +504,7 @@ struct acpi_parse_resource_set acpi_res_parse_set = {
     acpi_res_set_start_dependent,
     acpi_res_set_end_dependent,
     acpi_res_set_iic_serialbus,
+    acpi_res_set_gpio_int,
 };
 
 struct acpi_res_context {
@@ -498,6 +513,7 @@ struct acpi_res_context {
     int		ar_nirq;
     int		ar_ndrq;
     int		ar_niic;
+    int		ar_ngpio_int;
     void 	*ar_parent;
 };
 
@@ -673,11 +689,39 @@ acpi_res_set_iic_serialbus(device_t dev, void *context, char *name,
 	return;
 
     res = kmalloc(sizeof(*res), M_ACPIRES, M_WAITOK | M_ZERO);
-    /* XXX Maybe directly resolve the name, to an ACPI_HANDLE ?? */
     res->handle = h;
     res->address = address;
     res->rid = cp->ar_niic++;
     SLIST_INSERT_HEAD(&adev->ad_iic, res, entries);
+    /* XXX How can this be freed again later? */
+}
+
+static void
+acpi_res_set_gpio_int(device_t dev, void *context, char *name, uint16_t pin,
+    uint8_t triggering, uint8_t polarity, uint8_t pinconfig)
+{
+    struct acpi_res_context	*cp = (struct acpi_res_context *)context;
+    struct acpi_device		*adev;
+    struct acpi_gpio_int_resource *res;
+    ACPI_STATUS			status;
+    ACPI_HANDLE			h;
+
+    if (cp == NULL)
+	return;
+
+    adev = device_get_ivars(dev);
+    status = AcpiGetHandle(adev->ad_handle, name, &h);
+    if (ACPI_FAILURE(status))
+	return;
+
+    res = kmalloc(sizeof(*res), M_ACPIRES, M_WAITOK | M_ZERO);
+    res->handle = h;
+    res->pin = pin;
+    res->triggering = triggering;
+    res->polarity = polarity;
+    res->pinconfig = pinconfig;
+    res->rid = cp->ar_ngpio_int++;
+    SLIST_INSERT_HEAD(&adev->ad_gpio_int, res, entries);
     /* XXX How can this be freed again later? */
 }
 
