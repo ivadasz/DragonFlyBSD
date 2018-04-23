@@ -940,6 +940,44 @@ acpi_iic_resource_print(struct acpi_iic_resource_list *ls, const char *n,
 }
 
 static int
+acpi_gpio_int_resource_print(struct acpi_gpio_int_resource_list *ls,
+    const char *n, const char *fmt)
+{
+    struct acpi_gpio_int_resource *res;
+    int cnt = 0;
+    ACPI_BUFFER buf;
+    static char data[256];
+    ACPI_STATUS status;
+
+    SLIST_FOREACH(res, ls, entries) {
+	if (res->handle == NULL)
+	    continue;
+
+	buf.Length = sizeof(data);
+	buf.Pointer = data;
+	status = AcpiGetName(res->handle, ACPI_FULL_PATHNAME, &buf);
+	if (ACPI_FAILURE(status))
+	    continue;
+
+	if (cnt == 0) {
+	    cnt += kprintf(" %s ", n);
+	} else {
+	    cnt += kprintf(",");
+	}
+	cnt += kprintf(fmt, data, res->pin,
+	    res->triggering == ACPI_EDGE_SENSITIVE ? "edge" : "level",
+	    res->polarity == ACPI_ACTIVE_BOTH ? "both" :
+	     (res->polarity == ACPI_ACTIVE_LOW ? "low" : "high"),
+	    res->pinconfig == ACPI_PIN_CONFIG_NOPULL ? "nopull" :
+	     (res->pinconfig == ACPI_PIN_CONFIG_PULLDOWN ? "pulldown" :
+	      (res->pinconfig == ACPI_PIN_CONFIG_PULLUP ? "pullup" :
+	       "default")));;
+    }
+
+    return cnt;
+}
+
+static int
 acpi_print_child(device_t bus, device_t child)
 {
     struct acpi_device	 *adev = device_get_ivars(child);
@@ -952,6 +990,8 @@ acpi_print_child(device_t bus, device_t child)
     retval += resource_list_print_type(rl, "irq",   SYS_RES_IRQ,    "%ld");
     retval += resource_list_print_type(rl, "drq",   SYS_RES_DRQ,    "%ld");
     retval += acpi_iic_resource_print(&adev->ad_iic, "iic", "%s:%u");
+    retval += acpi_gpio_int_resource_print(&adev->ad_gpio_int, "gpio-int",
+					   "%s:%u-%s-%s-%s");
     if (device_get_flags(child))
 	retval += kprintf(" flags %#x", device_get_flags(child));
     retval += bus_print_child_footer(bus, child);
