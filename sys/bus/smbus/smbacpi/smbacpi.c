@@ -93,7 +93,7 @@ smbus_acpi_rawtrans(struct acpi_new_resource *res, char *wbuf, int wcount,
 {
 	KKASSERT(res->type == NEW_RES_IIC);
 
-	return SMBUS_TRANS(res->dev, res->address, 0,
+	return SMBUS_TRANS(res->dev, res->iic.address, 0,
 			   SMB_TRANS_NOCMD | SMB_TRANS_NOCNT | SMB_TRANS_7BIT,
 			   wbuf, wcount, rbuf, rcount, actualp);
 }

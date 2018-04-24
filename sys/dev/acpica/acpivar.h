@@ -95,7 +95,18 @@ struct acpi_new_resource {
 #define NEW_RES_GPIOINT 2
 #define NEW_RES_GPIOIO 3
         device_t dev;
-        uint16_t address;
+	union {
+		struct {
+			uint16_t address;
+		} iic;
+		struct {
+			uint16_t pin;
+			uint8_t triggering;
+			uint8_t polarity;
+			uint8_t pinconfig;
+			void *cookie;
+		} gpio_int;
+	};
 };
 
 struct acpi_iic_resource {
@@ -505,8 +516,11 @@ void		acpi_ec_ecdt_probe(device_t);
 int		acpi_acad_get_acline(int *);
 
 /* New style ACPI device type registration. */
-void acpi_register_iic_provider(ACPI_HANDLE h, device_t dev);
-void acpi_unregister_iic_provider(ACPI_HANDLE h, device_t dev);
+void acpi_register_bus_provider(ACPI_HANDLE h, device_t dev, int type);
+void acpi_unregister_bus_provider(ACPI_HANDLE h, int type);
+struct acpi_new_resource *acpi_alloc_new_resource(device_t dev, int type,
+						  int rid);
+void acpi_release_new_resource(struct acpi_new_resource *res);
 
 /* Package manipulation convenience functions. */
 #define ACPI_PKG_VALID(pkg, size)				\

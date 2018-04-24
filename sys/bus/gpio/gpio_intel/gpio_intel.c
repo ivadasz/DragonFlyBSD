@@ -93,6 +93,7 @@ static int
 gpio_intel_attach(device_t dev)
 {
 	struct gpio_intel_softc *sc = device_get_softc(dev);
+	ACPI_HANDLE h;
 	int error, i, rid;
 
 	lockinit(&sc->lk, "gpio_intel", 0, LK_CANRECURSE);
@@ -150,6 +151,9 @@ gpio_intel_attach(device_t dev)
 
 	device_add_child(dev, "gpio_acpi", -1);
 	bus_generic_attach(dev);
+	h = acpi_get_handle(dev);
+	if (h != NULL)
+		acpi_register_bus_provider(h, dev, NEW_RES_GPIOINT);
 
 	return (0);
 
@@ -171,11 +175,16 @@ static int
 gpio_intel_detach(device_t dev)
 {
 	struct gpio_intel_softc *sc = device_get_softc(dev);
+	ACPI_HANDLE h;
 	int error;
 
 	error = bus_generic_detach(dev);
 	if (error)
 		return (error);
+
+	h = acpi_get_handle(dev);
+	if (h != NULL)
+		acpi_unregister_bus_provider(h, NEW_RES_GPIOINT);
 
 	device_delete_children(dev);
 
