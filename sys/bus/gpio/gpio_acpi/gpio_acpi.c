@@ -131,6 +131,60 @@ gpio_acpi_check_gpioint(device_t dev, ACPI_RESOURCE_GPIO *gpio)
 }
 
 /*
+ * GpioInt Resource Methods
+ */
+/* XXX Get rid of reserve/unreserve, by making register/unregister flexible. */
+int
+gpio_int_reserve_interrupt(struct acpi_new_resource *res)
+{
+	KKASSERT(res->type == NEW_RES_GPIOINT);
+	KKASSERT(res->gpio_int.cookie == NULL);
+
+	if (res->gpio_int.triggering != ACPI_LEVEL_SENSITIVE &&
+	    res->gpio_int.triggering != ACPI_EDGE_SENSITIVE) {
+		return (EINVAL);
+	}
+	if (res->gpio_int.polarity != ACPI_ACTIVE_HIGH &&
+	    res->gpio_int.polarity != ACPI_ACTIVE_LOW &&
+	    res->gpio_int.polarity != ACPI_ACTIVE_BOTH) {
+		return (EINVAL);
+	}
+	/* XXX check pinconfig? */
+
+	return GPIO_ALLOC_INTR(res->dev, res->gpio_int.pin,
+	    res->gpio_int.triggering, res->gpio_int.polarity,
+	    res->gpio_int.pinconfig, &res->gpio_int.cookie);
+}
+
+void
+gpio_int_unreserve_interrupt(struct acpi_new_resource *res)
+{
+	KKASSERT(res->type == NEW_RES_GPIOINT);
+	KKASSERT(res->gpio_int.cookie != NULL);
+
+	GPIO_FREE_INTR(res->dev, res->gpio_int.cookie);
+}
+
+void
+gpio_int_establish_interrupt(struct acpi_new_resource *res,
+    driver_intr_t handler, void *context)
+{
+	KKASSERT(res->type == NEW_RES_GPIOINT);
+	KKASSERT(res->gpio_int.cookie != NULL);
+
+	GPIO_SETUP_INTR(res->dev, res->gpio_int.cookie, context, handler);
+}
+
+void
+gpio_int_teardown_interrupt(struct acpi_new_resource *res)
+{
+	KKASSERT(res->type == NEW_RES_GPIOINT);
+	KKASSERT(res->gpio_int.cookie != NULL);
+
+	GPIO_TEARDOWN_INTR(res->dev, res->gpio_int.cookie);
+}
+
+/*
  * GpioIo ACPI resource handling
  */
 
