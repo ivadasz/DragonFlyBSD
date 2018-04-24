@@ -168,11 +168,6 @@ static int	acpi_child_pnpinfo_str_method(device_t acdev, device_t child,
 static void	acpi_enable_pcie(void);
 static void	acpi_reset_interfaces(device_t dev);
 
-static struct acpi_new_resource *acpi_device_alloc_new_resource(device_t dev,
-		    device_t child, int type, int rid);
-static void	acpi_device_release_new_resource(device_t dev,
-		    struct acpi_new_resource *res);
-
 static device_method_t acpi_methods[] = {
     /* Device interface */
     DEVMETHOD(device_identify,		acpi_identify),
@@ -208,8 +203,6 @@ static device_method_t acpi_methods[] = {
     DEVMETHOD(acpi_evaluate_object,	acpi_device_eval_obj),
     DEVMETHOD(acpi_pwr_for_sleep,	acpi_device_pwr_for_sleep),
     DEVMETHOD(acpi_scan_children,	acpi_device_scan_children),
-    DEVMETHOD(acpi_alloc_new_resource,	acpi_device_alloc_new_resource),
-    DEVMETHOD(acpi_release_new_resource, acpi_device_release_new_resource),
 
     /* PCI emulation */
     DEVMETHOD(pci_set_powerstate,	acpi_set_powerstate_method),
@@ -843,66 +836,144 @@ acpi_iic_objhandler(ACPI_HANDLE h, void *data)
 {
 }
 
+static void
+acpi_gpio_int_objhandler(ACPI_HANDLE h, void *data)
+{
+}
+
+static void
+acpi_gpio_io_objhandler(ACPI_HANDLE h, void *data)
+{
+}
+
 void
-acpi_register_iic_provider(ACPI_HANDLE h, device_t dev)
+acpi_register_bus_provider(ACPI_HANDLE h, device_t dev, int type)
 {
 	ACPI_STATUS status;
 
-	status = AcpiAttachData(h, acpi_iic_objhandler, dev);
-	if (ACPI_FAILURE(status))
-		device_printf(dev, "Failed to register as iic handler\n");
+	KKASSERT(type == NEW_RES_IIC || type == NEW_RES_GPIOINT ||
+	    type == NEW_RES_GPIOIO);
+
+	switch (type) {
+	case NEW_RES_IIC:
+		status = AcpiAttachData(h, acpi_iic_objhandler, dev);
+		break;
+	case NEW_RES_GPIOINT:
+		status = AcpiAttachData(h, acpi_gpio_int_objhandler, dev);
+		break;
+	case NEW_RES_GPIOIO:
+		status = AcpiAttachData(h, acpi_gpio_io_objhandler, dev);
+		break;
+	}
+	if (ACPI_FAILURE(status)) {
+		device_printf(dev, "Failed to register as %s handler\n",
+		    type == NEW_RES_IIC ? "iic" :
+		     (type == NEW_RES_GPIOINT ? "gpio-int" : "gpio-io"));
+	}
 }
 
 void
-acpi_unregister_iic_provider(ACPI_HANDLE h, device_t dev)
+acpi_unregister_bus_provider(ACPI_HANDLE h, int type)
 {
-	AcpiDetachData(h, acpi_iic_objhandler);
+	KKASSERT(type == NEW_RES_IIC || type == NEW_RES_GPIOINT ||
+	    type == NEW_RES_GPIOIO);
+
+	switch (type) {
+	case NEW_RES_IIC:
+		AcpiDetachData(h, acpi_iic_objhandler);
+		break;
+	case NEW_RES_GPIOINT:
+		AcpiDetachData(h, acpi_gpio_int_objhandler);
+		break;
+	case NEW_RES_GPIOIO:
+		AcpiDetachData(h, acpi_gpio_io_objhandler);
+		break;
+	}
 }
 
 static device_t
-acpi_get_iic_provider(ACPI_HANDLE h)
+acpi_get_bus_provider(ACPI_HANDLE h, int type)
 {
 	ACPI_STATUS status;
 	void *value;
 
-	status = AcpiGetData(h, acpi_iic_objhandler, &value);
+	KKASSERT(type == NEW_RES_IIC || type == NEW_RES_GPIOINT ||
+	    type == NEW_RES_GPIOIO);
+
+	switch (type) {
+	case NEW_RES_IIC:
+		status = AcpiGetData(h, acpi_iic_objhandler, &value);
+		break;
+	case NEW_RES_GPIOINT:
+		status = AcpiGetData(h, acpi_gpio_int_objhandler, &value);
+		break;
+	case NEW_RES_GPIOIO:
+		status = AcpiGetData(h, acpi_gpio_io_objhandler, &value);
+		break;
+	}
 	if (ACPI_SUCCESS(status))
 		return value;
 
 	return NULL;
 }
 
-/* XXX Doesn't work well as a DEVMETHOD. */
-static struct acpi_new_resource *
-acpi_device_alloc_new_resource(device_t dev, device_t child,
-     int type, int rid)
+struct acpi_new_resource *
+acpi_alloc_new_resource(device_t dev, int type, int rid)
 {
-	struct acpi_device	 *adev = device_get_ivars(child);
+	struct acpi_device	 *adev = device_get_ivars(dev);
 	struct acpi_new_resource *res;
 	struct acpi_iic_resource *e;
+	struct acpi_gpio_int_resource *f;
 	device_t provider;
 
-	SLIST_FOREACH(e, &adev->ad_iic, entries) {
-		if (e->rid == rid)
-			break;
+	KKASSERT(type == NEW_RES_IIC || type == NEW_RES_GPIOINT);
+
+	switch (type) {
+	case NEW_RES_IIC:
+		SLIST_FOREACH(e, &adev->ad_iic, entries) {
+			if (e->rid == rid)
+				break;
+		}
+		if (e == NULL)
+			return NULL;
+
+		provider = acpi_get_bus_provider(e->handle, NEW_RES_IIC);
+		if (provider == NULL)
+			return NULL;
+
+		res = kmalloc(sizeof(*res), M_DEVBUF, M_WAITOK | M_ZERO);
+		res->type = NEW_RES_IIC;
+		res->dev = provider;
+		res->iic.address = e->address;
+		break;
+	case NEW_RES_GPIOINT:
+		SLIST_FOREACH(f, &adev->ad_gpio_int, entries) {
+			if (f->rid == rid)
+				break;
+		}
+		if (f == NULL)
+			return NULL;
+
+		provider = acpi_get_bus_provider(f->handle, NEW_RES_GPIOINT);
+		if (provider == NULL)
+			return NULL;
+
+		res = kmalloc(sizeof(*res), M_DEVBUF, M_WAITOK | M_ZERO);
+		res->type = NEW_RES_GPIOINT;
+		res->dev = provider;
+		res->gpio_int.pin = f->pin;
+		res->gpio_int.triggering = f->triggering;
+		res->gpio_int.polarity = f->polarity;
+		res->gpio_int.pinconfig = f->pinconfig;
+		res->gpio_int.cookie = NULL;
+		break;
 	}
-	if (e == NULL)
-		return NULL;
-
-	provider = acpi_get_iic_provider(e->handle);
-	if (provider == NULL)
-		return NULL;
-
-	res = kmalloc(sizeof(*res), M_DEVBUF, M_WAITOK | M_ZERO);
-	res->type = NEW_RES_IIC;
-	res->dev = provider;
-	res->address = e->address;
 	device_busy(res->dev);
 	return res;
 }
 
-static void
-acpi_device_release_new_resource(device_t dev, struct acpi_new_resource *res)
+void
+acpi_release_new_resource(struct acpi_new_resource *res)
 {
 	device_unbusy(res->dev);
 	kfree(res, M_DEVBUF);

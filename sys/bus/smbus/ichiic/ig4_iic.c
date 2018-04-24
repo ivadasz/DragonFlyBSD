@@ -667,7 +667,7 @@ ig4iic_attach(ig4iic_softc_t *sc)
 
 	h = acpi_get_handle(sc->dev);
 	if (h != NULL)
-		acpi_register_iic_provider(h, sc->dev);
+		acpi_register_bus_provider(h, sc->dev, NEW_RES_IIC);
 
 done:
 	return error;
@@ -692,7 +692,7 @@ ig4iic_detach(ig4iic_softc_t *sc)
 	}
         h = acpi_get_handle(sc->dev);
         if (h != NULL)
-                acpi_unregister_iic_provider(h, sc->dev);
+                acpi_unregister_bus_provider(h, NEW_RES_IIC);
 	if (sc->smb) {
 		device_delete_child(sc->dev, sc->smb);
 		sc->smb = NULL;
