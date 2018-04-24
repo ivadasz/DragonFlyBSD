@@ -47,6 +47,7 @@
 #include <bus/pci/pcivar.h>
 
 #include <bus/smbus/smbacpi/smbacpi.h>
+#include <bus/gpio/gpio_acpi/gpio_acpivar.h>
 
 #include <bus/hid/hid_common.h>
 #include <bus/hid/hidvar.h>
@@ -82,18 +83,41 @@ static int iichid_detach(device_t dev);
 
 struct iichid_softc {
 	device_t dev;
+	struct lock lk;
 	uint16_t desc_reg;	/* I2C-HID descriptor register address. */
 	struct acpi_new_resource *iic_res;
+	struct acpi_new_resource *gpio_res;
 	struct iic_hid_descriptor hid_desc;
 
 	device_t child;
 	u_char *report_descriptor;
+	int have_multi_id;
+
+	u_char *input_report;
+	uint16_t max_len;
+	hid_input_handler_t input_handler;
+	void *handler_arg;
 };
 
 static char *iichid_ids[] = {
 	"PNP0C50",
 	NULL
 };
+
+static int
+iichid_have_multi_id(void *buf, int len, int kind)
+{
+	struct hid_data *d;
+	struct hid_item h;
+
+	h.report_ID = 0;
+	for (d = hid_start_parse(buf, len, kind); hid_get_item(d, &h); ) {
+		if (h.report_ID != 0)
+			return (1);
+	}
+	hid_end_parse(d);
+	return (0);
+}
 
 static int
 iichid_get_descriptor_address(struct iichid_softc *sc, uint16_t *addr)
@@ -170,6 +194,123 @@ iichid_readreg_check(struct iichid_softc *sc, uint16_t reg, u_char *buf,
 }
 
 static int
+iichid_writereg16(struct iichid_softc *sc, uint16_t reg, uint16_t value)
+{
+	uint16_t data[2] = { reg, value };
+
+	if (smbus_acpi_rawtrans(sc->iic_res, (char *)data, 4, NULL, 0, NULL)
+	    != 0) {
+		device_printf(sc->dev, "failed to set reg 0x%04x to 0x%04x\n",
+		    reg, value);
+		return (1);
+	}
+
+	return (0);
+}
+
+static int
+iichid_reset(struct iichid_softc *sc)
+{
+	uint16_t req = 0x0100;
+
+	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	if (iichid_writereg16(sc, sc->hid_desc.wCommandRegister, req) != 0) {
+		lockmgr(&sc->lk, LK_RELEASE);
+		return (1);
+	}
+
+	/* Wait for GPIO interrupt and 2 byte input report with length 0 */
+	if (lksleep(sc, &sc->lk, 0, "iichid", 5*hz) == EWOULDBLOCK) {
+		device_printf(sc->dev, "reset timed out\n");
+		lockmgr(&sc->lk, LK_RELEASE);
+		return 1;
+	}
+
+	lockmgr(&sc->lk, LK_RELEASE);
+	return (0);
+}
+
+
+static int
+iichid_setpower(struct iichid_softc *sc, int on)
+{
+	uint16_t req = (0x08 << 8) | (on ? 0x00 : 0x01);
+
+	if (iichid_writereg16(sc, sc->hid_desc.wCommandRegister, req) != 0) {
+		device_printf(sc->dev, "setpower to %s failed\n",
+		    on ? "on" : "off");
+		return (1);
+	}
+
+	return (0);
+}
+
+static int
+iichid_fetch_report(struct iichid_softc *sc, int *actualp)
+{
+	uint16_t length;
+	uint16_t reg = sc->hid_desc.wInputRegister;
+	uint16_t maxcount = sc->hid_desc.wMaxInputLength;
+	int count;
+
+	if (iichid_readreg(sc, reg, sc->input_report, maxcount, &count) != 0) {
+		device_printf(sc->dev, "fetching input report failed\n");
+		return (1);
+	}
+	if (count < 2) {
+		device_printf(sc->dev, "input report too short, %d bytes\n",
+		    count);
+		return (1);
+	}
+	length = *(uint16_t *)&sc->input_report[0];
+	if (length == 0) {
+		device_printf(sc->dev, "reset found\n");
+		return (-1);
+	}
+	if (count != length) {
+		device_printf(sc->dev, "length != count\n");
+		return (1);
+	}
+	*actualp = length;
+
+	return (0);
+}
+
+static void
+iichid_intr(void *arg)
+{
+	struct iichid_softc *sc = (struct iichid_softc *)arg;
+	int count, val;
+
+	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	val = iichid_fetch_report(sc, &count);
+	if (val == -1)
+		wakeup(sc);
+	if (val == 0 && count > (sc->have_multi_id ? 1 : 0)) {
+		if (sc->input_handler != NULL) {
+			uint8_t id = 0;
+			hid_input_handler_t fn;
+			void *arg;
+			uint8_t *buffer = sc->input_report;
+
+			if (sc->have_multi_id) {
+				id = buffer[0];
+				buffer++;
+				count--;
+			}
+			if (count > sc->max_len)
+				count = sc->max_len;
+			fn = sc->input_handler;
+			arg = sc->handler_arg;
+			lockmgr(&sc->lk, LK_RELEASE);
+			fn(id, buffer, count, arg);
+		}
+	} else {
+		lockmgr(&sc->lk, LK_RELEASE);
+	}
+}
+
+static int
 iichid_probe(device_t dev)
 {
 
@@ -198,25 +339,40 @@ dump_bytes(device_t dev, uint8_t *buf, int length)
 	}
 }
 
+/* XXX Currently requires interrupts to work already. */
 static int
 iichid_attach(device_t dev)
 {
 	struct iichid_softc *sc = device_get_softc(dev);
-	struct acpi_new_resource *ires;
+	struct acpi_new_resource *ires, *gres;
 
 	sc->dev = dev;
+	lockinit(&sc->lk, "iiclk", 0, LK_CANRECURSE);
 	if (iichid_get_descriptor_address(sc, &sc->desc_reg) != 0) {
 		device_printf(dev, "Failed to find descriptor register\n");
 		return ENXIO;
 	}
 
-	ires = ACPI_ALLOC_NEW_RESOURCE(device_get_parent(dev), dev,
-	    NEW_RES_IIC, 0);
+	ires = acpi_alloc_new_resource(dev, NEW_RES_IIC, 0);
 	if (ires == NULL) {
 		device_printf(dev, "Failed to allocate I2C resource\n");
 		return ENXIO;
 	}
 	sc->iic_res = ires;
+
+	gres = acpi_alloc_new_resource(dev, NEW_RES_GPIOINT, 0);
+	if (gres == NULL) {
+		device_printf(dev, "Failed to allocate GPIO IRQ resource\n");
+		acpi_release_new_resource(sc->iic_res);
+		return ENXIO;
+	}
+	sc->gpio_res = gres;
+	if (gpio_int_reserve_interrupt(sc->gpio_res) != 0) {
+		device_printf(dev, "Failed to reserve GPIO IRQ resource\n");
+		acpi_release_new_resource(sc->gpio_res);
+		acpi_release_new_resource(sc->iic_res);
+		return ENXIO;
+	}
 	pci_set_powerstate(dev, PCI_POWERSTATE_D0);
 
 	device_printf(dev, "Fetching I2C-HID descriptor from reg 0x%04x\n",
@@ -225,7 +381,9 @@ iichid_attach(device_t dev)
 	    (u_char *)&sc->hid_desc, sizeof(sc->hid_desc)) != 0) {
 		device_printf(dev, "Failed to retrieve HID Descriptor\n");
 		pci_set_powerstate(dev, PCI_POWERSTATE_D3);
-		ACPI_RELEASE_NEW_RESOURCE(device_get_parent(dev), sc->iic_res);
+		acpi_release_new_resource(sc->iic_res);
+		gpio_int_unreserve_interrupt(sc->gpio_res);
+		acpi_release_new_resource(sc->gpio_res);
 		return (ENXIO);
 	}
 	sc->report_descriptor = kmalloc(sc->hid_desc.wReportDescLength,
@@ -236,16 +394,28 @@ iichid_attach(device_t dev)
 	    sc->report_descriptor, sc->hid_desc.wReportDescLength) != 0) {
 		device_printf(dev, "Failed to retrieve Report Descriptor\n");
 		pci_set_powerstate(dev, PCI_POWERSTATE_D3);
-		ACPI_RELEASE_NEW_RESOURCE(device_get_parent(dev), sc->iic_res);
+		acpi_release_new_resource(sc->iic_res);
+		gpio_int_unreserve_interrupt(sc->gpio_res);
+		acpi_release_new_resource(sc->gpio_res);
 		kfree(sc->report_descriptor, M_DEVBUF);
 		return (ENXIO);
 	}
 	if (bootverbose)
 		dump_bytes(dev, sc->report_descriptor, sc->hid_desc.wReportDescLength);
+	sc->have_multi_id = iichid_have_multi_id(sc->report_descriptor,
+	    sc->hid_desc.wReportDescLength, hid_input);
+	sc->input_report = kmalloc(sc->hid_desc.wMaxInputLength, M_DEVBUF,
+	    M_WAITOK | M_ZERO);
 	if (sc->child == NULL) {
 		sc->child = device_add_child(dev, NULL, -1);
 	}
 	bus_generic_attach(dev);
+	gpio_int_establish_interrupt(sc->gpio_res, iichid_intr, sc);
+	iichid_setpower(sc, 1);
+	if (iichid_reset(sc) != 0) {
+		iichid_detach(dev);
+		return (ENXIO);
+	}
 
 	return 0;
 }
@@ -260,11 +430,18 @@ iichid_detach(device_t dev)
 
 	device_delete_child(dev, sc->child);
 	sc->child = NULL;
+	gpio_int_teardown_interrupt(sc->gpio_res);
+	iichid_setpower(sc, 0);
 	if (sc->iic_res != NULL) {
-		ACPI_RELEASE_NEW_RESOURCE(device_get_parent(dev), sc->iic_res);
+		acpi_release_new_resource(sc->iic_res);
+		gpio_int_unreserve_interrupt(sc->gpio_res);
+		acpi_release_new_resource(sc->gpio_res);
 	}
 	pci_set_powerstate(dev, PCI_POWERSTATE_D3);
-	kfree(sc->report_descriptor, M_DEVBUF);
+	if (sc->report_descriptor != NULL)
+		kfree(sc->report_descriptor, M_DEVBUF);
+	if (sc->input_report != NULL)
+		kfree(sc->input_report, M_DEVBUF);
 
 	return 0;
 }
@@ -282,19 +459,36 @@ static void
 iichid_set_handler(device_t dev, hid_input_handler_t input,
     hid_output_handler_t output, void *arg)
 {
-	/* XXX */
+	struct iichid_softc *sc = device_get_softc(dev);
+
+	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	sc->input_handler = input;
+	sc->handler_arg = arg;
+	lockmgr(&sc->lk, LK_RELEASE);
 }
 
 static void
 iichid_start_read(device_t dev, uint16_t max_len)
 {
-	/* XXX */
+	struct iichid_softc *sc = device_get_softc(dev);
+
+	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	sc->max_len = sc->hid_desc.wMaxInputLength;
+	if (max_len > 0 && max_len < sc->max_len)
+		sc->max_len = max_len;
+
+	device_printf(dev, "starting input\n");
+	lockmgr(&sc->lk, LK_RELEASE);
 }
 
 static void
 iichid_stop_read(device_t dev)
 {
-	/* XXX */
+	struct iichid_softc *sc = device_get_softc(dev);
+
+	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	sc->max_len = 0;
+	lockmgr(&sc->lk, LK_RELEASE);
 }
 
 static void
@@ -369,5 +563,6 @@ static devclass_t iichid_devclass;
 DRIVER_MODULE(iichid, acpi, iichid_driver, iichid_devclass, NULL, NULL);
 MODULE_DEPEND(iichid, acpi, 1, 1, 1);
 MODULE_DEPEND(iichid, smbacpi, 1, 1, 1);
+MODULE_DEPEND(iichid, gpio_acpi, 1, 1, 1);
 MODULE_DEPEND(iichid, hidbus, 1, 1, 1);
 MODULE_VERSION(iichid, 1);
