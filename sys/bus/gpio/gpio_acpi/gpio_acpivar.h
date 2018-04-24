@@ -35,6 +35,12 @@
 #ifndef _GPIO_ACPIVAR_H
 #define _GPIO_ACPIVAR_H
 
-/* XXX */
+struct acpi_new_resource;
+
+int	gpio_int_reserve_interrupt(struct acpi_new_resource *res);
+void	gpio_int_unreserve_interrupt(struct acpi_new_resource *res);
+void	gpio_int_establish_interrupt(struct acpi_new_resource *res,
+	    driver_intr_t handler, void *context);
+void	gpio_int_teardown_interrupt(struct acpi_new_resource *res);
 
 #endif
