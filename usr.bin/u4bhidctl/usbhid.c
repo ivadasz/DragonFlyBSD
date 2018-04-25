@@ -342,7 +342,7 @@ dumpdata(int f, report_desc_t rd, int loop)
 		} else {
 			dbuf = malloc(dlen + (use_rid ? 1 : 0));
 			memset(dbuf, 0, dlen + (use_rid ? 1 : 0));
-			r = read(f, dbuf, dlen) + (use_rid ? 1 : 0);
+			r = read(f, dbuf, dlen + (use_rid ? 1 : 0));
 			if (r < 1)
 				err(1, "read error");
 			dlen = r;
