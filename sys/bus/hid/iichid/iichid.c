@@ -277,34 +277,52 @@ iichid_fetch_report(struct iichid_softc *sc, int *actualp)
 }
 
 static void
+dump_bytes(device_t dev, uint8_t *buf, int length)
+{
+	int i;
+
+	for (i = 0; i < length; i += 16) {
+		int j;
+
+		device_printf(dev, "0x%03x", i);
+		for (j = i; j < i + 16 && j < length; j++) {
+			kprintf(" %02x", buf[j]);
+		}
+		kprintf("\n");
+	}
+}
+
+static void
 iichid_intr(void *arg)
 {
 	struct iichid_softc *sc = (struct iichid_softc *)arg;
+	uint8_t *buffer;
 	int count, val;
 
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
 	val = iichid_fetch_report(sc, &count);
 	if (val == -1)
 		wakeup(sc);
-	if (val == 0 && count > (sc->have_multi_id ? 1 : 0)) {
-		if (sc->input_handler != NULL) {
-			uint8_t id = 0;
-			hid_input_handler_t fn;
-			void *arg;
-			uint8_t *buffer = sc->input_report;
+	KKASSERT(count >= 2);
+	if (val == 0 && count > (sc->have_multi_id ? 3 : 2) &&
+	    sc->input_handler != NULL) {
+		uint8_t id = 0;
+		hid_input_handler_t fn;
+		void *arg;
 
-			if (sc->have_multi_id) {
-				id = buffer[0];
-				buffer++;
-				count--;
-			}
-			if (count > sc->max_len)
-				count = sc->max_len;
-			fn = sc->input_handler;
-			arg = sc->handler_arg;
-			lockmgr(&sc->lk, LK_RELEASE);
-			fn(id, buffer, count, arg);
+		count -= 2;
+		buffer = sc->input_report + 2;
+		if (sc->have_multi_id) {
+			id = buffer[0];
+			buffer++;
+			count--;
 		}
+		if (count > sc->max_len)
+			count = sc->max_len;
+		fn = sc->input_handler;
+		arg = sc->handler_arg;
+		lockmgr(&sc->lk, LK_RELEASE);
+		fn(id, buffer, count, arg);
 	} else {
 		lockmgr(&sc->lk, LK_RELEASE);
 	}
@@ -321,22 +339,6 @@ iichid_probe(device_t dev)
 	device_set_desc(dev, "I2C-HID device");
 
 	return (BUS_PROBE_DEFAULT);
-}
-
-static void
-dump_bytes(device_t dev, uint8_t *buf, int length)
-{
-	int i;
-
-	for (i = 0; i < length; i += 8) {
-		int j;
-
-		device_printf(dev, "0x%03x", i);
-		for (j = i; j < i + 16 && j < length; j++) {
-			kprintf(" %02x", buf[j]);
-		}
-		kprintf("\n");
-	}
 }
 
 /* XXX Currently requires interrupts to work already. */
