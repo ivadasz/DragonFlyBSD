@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 The DragonFly Project.  All rights reserved.
+ * Copyright (c) 2018 The DragonFly Project.  All rights reserved.
  *
  * This code is derived from software contributed to The DragonFly Project
  * by Imre Vadász <imre@vdsz.com>
@@ -32,7 +32,7 @@
  * SUCH DAMAGE.
  */
 /*
- * Cherryview GPIO support.
+ * Kabylake GPIO support.
  */
 
 #include <sys/param.h>
@@ -53,8 +53,29 @@
 
 #include "gpio_if.h"
 
-#define CHV_GPIO_REG_IS		0x300
-#define CHV_GPIO_REG_MASK	0x380
+#define KBL_GPIO_REG_PAD_BASE	0x400
+
+/* Community 0 Registers */
+#define KBL_GPIO_REG_IS_A	0x100
+#define KBL_GPIO_REG_IS_B	0x104
+#define KBL_GPIO_REG_IE_A	0x120
+#define KBL_GPIO_REG_IE_B	0x124
+
+/* Community 1 Registers */
+#define KBL_GPIO_REG_IS_C	0x100
+#define KBL_GPIO_REG_IS_D	0x104
+#define KBL_GPIO_REG_IS_E	0x108
+#define KBL_GPIO_REG_IE_C	0x120
+#define KBL_GPIO_REG_IE_D	0x124
+#define KBL_GPIO_REG_IE_E	0x128
+
+/* Community 3 Registers */
+#define KBL_GPIO_REG_IS_F	0x100
+#define KBL_GPIO_REG_IS_G	0x104
+#define KBL_GPIO_REG_IE_F	0x120
+#define KBL_GPIO_REG_IE_G	0x124
+
+
 #define CHV_GPIO_REG_PINS	0x4400	/* start of pin control registers */
 
 #define CHV_GPIO_REGOFF_CTL0	0x0
@@ -72,185 +93,206 @@
 #define CHV_GPIO_PINCHUNK	15	/* 15 pins at a time */
 #define CHV_GPIO_PININC		0x400	/* every 0x400 bytes */
 
-#define PIN_ADDRESS(x)					\
-    (CHV_GPIO_REG_PINS +				\
-     ((x) / CHV_GPIO_PINCHUNK) * CHV_GPIO_PININC +	\
-     ((x) % CHV_GPIO_PINCHUNK) * CHV_GPIO_PINSIZE)
-
-#define PIN_CTL0(x)		(PIN_ADDRESS(x) + CHV_GPIO_REGOFF_CTL0)
-#define PIN_CTL1(x)		(PIN_ADDRESS(x) + CHV_GPIO_REGOFF_CTL1)
-
-static void	gpio_cherryview_init(struct gpio_intel_softc *sc);
-static void	gpio_cherryview_intr(void *arg);
-static int	gpio_cherryview_map_intr(struct gpio_intel_softc *sc,
+static void	gpio_kabylake_init(struct gpio_intel_softc *sc);
+static void	gpio_kabylake_intr(void *arg);
+static int	gpio_kabylake_map_intr(struct gpio_intel_softc *sc,
 		    uint16_t pin, int trigger, int polarity, int termination);
-static void	gpio_cherryview_unmap_intr(struct gpio_intel_softc *sc,
+static void	gpio_kabylake_unmap_intr(struct gpio_intel_softc *sc,
 		    struct pin_intr_map *map);
-static void	gpio_cherryview_enable_intr(struct gpio_intel_softc *sc,
+static void	gpio_kabylake_enable_intr(struct gpio_intel_softc *sc,
 		    struct pin_intr_map *map);
-static void	gpio_cherryview_disable_intr(struct gpio_intel_softc *sc,
+static void	gpio_kabylake_disable_intr(struct gpio_intel_softc *sc,
 		    struct pin_intr_map *map);
-static int	gpio_cherryview_check_io_pin(struct gpio_intel_softc *sc,
+static int	gpio_kabylake_check_io_pin(struct gpio_intel_softc *sc,
 		    uint16_t pin, int flags);
-static int	gpio_cherryview_read_pin(struct gpio_intel_softc *sc,
+static int	gpio_kabylake_read_pin(struct gpio_intel_softc *sc,
 		    uint16_t pin);
-static void	gpio_cherryview_write_pin(struct gpio_intel_softc *sc,
+static void	gpio_kabylake_write_pin(struct gpio_intel_softc *sc,
 		    uint16_t pin, int value);
 
-static struct gpio_intel_fns gpio_cherryview_fns = {
-	.init = gpio_cherryview_init,
-	.intr = gpio_cherryview_intr,
-	.map_intr = gpio_cherryview_map_intr,
-	.unmap_intr = gpio_cherryview_unmap_intr,
-	.enable_intr = gpio_cherryview_enable_intr,
-	.disable_intr = gpio_cherryview_disable_intr,
-	.check_io_pin = gpio_cherryview_check_io_pin,
-	.read_pin = gpio_cherryview_read_pin,
-	.write_pin = gpio_cherryview_write_pin,
+static struct gpio_intel_fns gpio_kabylake_fns = {
+	.init = gpio_kabylake_init,
+	.intr = gpio_kabylake_intr,
+	.map_intr = gpio_kabylake_map_intr,
+	.unmap_intr = gpio_kabylake_unmap_intr,
+	.enable_intr = gpio_kabylake_enable_intr,
+	.disable_intr = gpio_kabylake_disable_intr,
+	.check_io_pin = gpio_kabylake_check_io_pin,
+	.read_pin = gpio_kabylake_read_pin,
+	.write_pin = gpio_kabylake_write_pin,
 };
 
-/* _UID=1 */
-static struct pinrange chv_sw_ranges[] = {
-	{ 0, 7 },
-	{ 15, 22 },
-	{ 30, 37 },
-	{ 45, 52 },
-	{ 60, 67 },
-	{ 75, 82 },
-	{ 90, 97 },
+/* _UID=0 */
+static struct pinrange kabylake_ranges[] = {
+	{ 0, 151 },	/* Corresponds to Communities 0, 1, and 3 */
 	{ -1, -1 }
 };
 
-/* _UID=2 */
-static struct pinrange chv_n_ranges[] = {
-	{ 0, 8 },
-	{ 15, 27 },
-	{ 30, 41 },
-	{ 45, 56 },
-	{ 60, 72 },
-	{ -1, -1 }
-};
-
-/* _UID=3 */
-static struct pinrange chv_e_ranges[] = {
-	{ 0, 11 },
-	{ 15, 26 },
-	{ -1, -1 }
-};
-
-/* _UID=4 */
-static struct pinrange chv_se_ranges[] = {
-	{ 0, 7 },
-	{ 15, 26 },
-	{ 30, 35 },
-	{ 45, 52 },
-	{ 60, 69 },
-	{ 75, 85 },
-	{ -1, -1 }
-};
-
-static struct lock gpio_lk;
-LOCK_SYSINIT(chvgpiolk, &gpio_lk, "chvgpio", 0);
-
-/*
- * Use global GPIO register lock to workaround erratum:
- *
- * CHT34    Multiple Drivers That Access the GPIO Registers Concurrently May
- *          Result in Unpredictable System Behaviour
- */
 static inline uint32_t
-chvgpio_read(struct gpio_intel_softc *sc, bus_size_t offset)
+kblgpio_read(struct gpio_intel_softc *sc, bus_size_t offset, int comm)
 {
-	uint32_t val;
-
-	lockmgr(&gpio_lk, LK_EXCLUSIVE);
-	val = bus_read_4(sc->mem_res, offset);
-	lockmgr(&gpio_lk, LK_RELEASE);
-	return val;
+	if (comm == 0)
+		return bus_read_4(sc->mem_res, offset);
+	else if (comm == 1)
+		return bus_read_4(sc->mem_res1, offset);
+	else if (comm == 3)
+		return bus_read_4(sc->mem_res2, offset);
+	else
+		panic("Invalid PIN community, must be 0, 1 or 3");
 }
 
 static inline void
-chvgpio_write(struct gpio_intel_softc *sc, bus_size_t offset, uint32_t val)
+kblgpio_write(struct gpio_intel_softc *sc, bus_size_t offset, int comm,
+    uint32_t val)
 {
-	lockmgr(&gpio_lk, LK_EXCLUSIVE);
-	bus_write_4(sc->mem_res, offset, val);
-	lockmgr(&gpio_lk, LK_RELEASE);
+	if (comm == 0)
+		bus_write_4(sc->mem_res, offset, val);
+	else if (comm == 1)
+		bus_write_4(sc->mem_res1, offset, val);
+	else if (comm == 3)
+		bus_write_4(sc->mem_res2, offset, val);
+	else
+		panic("Invalid PIN community, must be 0, 1 or 3");
 }
 
 int
-gpio_cherryview_matchuid(struct gpio_intel_softc *sc)
+gpio_kabylake_matchuid(struct gpio_intel_softc *sc)
 {
 	ACPI_HANDLE handle;
 
 	handle = acpi_get_handle(sc->dev);
-	if (acpi_MatchUid(handle, "1")) {
-		sc->ranges = chv_sw_ranges;
-	} else if (acpi_MatchUid(handle, "2")) {
-		sc->ranges = chv_n_ranges;
-	} else if (acpi_MatchUid(handle, "3")) {
-		sc->ranges = chv_e_ranges;
-	} else if (acpi_MatchUid(handle, "4")) {
-		sc->ranges = chv_se_ranges;
+	if (acpi_MatchUid(handle, "0")) {
+		sc->ranges = kabylake_ranges;
 	} else {
 		return (ENXIO);
 	}
 
-	sc->fns = &gpio_cherryview_fns;
+	sc->fns = &gpio_kabylake_fns;
 
 	return (0);
 }
 
 static void
-gpio_cherryview_init(struct gpio_intel_softc *sc)
+gpio_kabylake_init(struct gpio_intel_softc *sc)
 {
-	KKASSERT(sc->nintr >= 16);
-
 	/* mask and clear all interrupt lines */
-	chvgpio_write(sc, CHV_GPIO_REG_MASK, 0);
-	chvgpio_write(sc, CHV_GPIO_REG_IS, 0xffff);
+	kblgpio_write(sc, KBL_GPIO_REG_IE_A, 0, 0);
+	kblgpio_write(sc, KBL_GPIO_REG_IE_B, 0, 0);
+	kblgpio_write(sc, KBL_GPIO_REG_IS_A, 0, 0xffffff);
+	kblgpio_write(sc, KBL_GPIO_REG_IS_B, 0, 0xffffff);
+	kblgpio_write(sc, KBL_GPIO_REG_IE_C, 1, 0);
+	kblgpio_write(sc, KBL_GPIO_REG_IE_D, 1, 0);
+	kblgpio_write(sc, KBL_GPIO_REG_IE_E, 1, 0);
+	kblgpio_write(sc, KBL_GPIO_REG_IS_C, 1, 0xffffff);
+	kblgpio_write(sc, KBL_GPIO_REG_IS_D, 1, 0xffffff);
+	kblgpio_write(sc, KBL_GPIO_REG_IS_E, 1, 0xffffff);
+	kblgpio_write(sc, KBL_GPIO_REG_IE_F, 3, 0);
+	kblgpio_write(sc, KBL_GPIO_REG_IE_G, 3, 0);
+	kblgpio_write(sc, KBL_GPIO_REG_IS_F, 3, 0xffffff);
+	kblgpio_write(sc, KBL_GPIO_REG_IS_G, 3, 0xff);
 }
 
 static void
-gpio_cherryview_intr(void *arg)
+gpio_kabylake_group_intr(struct gpio_intel_softc *sc, u_int startpin, int count,
+    uint32_t reg, int comm)
 {
-	struct gpio_intel_softc *sc = (struct gpio_intel_softc *)arg;
 	struct pin_intr_map *mapping;
 	uint32_t status;
 	int i;
 
-	status = chvgpio_read(sc, CHV_GPIO_REG_IS);
-	for (i = 0; i < 16; i++) {
+	/*
+	 * XXX Better strategy: Only read status register, when any of the pins
+	 *     is actually allocated as a GPIO interrupt in the driver.
+	 */
+	KKASSERT(count == 8 || count == 24);
+	status = kblgpio_read(sc, reg, comm);
+	for (i = 0; i < count; i++) {
 		if (status & (1U << i)) {
-			mapping = &sc->intrmaps[i];
+			mapping = &sc->intrmaps[i + startpin];
 			if (!mapping->is_level) {
-				chvgpio_write(sc, CHV_GPIO_REG_IS,
-				    (1U << i));
+				kblgpio_write(sc, reg, comm, (1U << i));
 			}
 			if (mapping->pin != -1 && mapping->handler != NULL)
 				mapping->handler(mapping->arg);
 			if (mapping->is_level) {
-				chvgpio_write(sc, CHV_GPIO_REG_IS,
-				    (1U << i));
+				kblgpio_write(sc, reg, comm, (1U << i));
 			}
 		}
 	}
 }
 
+static void
+gpio_kabylake_intr(void *arg)
+{
+	struct gpio_intel_softc *sc = (struct gpio_intel_softc *)arg;
+
+	gpio_kabylake_group_intr(sc, 0, 24, KBL_GPIO_REG_IS_A, 0);
+	gpio_kabylake_group_intr(sc, 24, 24, KBL_GPIO_REG_IS_B, 0);
+	gpio_kabylake_group_intr(sc, 48, 24, KBL_GPIO_REG_IS_C, 1);
+	gpio_kabylake_group_intr(sc, 72, 24, KBL_GPIO_REG_IS_D, 1);
+	gpio_kabylake_group_intr(sc, 96, 24, KBL_GPIO_REG_IS_E, 1);
+	gpio_kabylake_group_intr(sc, 120, 24, KBL_GPIO_REG_IS_F, 3);
+	gpio_kabylake_group_intr(sc, 144, 8, KBL_GPIO_REG_IS_G, 3);
+}
+
+static uint32_t
+kblgpio_cfg_addr(uint16_t pin)
+{
+	if (pin < 48) {
+		return KBL_GPIO_REG_PAD_BASE + pin * 8;
+	} else if (pin < 120) {
+		return KBL_GPIO_REG_PAD_BASE + (pin - 48) * 8;
+	} else {
+		return KBL_GPIO_REG_PAD_BASE + (pin - 120) * 8;
+	}
+}
+
+/* Pin index to GPIO Community. */
+static ing
+kblgpio_comm(uint16_t pin)
+{
+	if (pin < 48) {
+		return 0;
+	} else if (pin < 120) {
+		return 1;
+	} else {
+		return 3;
+	}
+}
+
+static uint32_t
+kblgpio_read_pinctl0(struct gpio_intel_softc *sc, uint16_t pin)
+{
+	return kblgpio_read(sc, kblgpio_cfg_addr(pin), kblgpio_comm(pin));
+}
+
+static uint32_t
+kblgpio_read_pinctl1(struct gpio_intel_softc *sc, uint16_t pin)
+{
+	return kblgpio_read(sc, kblgpio_cfg_addr(pin) + 4, kblgpio_comm(pin));
+}
+
 /* XXX Add shared/exclusive argument. */
 static int
-gpio_cherryview_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
+gpio_kabylake_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
     int polarity, int termination)
 {
 	uint32_t reg, reg1, reg2;
 	uint32_t intcfg, new_intcfg, gpiocfg, new_gpiocfg;
 	int i;
 
-	reg1 = chvgpio_read(sc, PIN_CTL0(pin));
-	reg2 = chvgpio_read(sc, PIN_CTL1(pin));
+	reg1 = kblgpio_read_pinctl0(sc, pin);
+	reg2 = kblgpio_read_pinctl1(sc, pin);
 	device_printf(sc->dev,
 	    "pin=%d trigger=%d polarity=%d ctrl0=0x%08x ctrl1=0x%08x\n",
 	    pin, trigger, polarity, reg1, reg2);
 
+	XXXXX First we need to check the Pad Ownership.
+	XXXXX Then check that the Pad Configuration isn't locked.
+	XXXXX Then update the Host Software Pad Ownership register to
+              "GPIO Driver Mode".
+
+XXXXXXXXXXXXX
 	new_intcfg = intcfg = reg2 & CHV_GPIO_CTL1_INTCFG_MASK;
 	new_gpiocfg = gpiocfg = reg1 & CHV_GPIO_CTL0_GPIOCFG_MASK;
 
@@ -353,7 +395,7 @@ gpio_cherryview_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
 		    intcfg, new_intcfg);
 		reg = reg2 & ~CHV_GPIO_CTL1_INTCFG_MASK;
 		reg |= (new_intcfg & CHV_GPIO_CTL1_INTCFG_MASK) << 0;
-		chvgpio_write(sc, PIN_CTL1(pin), reg);
+		kblgpio_write(sc, PIN_CTL1(pin), reg);
 	}
 
 	if (new_gpiocfg != gpiocfg) {
@@ -362,7 +404,7 @@ gpio_cherryview_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
 		    gpiocfg, new_gpiocfg);
 		reg = reg1 & ~CHV_GPIO_CTL0_GPIOCFG_MASK;
 		reg |= (new_gpiocfg & CHV_GPIO_CTL0_GPIOCFG_MASK) << 0;
-		chvgpio_write(sc, PIN_CTL0(pin), reg);
+		kblgpio_write(sc, PIN_CTL0(pin), reg);
 	}
 
 	sc->intrmaps[i].pin = pin;
@@ -379,7 +421,7 @@ gpio_cherryview_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
 }
 
 static void
-gpio_cherryview_unmap_intr(struct gpio_intel_softc *sc,
+gpio_kabylake_unmap_intr(struct gpio_intel_softc *sc,
     struct pin_intr_map *map)
 {
 	uint32_t reg, intcfg, gpiocfg;
@@ -398,24 +440,24 @@ gpio_cherryview_unmap_intr(struct gpio_intel_softc *sc,
 	map->orig_gpiocfg = 0;
 
 	/* Restore interrupt configuration if needed */
-	reg = chvgpio_read(sc, PIN_CTL1(pin));
+	reg = kblgpio_read(sc, PIN_CTL1(pin));
 	if ((reg & CHV_GPIO_CTL1_INTCFG_MASK) != intcfg) {
 		reg &= ~CHV_GPIO_CTL1_INTCFG_MASK;
 		reg |= intcfg;
-		chvgpio_write(sc, PIN_CTL1(pin), reg);
+		kblgpio_write(sc, PIN_CTL1(pin), reg);
 	}
 
 	/* Restore gpio configuration if needed */
-	reg = chvgpio_read(sc, PIN_CTL0(pin));
+	reg = kblgpio_read(sc, PIN_CTL0(pin));
 	if ((reg & CHV_GPIO_CTL0_GPIOCFG_MASK) != gpiocfg) {
 		reg &= ~CHV_GPIO_CTL0_GPIOCFG_MASK;
 		reg |= gpiocfg;
-		chvgpio_write(sc, PIN_CTL0(pin), reg);
+		kblgpio_write(sc, PIN_CTL0(pin), reg);
 	}
 }
 
 static void
-gpio_cherryview_enable_intr(struct gpio_intel_softc *sc,
+gpio_kabylake_enable_intr(struct gpio_intel_softc *sc,
     struct pin_intr_map *map)
 {
 	uint32_t reg;
@@ -423,16 +465,16 @@ gpio_cherryview_enable_intr(struct gpio_intel_softc *sc,
 	KKASSERT(map->intidx >= 0);
 
 	/* clear interrupt status flag */
-	chvgpio_write(sc, CHV_GPIO_REG_IS, (1U << map->intidx));
+	kblgpio_write(sc, CHV_GPIO_REG_IS, (1U << map->intidx));
 
 	/* unmask interrupt */
-	reg = chvgpio_read(sc, CHV_GPIO_REG_MASK);
+	reg = kblgpio_read(sc, CHV_GPIO_REG_MASK);
 	reg |= (1U << map->intidx);
-	chvgpio_write(sc, CHV_GPIO_REG_MASK, reg);
+	kblgpio_write(sc, CHV_GPIO_REG_MASK, reg);
 }
 
 static void
-gpio_cherryview_disable_intr(struct gpio_intel_softc *sc,
+gpio_kabylake_disable_intr(struct gpio_intel_softc *sc,
     struct pin_intr_map *map)
 {
 	uint32_t reg;
@@ -440,18 +482,18 @@ gpio_cherryview_disable_intr(struct gpio_intel_softc *sc,
 	KKASSERT(map->intidx >= 0);
 
 	/* mask interrupt line */
-	reg = chvgpio_read(sc, CHV_GPIO_REG_MASK);
+	reg = kblgpio_read(sc, CHV_GPIO_REG_MASK);
 	reg &= ~(1U << map->intidx);
-	chvgpio_write(sc, CHV_GPIO_REG_MASK, reg);
+	kblgpio_write(sc, CHV_GPIO_REG_MASK, reg);
 }
 
 static int
-gpio_cherryview_check_io_pin(struct gpio_intel_softc *sc, uint16_t pin,
+gpio_kabylake_check_io_pin(struct gpio_intel_softc *sc, uint16_t pin,
     int flags)
 {
 	uint32_t reg1, reg2;
 
-	reg1 = chvgpio_read(sc, PIN_CTL0(pin));
+	reg1 = kblgpio_read(sc, PIN_CTL0(pin));
 	if (flags & (1U << 0)) {
 		/* Verify that RX is enabled */
 		if ((reg1 & CHV_GPIO_CTL0_GPIOCFG_MASK) != 0 &&
@@ -459,7 +501,7 @@ gpio_cherryview_check_io_pin(struct gpio_intel_softc *sc, uint16_t pin,
 			return (0);
 		}
 	}
-	reg2 = chvgpio_read(sc, PIN_CTL1(pin));
+	reg2 = kblgpio_read(sc, PIN_CTL1(pin));
 	if (flags & (1U << 1)) {
 		/* Verify that interrupt is disabled */
 		if ((reg2 & CHV_GPIO_CTL1_INTCFG_MASK) != 0)
@@ -475,12 +517,12 @@ gpio_cherryview_check_io_pin(struct gpio_intel_softc *sc, uint16_t pin,
 }
 
 static int
-gpio_cherryview_read_pin(struct gpio_intel_softc *sc, uint16_t pin)
+gpio_kabylake_read_pin(struct gpio_intel_softc *sc, uint16_t pin)
 {
 	uint32_t reg;
 	int val;
 
-	reg = chvgpio_read(sc, PIN_CTL0(pin));
+	reg = kblgpio_read(sc, PIN_CTL0(pin));
 	/* Verify that RX is enabled */
 	KKASSERT((reg & CHV_GPIO_CTL0_GPIOCFG_MASK) == 0x0 ||
 	    (reg & CHV_GPIO_CTL0_GPIOCFG_MASK) == 0x200);
@@ -494,11 +536,11 @@ gpio_cherryview_read_pin(struct gpio_intel_softc *sc, uint16_t pin)
 }
 
 static void
-gpio_cherryview_write_pin(struct gpio_intel_softc *sc, uint16_t pin, int value)
+gpio_kabylake_write_pin(struct gpio_intel_softc *sc, uint16_t pin, int value)
 {
 	uint32_t reg;
 
-	reg = chvgpio_read(sc, PIN_CTL0(pin));
+	reg = kblgpio_read(sc, PIN_CTL0(pin));
 	/* Verify that TX is enabled */
 	KKASSERT((reg & CHV_GPIO_CTL0_GPIOCFG_MASK) == 0 ||
 	    (reg & CHV_GPIO_CTL0_GPIOCFG_MASK) == 0x100);
@@ -507,5 +549,5 @@ gpio_cherryview_write_pin(struct gpio_intel_softc *sc, uint16_t pin, int value)
 		reg |= CHV_GPIO_CTL0_TXSTATE;
 	else
 		reg &= ~CHV_GPIO_CTL0_TXSTATE;
-	chvgpio_write(sc, PIN_CTL0(pin), reg);
+	kblgpio_write(sc, PIN_CTL0(pin), reg);
 }
