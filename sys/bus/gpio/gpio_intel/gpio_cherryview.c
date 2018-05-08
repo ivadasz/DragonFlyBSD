@@ -204,6 +204,8 @@ gpio_cherryview_matchuid(struct gpio_intel_softc *sc)
 static void
 gpio_cherryview_init(struct gpio_intel_softc *sc)
 {
+	KKASSERT(sc->nintr >= 16);
+
 	/* mask and clear all interrupt lines */
 	chvgpio_write(sc, CHV_GPIO_REG_MASK, 0);
 	chvgpio_write(sc, CHV_GPIO_REG_IS, 0xffff);
@@ -219,7 +221,6 @@ gpio_cherryview_intr(void *arg)
 	int i, mpheld = 0;
 
 	status = chvgpio_read(sc, CHV_GPIO_REG_IS);
-	KKASSERT(NELEM(sc->intrmaps) >= 16);
 	for (i = 0; i < 16; i++) {
 		if (status & (1U << i)) {
 			mapping = &sc->intrmaps[i];
