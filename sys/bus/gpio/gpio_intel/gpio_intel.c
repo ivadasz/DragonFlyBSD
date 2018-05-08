@@ -75,16 +75,23 @@ static int	gpio_intel_pin_exists(struct gpio_intel_softc *sc,
 		    uint16_t pin);
 
 static char *cherryview_ids[] = { "INT33FF", NULL };
+static char *kabylake_ids[] = { "INT344B", "INT345D", NULL };
 
 static int
 gpio_intel_probe(device_t dev)
 {
+	device_t parent = device_get_parent(dev);
 
-        if (acpi_disabled("gpio_intel") ||
-            ACPI_ID_PROBE(device_get_parent(dev), dev, cherryview_ids) == NULL)
+        if (acpi_disabled("gpio_intel"))
+		return (ENXIO);
+
+	if (ACPI_ID_PROBE(parent, dev, cherryview_ids) != NULL) {
+		device_set_desc(dev, "Intel Cherry Trail GPIO Controller");
+	} else if (ACPI_ID_PROBE(parent, dev, kabylake_ids) != NULL) {
+		device_set_desc(dev, "Intel Kabylake GPIO Controller");
+	} else {
                 return (ENXIO);
-
-	device_set_desc(dev, "Intel Cherry Trail GPIO Controller");
+	}
 
 	return (BUS_PROBE_DEFAULT);
 }
@@ -93,29 +100,45 @@ static int
 gpio_intel_attach(device_t dev)
 {
 	struct gpio_intel_softc *sc = device_get_softc(dev);
+	device_t parent = device_get_parent(dev);
 	ACPI_HANDLE h;
 	int error, i, rid;
+	int type = 0;
 
 	lockinit(&sc->lk, "gpio_intel", 0, LK_CANRECURSE);
 
 	sc->dev = dev;
 
-        if (ACPI_ID_PROBE(device_get_parent(dev), dev, cherryview_ids)
-	    != NULL) {
+        if (ACPI_ID_PROBE(parent, dev, cherryview_ids) != NULL) {
 		error = gpio_cherryview_matchuid(sc);
 		if (error) {
 			error = ENXIO;
 			goto err;
 		}
+		sc->npins = 98;
+		sc->nintr = 16;
+        } else if (ACPI_ID_PROBE(parent, dev, kabylake_ids) != NULL) {
+		error = gpio_kabylake_matchuid(sc);
+		if (error) {
+			error = ENXIO;
+			goto err;
+		}
+		type = 1;
+		sc->nintr = 152;
+		sc->npins = 152;
 	} else {
 		error = ENXIO;
 		goto err;
 	}
 
-	for (i = 0; i < NELEM(sc->intrmaps); i++) {
+	sc->intrmaps = kmalloc(sc->nintr * sizeof(*sc->intrmaps), M_DEVBUF,
+	    M_ZERO | M_WAITOK);
+	sc->iomaps = kmalloc(sc->npins * sizeof(*sc->iomaps), M_DEVBUF,
+	    M_ZERO | M_WAITOK);
+	for (i = 0; i < sc->nintr; i++) {
 		sc->intrmaps[i].pin = -1;
 	}
-	for (i = 0; i < NELEM(sc->iomaps); i++) {
+	for (i = 0; i < sc->npins; i++) {
 		sc->iomaps[i].pin = -1;
 	}
 
@@ -126,6 +149,39 @@ gpio_intel_attach(device_t dev)
 		device_printf(dev, "unable to map registers");
 		error = ENXIO;
 		goto err;
+	}
+	if (type == 1) {
+		if (rman_get_size(sc->mem_res) < 0x580) {
+			device_printf(dev, "Memory resource 0 too short.\n");
+			error = ENXIO;
+			goto err;
+		}
+		rid = 1;
+		sc->mem_res1 = bus_alloc_resource_any(dev, SYS_RES_MEMORY,
+		    &rid, RF_ACTIVE);
+		if (sc->mem_res1 == NULL) {
+			device_printf(dev, "unable to map registers");
+			error = ENXIO;
+			goto err;
+		}
+		if (rman_get_size(sc->mem_res1) < 0x640) {
+			device_printf(dev, "Memory resource 1 too short.\n");
+			error = ENXIO;
+			goto err;
+		}
+		rid = 2;
+		sc->mem_res2 = bus_alloc_resource_any(dev, SYS_RES_MEMORY,
+		    &rid, RF_ACTIVE);
+		if (sc->mem_res2 == NULL) {
+			device_printf(dev, "unable to map registers");
+			error = ENXIO;
+			goto err;
+		}
+		if (rman_get_size(sc->mem_res2) < 0x500) {
+			device_printf(dev, "Memory resource 2 too short.\n");
+			error = ENXIO;
+			goto err;
+		}
 	}
 	rid = 0;
 	sc->irq_res = bus_alloc_resource_any(dev, SYS_RES_IRQ,
@@ -168,6 +224,20 @@ err:
 		    rman_get_rid(sc->mem_res), sc->mem_res);
 		sc->mem_res = NULL;
 	}
+	if (sc->mem_res1) {
+		bus_release_resource(dev, SYS_RES_MEMORY,
+		    rman_get_rid(sc->mem_res1), sc->mem_res1);
+		sc->mem_res1 = NULL;
+	}
+	if (sc->mem_res2) {
+		bus_release_resource(dev, SYS_RES_MEMORY,
+		    rman_get_rid(sc->mem_res2), sc->mem_res2);
+		sc->mem_res2 = NULL;
+	}
+	if (sc->intrmaps != NULL)
+		kfree(sc->intrmaps, M_DEVBUF);
+	if (sc->iomaps != NULL)
+		kfree(sc->iomaps, M_DEVBUF);
 	return (error);
 }
 
@@ -199,9 +269,24 @@ gpio_intel_detach(device_t dev)
 		    rman_get_rid(sc->mem_res), sc->mem_res);
 		sc->mem_res = NULL;
 	}
+	if (sc->mem_res1) {
+		bus_release_resource(dev, SYS_RES_MEMORY,
+		    rman_get_rid(sc->mem_res1), sc->mem_res1);
+		sc->mem_res1 = NULL;
+	}
+	if (sc->mem_res2) {
+		bus_release_resource(dev, SYS_RES_MEMORY,
+		    rman_get_rid(sc->mem_res2), sc->mem_res2);
+		sc->mem_res2 = NULL;
+	}
 	lockuninit(&sc->lk);
 
 	pci_set_powerstate(dev, PCI_POWERSTATE_D3);
+
+	if (sc->intrmaps != NULL)
+		kfree(sc->intrmaps, M_DEVBUF);
+	if (sc->iomaps != NULL)
+		kfree(sc->iomaps, M_DEVBUF);
 
 	return 0;
 }
@@ -226,7 +311,7 @@ gpio_intel_alloc_intr(device_t dev, u_int pin, int trigger, int polarity,
 
 	if (gpio_intel_pin_exists(sc, pin)) {
 		/* Make sure this pin isn't mapped yet */
-		for (i = 0; i < NELEM(sc->intrmaps); i++) {
+		for (i = 0; i < sc->nintr; i++) {
 			if (sc->intrmaps[i].pin == pin) {
 				lockmgr(&sc->lk, LK_RELEASE);
 				return (EBUSY);
@@ -236,7 +321,7 @@ gpio_intel_alloc_intr(device_t dev, u_int pin, int trigger, int polarity,
 		    termination);
 		if (ret == 0) {
 			/* XXX map_intr should return the pin_intr_map */
-			for (i = 0; i < NELEM(sc->intrmaps); i++) {
+			for (i = 0; i < sc->nintr; i++) {
 				if (sc->intrmaps[i].pin == pin)
 					map = &sc->intrmaps[i];
 			}
@@ -317,13 +402,13 @@ gpio_intel_alloc_io_pin(device_t dev, u_int pin, int flags, void **cookiep)
 
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
 
-	for (i = 0; i < NELEM(sc->iomaps); i++) {
+	for (i = 0; i < sc->npins; i++) {
 		if (sc->iomaps[i].pin == pin) {
 			lockmgr(&sc->lk, LK_RELEASE);
 			return (EBUSY);
 		}
 	}
-	for (i = 0; i < NELEM(sc->iomaps); i++) {
+	for (i = 0; i < sc->npins; i++) {
 		if (sc->iomaps[i].pin == -1) {
 			map = &sc->iomaps[i];
 			break;

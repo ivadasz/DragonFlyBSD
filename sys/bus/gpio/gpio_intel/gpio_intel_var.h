@@ -24,12 +24,16 @@ struct pin_io_map {
 struct gpio_intel_softc {
 	device_t dev;
 	struct resource *mem_res;
+	struct resource *mem_res1;
+	struct resource *mem_res2;
 	struct resource *irq_res;
 	void		*intrhand;
 	struct lock	lk;
 	struct pinrange *ranges;
-	struct pin_intr_map intrmaps[16];
-	struct pin_io_map iomaps[128];
+	u_int		nintr;
+	struct pin_intr_map *intrmaps;
+	u_int		npins;
+	struct pin_io_map *iomaps;
 	struct gpio_intel_fns *fns;
 };
 
@@ -62,5 +66,6 @@ struct gpio_intel_fns {
 };
 
 int	gpio_cherryview_matchuid(struct gpio_intel_softc *sc);
+int	gpio_kabylake_matchuid(struct gpio_intel_softc *sc);
 
 #endif
