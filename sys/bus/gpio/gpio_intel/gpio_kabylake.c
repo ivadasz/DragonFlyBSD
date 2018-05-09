@@ -412,7 +412,11 @@ gpio_kabylake_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
 		if ((reg1 & 0x6000000) != 0) {
 			device_printf(sc->dev,
 			    "reg1 is 0x%x. Should be Level sensitive\n", reg1);
-			return (ENXIO);
+			if ((reg1 & 0x6000000) != 0x6000000) {
+				new_gpiocfg &= ~0x6000000;
+			} else {
+				return (ENXIO);
+			}
 		}
 		if (polarity == ACPI_ACTIVE_LOW) {
 			if (!(reg1 & 0x800000)) {
