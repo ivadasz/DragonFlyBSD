@@ -64,6 +64,8 @@
 #define KBL_GPIO_OWNER_B2	0x38
 #define KBL_GPIO_CFGLOCK_A	0xa0
 #define KBL_GPIO_CFGLOCK_B	0xa8
+#define KBL_GPIO_SW_OWNER_A	0xd0
+#define KBL_GPIO_SW_OWNER_B	0xd4
 #define KBL_GPIO_REG_IS_A	0x100
 #define KBL_GPIO_REG_IS_B	0x104
 #define KBL_GPIO_REG_IE_A	0x120
@@ -82,6 +84,9 @@
 #define KBL_GPIO_CFGLOCK_C	0xa0
 #define KBL_GPIO_CFGLOCK_D	0xa8
 #define KBL_GPIO_CFGLOCK_E	0xb0
+#define KBL_GPIO_SW_OWNER_C	0xd0
+#define KBL_GPIO_SW_OWNER_D	0xd4
+#define KBL_GPIO_SW_OWNER_E	0xd8
 #define KBL_GPIO_REG_IS_C	0x100
 #define KBL_GPIO_REG_IS_D	0x104
 #define KBL_GPIO_REG_IS_E	0x108
@@ -96,6 +101,8 @@
 #define KBL_GPIO_OWNER_G0	0x30
 #define KBL_GPIO_CFGLOCK_F	0xa0
 #define KBL_GPIO_CFGLOCK_G	0xa8
+#define KBL_GPIO_SW_OWNER_F	0xd0
+#define KBL_GPIO_SW_OWNER_G	0xd4
 #define KBL_GPIO_REG_IS_F	0x100
 #define KBL_GPIO_REG_IS_G	0x104
 #define KBL_GPIO_REG_IE_F	0x120
@@ -339,6 +346,36 @@ kblgpio_pad_config_lock(struct gpio_intel_softc *sc, uint16_t pin)
 	return ((val >> (pin % 24)) & 1);
 }
 
+static void
+kblgpio_pad_sw_own(struct gpio_intel_softc *sc, uint16_t pin, int own)
+{
+	uint32_t reg, val;
+
+	if (pin < 24) {
+		reg = KBL_GPIO_SW_OWNER_A;
+	} else if (pin < 48) {
+		reg = KBL_GPIO_SW_OWNER_B;
+	} else if (pin < 72) {
+		reg = KBL_GPIO_SW_OWNER_C;
+	} else if (pin < 96) {
+		reg = KBL_GPIO_SW_OWNER_D;
+	} else if (pin < 120) {
+		reg = KBL_GPIO_SW_OWNER_E;
+	} else if (pin < 144) {
+		reg = KBL_GPIO_SW_OWNER_F;
+	} else {
+		reg = KBL_GPIO_SW_OWNER_G;
+	}
+	val = kblgpio_read(sc, reg, kblgpio_comm(pin));
+	if (own) {
+		val |= (1 << (pin % 24));
+		kblgpio_write(sc, reg, kblgpio_comm(pin), val);
+	} else {
+		val &= ~(1 << (pin % 24));
+		kblgpio_write(sc, reg, kblgpio_comm(pin), val);
+	}
+}
+
 static uint32_t
 kblgpio_read_pinctl0(struct gpio_intel_softc *sc, uint16_t pin)
 {
@@ -351,13 +388,19 @@ kblgpio_read_pinctl1(struct gpio_intel_softc *sc, uint16_t pin)
 	return kblgpio_read(sc, kblgpio_cfg_addr(pin) + 4, kblgpio_comm(pin));
 }
 
+static uint32_t
+kblgpio_write_pinctl0(struct gpio_intel_softc *sc, uint16_t pin, uint32_t val)
+{
+	return kblgpio_write(sc, kblgpio_cfg_addr(pin), kblgpio_comm(pin), val);
+}
+
 /* XXX Add shared/exclusive argument. */
 static int
 gpio_kabylake_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
     int polarity, int termination)
 {
 	uint32_t reg, reg1, reg2;
-	uint32_t intcfg, new_intcfg, gpiocfg, new_gpiocfg;
+	uint32_t new_gpiocfg;
 	int i;
 
 	reg1 = kblgpio_read_pinctl0(sc, pin);
@@ -376,49 +419,37 @@ gpio_kabylake_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
 		device_printf(sc->dev, "Pin %u config locked\n", pin);
 		return (ENXIO);
 	}
-	XXXXX Then update the Host Software Pad Ownership register to
-              "GPIO Driver Mode".
+	kblgpio_pad_sw_own(sc, pin, 1);
 
-XXXXXXXXXXXXX
-	new_intcfg = intcfg = reg2 & CHV_GPIO_CTL1_INTCFG_MASK;
-	new_gpiocfg = gpiocfg = reg1 & CHV_GPIO_CTL0_GPIOCFG_MASK;
-
-	/*
-	 * Sanity Checks, for now we just abort if the configuration doesn't
-	 * match our expectations.
-	 */
-	if (!(reg1 & CHV_GPIO_CTL0_GPIOEN)) {
+	if ((reg1 & 0xc00) != 0) {
 		device_printf(sc->dev, "GPIO mode is disabled\n");
 		return (ENXIO);
 	}
-	if (gpiocfg != 0x0 && gpiocfg != 0x200) {
+	new_gpiocfg = reg1;
+	if (reg1 & 0x200) {
 		device_printf(sc->dev, "RX is disabled\n");
-		if (gpiocfg == 0x100)
-			new_gpiocfg = 0x000;
-		else if (gpiocfg == 0x300)
-			new_gpiocfg = 0x200;
-		else
-			return (ENXIO);
+		new_gpiocfg &= ~0x200;
+	}
+	if (polarity == ACPI_ACTIVE_BOTH) {
+		device_printf(sc->dev,
+		    "ACTIVE_BOTH not supported\n");
+		return (ENXIO);
 	}
 	if (trigger == ACPI_LEVEL_SENSITIVE) {
-		if (intcfg != 4) {
+		if ((reg1 & 0x6000000) != 0) {
 			device_printf(sc->dev,
-			    "trigger is %x, should be 4 (Level)\n", intcfg);
+			    "reg1 is 0x%x. Should be Level sensitive\n", reg1);
 			return (ENXIO);
 		}
-		if (polarity == ACPI_ACTIVE_BOTH) {
-			device_printf(sc->dev,
-			    "ACTIVE_BOTH incompatible with level trigger\n");
-			return (ENXIO);
-		} else if (polarity == ACPI_ACTIVE_LOW) {
-			if (!(reg2 & CHV_GPIO_CTL1_INVRXDATA)) {
+		if (polarity == ACPI_ACTIVE_LOW) {
+			if (!(reg1 & 0x800000)) {
 				device_printf(sc->dev,
 				    "Invert RX not enabled (needed for "
 				    "level/low trigger/polarity)\n");
 				return (ENXIO);
 			}
 		} else {
-			if (reg2 & CHV_GPIO_CTL1_INVRXDATA) {
+			if (reg2 & 0x800000) {
 				device_printf(sc->dev,
 				    "Invert RX should not be enabled for "
 				    "level/high trigger/polarity\n");
@@ -431,78 +462,59 @@ XXXXXXXXXXXXX
 		 * change between rising-edge, falling-edge and both-edges
 		 * triggering.
 		 */
-		if (polarity == ACPI_ACTIVE_HIGH && intcfg != 2) {
+		if (polarity == ACPI_ACTIVE_HIGH && (reg1 & 0x6000000) != 0) {
 			device_printf(sc->dev,
 			    "Wrong interrupt configuration, is 0x%x should "
-			    "be 0x%x\n", intcfg, 2);
-			if (intcfg == 1 || intcfg == 3)
-				new_intcfg = 2;
-			else
+			    "be 0x%x\n", reg1, reg1 & ~0x6000000);
+			if ((reg1 & 0x6000000) == 0x2000000 ||
+			    (reg1 & 0x6000000) == 0x4000000) {
+				new_gpiocfg &= ~0x6000000;
+			} else {
 				return (ENXIO);
-		} else if (polarity == ACPI_ACTIVE_LOW && intcfg != 1) {
+			}
+		} else if (polarity == ACPI_ACTIVE_LOW &&
+		    (reg1 & 0x6000000) != 0x2000000) {
 			device_printf(sc->dev,
 			    "Wrong interrupt configuration, is 0x%x should "
-			    "be 0x%x\n", intcfg, 1);
-			if (intcfg == 2 || intcfg == 3)
-				new_intcfg = 1;
-			else
+			    "be 0x%x\n", reg1, (reg1 & ~0x6000000) | 0x2000000);
+			if ((reg1 & 0x6000000) == 0 ||
+			    (reg1 & 0x6000000) == 0x4000000) {
+				new_gpiocfg &= ~0x6000000;
+				new_gpiocfg |= 0x2000000;
+			} else {
 				return (ENXIO);
-		} else if (polarity == ACPI_ACTIVE_BOTH && intcfg != 3) {
-			device_printf(sc->dev,
-			    "Wrong interrupt configuration, is 0x%x should "
-			    "be 0x%x\n", intcfg, 3);
-			if (intcfg == 1 || intcfg == 2)
-				new_intcfg = 3;
-			else
-				return (ENXIO);
+			}
 		}
 	}
 	if (termination == ACPI_PIN_CONFIG_PULLUP &&
-	    !(reg1 & CHV_GPIO_CTL0_PULLUP)) {
+	    (reg2 & 0x3c00) != 0x2400 && (reg2 & 0x3c00) != 0x3000) {
 		device_printf(sc->dev,
-		    "Wrong termination, is pull-down, should be pull-up\n");
+		    "Wrong termination, is 0x%x, should be pull-up\n",
+		    (reg2 & 0x3c00) >> 10);
 		return (ENXIO);
 	} else if (termination == ACPI_PIN_CONFIG_PULLDOWN &&
-	    (reg1 & CHV_GPIO_CTL0_PULLUP)) {
+	    (reg2 & 0x3c00) != 0x800 && (reg2 & 0x3c00) != 0x1000) {
 		device_printf(sc->dev,
-		    "Wrong termination, is pull-up, should be pull-down\n");
+		    "Wrong termination, is 0x%x should be pull-down\n",
+		    (reg2 & 0x3c00) >> 10);
 		return (ENXIO);
 	}
-
-	/* Check if the interrupt/line configured by BIOS/UEFI is unused */
-	i = (reg1 >> 28) & 0xf;
-	if (sc->intrmaps[i].pin != -1) {
-		device_printf(sc->dev, "Interrupt line %d already used\n", i);
-		return (ENXIO);
-	}
-
-	if (new_intcfg != intcfg) {
+	if (new_gpiocfg != reg1) {
 		device_printf(sc->dev,
-		    "Switching interrupt configuration from 0x%x to 0x%x\n",
-		    intcfg, new_intcfg);
-		reg = reg2 & ~CHV_GPIO_CTL1_INTCFG_MASK;
-		reg |= (new_intcfg & CHV_GPIO_CTL1_INTCFG_MASK) << 0;
-		kblgpio_write(sc, PIN_CTL1(pin), reg);
+		    "Switching reg1 gpio configuration from 0x%x to 0x%x\n",
+		    reg1, new_gpiocfg);
+		kblgpio_write_pinctl0(sc, pin, new_gpiocfg);
 	}
-
-	if (new_gpiocfg != gpiocfg) {
-		device_printf(sc->dev,
-		    "Switching gpio configuration from 0x%x to 0x%x\n",
-		    gpiocfg, new_gpiocfg);
-		reg = reg1 & ~CHV_GPIO_CTL0_GPIOCFG_MASK;
-		reg |= (new_gpiocfg & CHV_GPIO_CTL0_GPIOCFG_MASK) << 0;
-		kblgpio_write(sc, PIN_CTL0(pin), reg);
-	}
-
-	sc->intrmaps[i].pin = pin;
-	sc->intrmaps[i].intidx = i;
-	sc->intrmaps[i].orig_intcfg = intcfg;
-	sc->intrmaps[i].orig_gpiocfg = gpiocfg;
+	/* Interrupts are directly mapped here. */
+	sc->intrmaps[pin].pin = pin;
+	sc->intrmaps[pin].intidx = pin;
+	sc->intrmaps[pin].orig_intcfg = reg2;
+	sc->intrmaps[pin].orig_gpiocfg = reg1;
 
 	if (trigger == ACPI_LEVEL_SENSITIVE)
-		sc->intrmaps[i].is_level = 1;
+		sc->intrmaps[pin].is_level = 1;
 	else
-		sc->intrmaps[i].is_level = 0;
+		sc->intrmaps[pin].is_level = 0;
 
 	return (0);
 }
@@ -511,14 +523,10 @@ static void
 gpio_kabylake_unmap_intr(struct gpio_intel_softc *sc,
     struct pin_intr_map *map)
 {
-	uint32_t reg, intcfg, gpiocfg;
+	uint32_t reg, gpiocfg;
 	uint16_t pin = map->pin;
 
-	intcfg = map->orig_intcfg;
-	intcfg &= CHV_GPIO_CTL1_INTCFG_MASK;
-
 	gpiocfg = map->orig_gpiocfg;
-	gpiocfg &= CHV_GPIO_CTL0_GPIOCFG_MASK;
 
 	map->pin = -1;
 	map->intidx = -1;
@@ -526,21 +534,14 @@ gpio_kabylake_unmap_intr(struct gpio_intel_softc *sc,
 	map->orig_intcfg = 0;
 	map->orig_gpiocfg = 0;
 
-	/* Restore interrupt configuration if needed */
-	reg = kblgpio_read(sc, PIN_CTL1(pin));
-	if ((reg & CHV_GPIO_CTL1_INTCFG_MASK) != intcfg) {
-		reg &= ~CHV_GPIO_CTL1_INTCFG_MASK;
-		reg |= intcfg;
-		kblgpio_write(sc, PIN_CTL1(pin), reg);
+	/* Restore gpio configuration if needed */
+	reg = kblgpio_read_pinctl0(sc, pin);
+	if ((reg & ~0x3) != (gpiocfg & ~0x3)) {
+		reg = (reg & 0x3) | (gpiocfg & ~0x3);
+		kblgpio_write_pinctl0(sc, pin, reg);
 	}
 
-	/* Restore gpio configuration if needed */
-	reg = kblgpio_read(sc, PIN_CTL0(pin));
-	if ((reg & CHV_GPIO_CTL0_GPIOCFG_MASK) != gpiocfg) {
-		reg &= ~CHV_GPIO_CTL0_GPIOCFG_MASK;
-		reg |= gpiocfg;
-		kblgpio_write(sc, PIN_CTL0(pin), reg);
-	}
+	kblgpio_pad_sw_own(sc, pin, 0);
 }
 
 static void
@@ -551,6 +552,7 @@ gpio_kabylake_enable_intr(struct gpio_intel_softc *sc,
 
 	KKASSERT(map->intidx >= 0);
 
+XXXXXXXXXXXX
 	/* clear interrupt status flag */
 	kblgpio_write(sc, CHV_GPIO_REG_IS, (1U << map->intidx));
 
