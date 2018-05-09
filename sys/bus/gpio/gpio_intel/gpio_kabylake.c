@@ -56,12 +56,27 @@
 #define KBL_GPIO_REG_PAD_BASE	0x400
 
 /* Community 0 Registers */
+#define KBL_GPIO_OWNER_A0	0x20
+#define KBL_GPIO_OWNER_A1	0x24
+#define KBL_GPIO_OWNER_A2	0x28
+#define KBL_GPIO_OWNER_B0	0x30
+#define KBL_GPIO_OWNER_B1	0x34
+#define KBL_GPIO_OWNER_B2	0x38
 #define KBL_GPIO_REG_IS_A	0x100
 #define KBL_GPIO_REG_IS_B	0x104
 #define KBL_GPIO_REG_IE_A	0x120
 #define KBL_GPIO_REG_IE_B	0x124
 
 /* Community 1 Registers */
+#define KBL_GPIO_OWNER_C0	0x20
+#define KBL_GPIO_OWNER_C1	0x24
+#define KBL_GPIO_OWNER_C2	0x28
+#define KBL_GPIO_OWNER_D0	0x30
+#define KBL_GPIO_OWNER_D1	0x34
+#define KBL_GPIO_OWNER_D2	0x38
+#define KBL_GPIO_OWNER_E0	0x40
+#define KBL_GPIO_OWNER_E1	0x44
+#define KBL_GPIO_OWNER_E2	0x48
 #define KBL_GPIO_REG_IS_C	0x100
 #define KBL_GPIO_REG_IS_D	0x104
 #define KBL_GPIO_REG_IS_E	0x108
@@ -70,6 +85,10 @@
 #define KBL_GPIO_REG_IE_E	0x128
 
 /* Community 3 Registers */
+#define KBL_GPIO_OWNER_F0	0x20
+#define KBL_GPIO_OWNER_F1	0x24
+#define KBL_GPIO_OWNER_F2	0x28
+#define KBL_GPIO_OWNER_G0	0x30
 #define KBL_GPIO_REG_IS_F	0x100
 #define KBL_GPIO_REG_IS_G	0x104
 #define KBL_GPIO_REG_IE_F	0x120
@@ -248,7 +267,7 @@ kblgpio_cfg_addr(uint16_t pin)
 }
 
 /* Pin index to GPIO Community. */
-static ing
+static int
 kblgpio_comm(uint16_t pin)
 {
 	if (pin < 48) {
@@ -258,6 +277,35 @@ kblgpio_comm(uint16_t pin)
 	} else {
 		return 3;
 	}
+}
+
+static uint8_t
+kblgpio_pad_ownership(struct gpio_intel_softc *sc, uint16_t pin)
+{
+	uint32_t reg, val;
+
+	if (pin < 24) {
+		reg = KBL_GPIO_OWNER_A0 + 4 * (pin / 8);
+	} else if (pin < 48) {
+		pin -= 24;
+		reg = KBL_GPIO_OWNER_B0 + 4 * (pin / 8);
+	} else if (pin < 72) {
+		pin -= 48;
+		reg = KBL_GPIO_OWNER_C0 + 4 * (pin / 8);
+	} else if (pin < 96) {
+		pin -= 72;
+		reg = KBL_GPIO_OWNER_D0 + 4 * (pin / 8);
+	} else if (pin < 120) {
+		pin -= 96;
+		reg = KBL_GPIO_OWNER_E0 + 4 * (pin / 8);
+	} else if (pin < 144) {
+		pin -= 120;
+		reg = KBL_GPIO_OWNER_F0 + 4 * (pin / 8);
+	} else {
+		reg = KBL_GPIO_OWNER_G0;
+	}
+	val = kblgpio_read(sc, reg, kblgpio_comm(pin));
+	return (val >> ((pin % 8) * 4)) & 0x3;
 }
 
 static uint32_t
@@ -287,7 +335,12 @@ gpio_kabylake_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
 	    "pin=%d trigger=%d polarity=%d ctrl0=0x%08x ctrl1=0x%08x\n",
 	    pin, trigger, polarity, reg1, reg2);
 
-	XXXXX First we need to check the Pad Ownership.
+	if (kblgpio_pad_ownership(sc, pin) != 0) {
+		device_printf(sc->dev,
+		    "Pin %u not owned by Host: Owner=0x%x\n",
+		    pin, kblgpio_pad_ownership(sc, pin));
+		return (ENXIO);
+	}
 	XXXXX Then check that the Pad Configuration isn't locked.
 	XXXXX Then update the Host Software Pad Ownership register to
               "GPIO Driver Mode".
