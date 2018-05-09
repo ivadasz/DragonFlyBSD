@@ -173,15 +173,7 @@ kblgpio_write(struct gpio_intel_softc *sc, bus_size_t offset, int comm,
 int
 gpio_kabylake_matchuid(struct gpio_intel_softc *sc)
 {
-	ACPI_HANDLE handle;
-
-	handle = acpi_get_handle(sc->dev);
-	if (acpi_MatchUid(handle, "0")) {
-		sc->ranges = kabylake_ranges;
-	} else {
-		return (ENXIO);
-	}
-
+	sc->ranges = kabylake_ranges;
 	sc->fns = &gpio_kabylake_fns;
 
 	return (0);
