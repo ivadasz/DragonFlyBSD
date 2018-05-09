@@ -108,24 +108,6 @@
 #define KBL_GPIO_REG_IE_F	0x120
 #define KBL_GPIO_REG_IE_G	0x124
 
-
-#define CHV_GPIO_REG_PINS	0x4400	/* start of pin control registers */
-
-#define CHV_GPIO_REGOFF_CTL0	0x0
-#define CHV_GPIO_REGOFF_CTL1	0x4
-
-#define CHV_GPIO_CTL0_RXSTATE	0x00000001u
-#define CHV_GPIO_CTL0_TXSTATE	0x00000002u
-#define CHV_GPIO_CTL0_GPIOCFG_MASK 0x00000700u
-#define CHV_GPIO_CTL0_GPIOEN	0x00008000u
-#define CHV_GPIO_CTL0_PULLUP	0x00800000u
-#define CHV_GPIO_CTL1_INTCFG_MASK 0x00000007u
-#define CHV_GPIO_CTL1_INVRXDATA	0x00000040u
-
-#define CHV_GPIO_PINSIZE	0x8	/* 8 bytes for each pin */
-#define CHV_GPIO_PINCHUNK	15	/* 15 pins at a time */
-#define CHV_GPIO_PININC		0x400	/* every 0x400 bytes */
-
 static void	gpio_kabylake_init(struct gpio_intel_softc *sc);
 static void	gpio_kabylake_intr(void *arg);
 static int	gpio_kabylake_map_intr(struct gpio_intel_softc *sc,
@@ -388,10 +370,10 @@ kblgpio_read_pinctl1(struct gpio_intel_softc *sc, uint16_t pin)
 	return kblgpio_read(sc, kblgpio_cfg_addr(pin) + 4, kblgpio_comm(pin));
 }
 
-static uint32_t
+static void
 kblgpio_write_pinctl0(struct gpio_intel_softc *sc, uint16_t pin, uint32_t val)
 {
-	return kblgpio_write(sc, kblgpio_cfg_addr(pin), kblgpio_comm(pin), val);
+	kblgpio_write(sc, kblgpio_cfg_addr(pin), kblgpio_comm(pin), val);
 }
 
 /* XXX Add shared/exclusive argument. */
@@ -399,9 +381,8 @@ static int
 gpio_kabylake_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
     int polarity, int termination)
 {
-	uint32_t reg, reg1, reg2;
+	uint32_t reg1, reg2;
 	uint32_t new_gpiocfg;
-	int i;
 
 	reg1 = kblgpio_read_pinctl0(sc, pin);
 	reg2 = kblgpio_read_pinctl1(sc, pin);
@@ -545,6 +526,35 @@ gpio_kabylake_unmap_intr(struct gpio_intel_softc *sc,
 }
 
 static void
+kblgpio_set_ie(struct gpio_intel_softc *sc, uint16_t pin, int enable)
+{
+	uint32_t reg, val;
+
+	if (pin < 24) {
+		reg = KBL_GPIO_REG_IE_A;
+	} else if (pin < 48) {
+		reg = KBL_GPIO_REG_IE_B;
+	} else if (pin < 72) {
+		reg = KBL_GPIO_REG_IE_C;
+	} else if (pin < 96) {
+		reg = KBL_GPIO_REG_IE_D;
+	} else if (pin < 120) {
+		reg = KBL_GPIO_REG_IE_E;
+	} else if (pin < 144) {
+		reg = KBL_GPIO_REG_IE_F;
+	} else {
+		reg = KBL_GPIO_REG_IE_G;
+	}
+	val = kblgpio_read(sc, reg, kblgpio_comm(pin));
+	if (enable) {
+		val |= (1 << (pin % 24));
+	} else {
+		val &= ~(1 << (pin % 24));
+	}
+	kblgpio_write(sc, reg, kblgpio_comm(pin), val);
+}
+
+static void
 gpio_kabylake_enable_intr(struct gpio_intel_softc *sc,
     struct pin_intr_map *map)
 {
@@ -552,34 +562,43 @@ gpio_kabylake_enable_intr(struct gpio_intel_softc *sc,
 
 	KKASSERT(map->intidx >= 0);
 
-XXXXXXXXXXXX
 	/* clear interrupt status flag */
-	kblgpio_write(sc, CHV_GPIO_REG_IS, (1U << map->intidx));
+	if (map->pin < 24) {
+		reg = KBL_GPIO_REG_IS_A;
+	} else if (map->pin < 48) {
+		reg = KBL_GPIO_REG_IS_B;
+	} else if (map->pin < 72) {
+		reg = KBL_GPIO_REG_IS_C;
+	} else if (map->pin < 96) {
+		reg = KBL_GPIO_REG_IS_D;
+	} else if (map->pin < 120) {
+		reg = KBL_GPIO_REG_IS_E;
+	} else if (map->pin < 144) {
+		reg = KBL_GPIO_REG_IS_F;
+	} else {
+		reg = KBL_GPIO_REG_IS_G;
+	}
+	kblgpio_write(sc, reg, kblgpio_comm(map->pin), 1 << (map->pin % 24));
 
 	/* unmask interrupt */
-	reg = kblgpio_read(sc, CHV_GPIO_REG_MASK);
-	reg |= (1U << map->intidx);
-	kblgpio_write(sc, CHV_GPIO_REG_MASK, reg);
+	kblgpio_set_ie(sc, map->pin, 1);
 }
 
 static void
 gpio_kabylake_disable_intr(struct gpio_intel_softc *sc,
     struct pin_intr_map *map)
 {
-	uint32_t reg;
-
 	KKASSERT(map->intidx >= 0);
 
 	/* mask interrupt line */
-	reg = kblgpio_read(sc, CHV_GPIO_REG_MASK);
-	reg &= ~(1U << map->intidx);
-	kblgpio_write(sc, CHV_GPIO_REG_MASK, reg);
+	kblgpio_set_ie(sc, map->pin, 0);
 }
 
 static int
 gpio_kabylake_check_io_pin(struct gpio_intel_softc *sc, uint16_t pin,
     int flags)
 {
+#if 0
 	uint32_t reg1, reg2;
 
 	reg1 = kblgpio_read(sc, PIN_CTL0(pin));
@@ -603,11 +622,16 @@ gpio_kabylake_check_io_pin(struct gpio_intel_softc *sc, uint16_t pin,
 	}
 
 	return (1);
+#else
+	/* XXX Always fail for now. */
+	return (0);
+#endif
 }
 
 static int
 gpio_kabylake_read_pin(struct gpio_intel_softc *sc, uint16_t pin)
 {
+#if 0
 	uint32_t reg;
 	int val;
 
@@ -622,11 +646,15 @@ gpio_kabylake_read_pin(struct gpio_intel_softc *sc, uint16_t pin)
 		val = 0;
 
 	return (val);
+#else
+	return (0);
+#endif
 }
 
 static void
 gpio_kabylake_write_pin(struct gpio_intel_softc *sc, uint16_t pin, int value)
 {
+#if 0
 	uint32_t reg;
 
 	reg = kblgpio_read(sc, PIN_CTL0(pin));
@@ -639,4 +667,5 @@ gpio_kabylake_write_pin(struct gpio_intel_softc *sc, uint16_t pin, int value)
 	else
 		reg &= ~CHV_GPIO_CTL0_TXSTATE;
 	kblgpio_write(sc, PIN_CTL0(pin), reg);
+#endif
 }
