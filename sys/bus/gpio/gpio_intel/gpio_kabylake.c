@@ -423,7 +423,7 @@ gpio_kabylake_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
 				device_printf(sc->dev,
 				    "Invert RX not enabled (needed for "
 				    "level/low trigger/polarity)\n");
-				return (ENXIO);
+				new_gpiocfg |= 0x800000;
 			}
 		} else {
 			if (reg2 & 0x800000) {
