@@ -62,6 +62,8 @@
 #define KBL_GPIO_OWNER_B0	0x30
 #define KBL_GPIO_OWNER_B1	0x34
 #define KBL_GPIO_OWNER_B2	0x38
+#define KBL_GPIO_CFGLOCK_A	0xa0
+#define KBL_GPIO_CFGLOCK_B	0xa8
 #define KBL_GPIO_REG_IS_A	0x100
 #define KBL_GPIO_REG_IS_B	0x104
 #define KBL_GPIO_REG_IE_A	0x120
@@ -77,6 +79,9 @@
 #define KBL_GPIO_OWNER_E0	0x40
 #define KBL_GPIO_OWNER_E1	0x44
 #define KBL_GPIO_OWNER_E2	0x48
+#define KBL_GPIO_CFGLOCK_C	0xa0
+#define KBL_GPIO_CFGLOCK_D	0xa8
+#define KBL_GPIO_CFGLOCK_E	0xb0
 #define KBL_GPIO_REG_IS_C	0x100
 #define KBL_GPIO_REG_IS_D	0x104
 #define KBL_GPIO_REG_IS_E	0x108
@@ -89,6 +94,8 @@
 #define KBL_GPIO_OWNER_F1	0x24
 #define KBL_GPIO_OWNER_F2	0x28
 #define KBL_GPIO_OWNER_G0	0x30
+#define KBL_GPIO_CFGLOCK_F	0xa0
+#define KBL_GPIO_CFGLOCK_G	0xa8
 #define KBL_GPIO_REG_IS_F	0x100
 #define KBL_GPIO_REG_IS_G	0x104
 #define KBL_GPIO_REG_IE_F	0x120
@@ -308,6 +315,30 @@ kblgpio_pad_ownership(struct gpio_intel_softc *sc, uint16_t pin)
 	return (val >> ((pin % 8) * 4)) & 0x3;
 }
 
+static int
+kblgpio_pad_config_lock(struct gpio_intel_softc *sc, uint16_t pin)
+{
+	uint32_t reg, val;
+
+	if (pin < 24) {
+		reg = KBL_GPIO_CFGLOCK_A;
+	} else if (pin < 48) {
+		reg = KBL_GPIO_CFGLOCK_B;
+	} else if (pin < 72) {
+		reg = KBL_GPIO_CFGLOCK_C;
+	} else if (pin < 96) {
+		reg = KBL_GPIO_CFGLOCK_D;
+	} else if (pin < 120) {
+		reg = KBL_GPIO_CFGLOCK_E;
+	} else if (pin < 144) {
+		reg = KBL_GPIO_CFGLOCK_F;
+	} else {
+		reg = KBL_GPIO_CFGLOCK_G;
+	}
+	val = kblgpio_read(sc, reg, kblgpio_comm(pin));
+	return ((val >> (pin % 24)) & 1);
+}
+
 static uint32_t
 kblgpio_read_pinctl0(struct gpio_intel_softc *sc, uint16_t pin)
 {
@@ -341,7 +372,10 @@ gpio_kabylake_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
 		    pin, kblgpio_pad_ownership(sc, pin));
 		return (ENXIO);
 	}
-	XXXXX Then check that the Pad Configuration isn't locked.
+	if (kblgpio_pad_config_lock(sc, pin) != 0) {
+		device_printf(sc->dev, "Pin %u config locked\n", pin);
+		return (ENXIO);
+	}
 	XXXXX Then update the Host Software Pad Ownership register to
               "GPIO Driver Mode".
 
