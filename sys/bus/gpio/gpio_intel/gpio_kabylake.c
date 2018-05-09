@@ -368,13 +368,19 @@ kblgpio_write_pinctl0(struct gpio_intel_softc *sc, uint16_t pin, uint32_t val)
 	kblgpio_write(sc, kblgpio_cfg_addr(pin), kblgpio_comm(pin), val);
 }
 
+static void
+kblgpio_write_pinctl1(struct gpio_intel_softc *sc, uint16_t pin, uint32_t val)
+{
+	kblgpio_write(sc, kblgpio_cfg_addr(pin) + 4, kblgpio_comm(pin), val);
+}
+
 /* XXX Add shared/exclusive argument. */
 static int
 gpio_kabylake_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
     int polarity, int termination)
 {
 	uint32_t reg1, reg2;
-	uint32_t new_gpiocfg;
+	uint32_t new_gpiocfg, new_intcfg;
 
 	reg1 = kblgpio_read_pinctl0(sc, pin);
 	reg2 = kblgpio_read_pinctl1(sc, pin);
@@ -399,6 +405,7 @@ gpio_kabylake_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
 		return (ENXIO);
 	}
 	new_gpiocfg = reg1;
+	new_intcfg = reg2;
 	if (reg1 & 0x200) {
 		device_printf(sc->dev, "RX is disabled\n");
 		new_gpiocfg &= ~0x200;
@@ -468,7 +475,11 @@ gpio_kabylake_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
 		device_printf(sc->dev,
 		    "Wrong termination, is 0x%x, should be pull-up\n",
 		    (reg2 & 0x3c00) >> 10);
-		return (ENXIO);
+		if ((reg2 & 0x3c00) == 0) {
+			new_intcfg |= 0x2800;
+		} else {
+			return (ENXIO);
+		}
 	} else if (termination == ACPI_PIN_CONFIG_PULLDOWN &&
 	    (reg2 & 0x3c00) != 0x800 && (reg2 & 0x3c00) != 0x1000) {
 		device_printf(sc->dev,
@@ -481,6 +492,12 @@ gpio_kabylake_map_intr(struct gpio_intel_softc *sc, uint16_t pin, int trigger,
 		    "Switching reg1 gpio configuration from 0x%x to 0x%x\n",
 		    reg1, new_gpiocfg);
 		kblgpio_write_pinctl0(sc, pin, new_gpiocfg);
+	}
+	if (new_intcfg != reg2) {
+		device_printf(sc->dev,
+		    "Switching reg2 gpio configuration from 0x%x to 0x%x\n",
+		    reg2, new_intcfg);
+		kblgpio_write_pinctl1(sc, pin, new_intcfg);
 	}
 	/* Interrupts are directly mapped here. */
 	sc->intrmaps[pin].pin = pin;
@@ -500,16 +517,22 @@ static void
 gpio_kabylake_unmap_intr(struct gpio_intel_softc *sc,
     struct pin_intr_map *map)
 {
-	uint32_t reg, gpiocfg;
+	uint32_t reg, gpiocfg, intcfg;
 	uint16_t pin = map->pin;
 
 	gpiocfg = map->orig_gpiocfg;
+	intcfg = map->orig_intcfg;
 
 	map->pin = -1;
 	map->intidx = -1;
 	map->is_level = 0;
 	map->orig_intcfg = 0;
 	map->orig_gpiocfg = 0;
+
+	/* Restore intr configuration if needed */
+	reg = kblgpio_read_pinctl1(sc, pin);
+	if (reg != intcfg)
+		kblgpio_write_pinctl1(sc, pin, intcfg);
 
 	/* Restore gpio configuration if needed */
 	reg = kblgpio_read_pinctl0(sc, pin);
