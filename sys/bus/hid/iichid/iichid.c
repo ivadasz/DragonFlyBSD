@@ -267,8 +267,8 @@ iichid_fetch_report(struct iichid_softc *sc, int *actualp)
 		device_printf(sc->dev, "reset found\n");
 		return (-1);
 	}
-	if (count != length) {
-		device_printf(sc->dev, "length != count\n");
+	if (count < length) {
+		device_printf(sc->dev, "count < length\n");
 		return (1);
 	}
 	*actualp = length;
@@ -303,8 +303,13 @@ iichid_intr(void *arg)
 	val = iichid_fetch_report(sc, &count);
 	if (val == -1)
 		wakeup(sc);
+	if (val != 0) {
+		lockmgr(&sc->lk, LK_RELEASE);
+		return;
+	}
 	KKASSERT(count >= 2);
-	if (val == 0 && count > (sc->have_multi_id ? 3 : 2) &&
+	if (sc->report_descriptor != NULL &&
+	    val == 0 && count > (sc->have_multi_id ? 3 : 2) &&
 	    sc->input_handler != NULL) {
 		uint8_t id = 0;
 		hid_input_handler_t fn;
@@ -388,36 +393,53 @@ iichid_attach(device_t dev)
 		acpi_release_new_resource(sc->gpio_res);
 		return (ENXIO);
 	}
+	gpio_int_establish_interrupt(sc->gpio_res, iichid_intr, sc);
+	iichid_setpower(sc, 1);
+	sc->input_report = kmalloc(sc->hid_desc.wMaxInputLength, M_DEVBUF,
+	    M_WAITOK | M_ZERO);
+#if 0
+	if (iichid_reset(sc) != 0) {
+		iichid_setpower(sc, 0);
+		pci_set_powerstate(dev, PCI_POWERSTATE_D3);
+		gpio_int_teardown_interrupt(sc->gpio_res);
+		gpio_int_unreserve_interrupt(sc->gpio_res);
+		acpi_release_new_resource(sc->gpio_res);
+		acpi_release_new_resource(sc->iic_res);
+		kfree(sc->input_report, M_DEVBUF);
+		return (ENXIO);
+	}
+#else
+	(void)iichid_reset;
+#endif
 	sc->report_descriptor = kmalloc(sc->hid_desc.wReportDescLength,
 	    M_DEVBUF, M_WAITOK | M_ZERO);
 	device_printf(dev, "Getting %u byte report descriptor from register 0x%x\n",
 	    sc->hid_desc.wReportDescLength, sc->hid_desc.wReportDescRegister);
+	lockmgr(&sc->lk, LK_EXCLUSIVE);
 	if (iichid_readreg_check(sc, sc->hid_desc.wReportDescRegister,
 	    sc->report_descriptor, sc->hid_desc.wReportDescLength) != 0) {
+		lockmgr(&sc->lk, LK_RELEASE);
 		device_printf(dev, "Failed to retrieve Report Descriptor\n");
+		iichid_setpower(sc, 0);
 		pci_set_powerstate(dev, PCI_POWERSTATE_D3);
-		acpi_release_new_resource(sc->iic_res);
+		gpio_int_teardown_interrupt(sc->gpio_res);
 		gpio_int_unreserve_interrupt(sc->gpio_res);
 		acpi_release_new_resource(sc->gpio_res);
+		acpi_release_new_resource(sc->iic_res);
 		kfree(sc->report_descriptor, M_DEVBUF);
+		kfree(sc->input_report, M_DEVBUF);
 		return (ENXIO);
 	}
 	if (bootverbose)
 		dump_bytes(dev, sc->report_descriptor, sc->hid_desc.wReportDescLength);
 	sc->have_multi_id = iichid_have_multi_id(sc->report_descriptor,
 	    sc->hid_desc.wReportDescLength, hid_input);
-	sc->input_report = kmalloc(sc->hid_desc.wMaxInputLength, M_DEVBUF,
-	    M_WAITOK | M_ZERO);
+	iichid_setpower(sc, 0);
 	if (sc->child == NULL) {
 		sc->child = device_add_child(dev, NULL, -1);
 	}
+	lockmgr(&sc->lk, LK_RELEASE);
 	bus_generic_attach(dev);
-	gpio_int_establish_interrupt(sc->gpio_res, iichid_intr, sc);
-	iichid_setpower(sc, 1);
-	if (iichid_reset(sc) != 0) {
-		iichid_detach(dev);
-		return (ENXIO);
-	}
 
 	return 0;
 }
@@ -432,12 +454,14 @@ iichid_detach(device_t dev)
 
 	device_delete_child(dev, sc->child);
 	sc->child = NULL;
-	gpio_int_teardown_interrupt(sc->gpio_res);
 	iichid_setpower(sc, 0);
-	if (sc->iic_res != NULL) {
-		acpi_release_new_resource(sc->iic_res);
+	if (sc->gpio_res != NULL) {
+		gpio_int_teardown_interrupt(sc->gpio_res);
 		gpio_int_unreserve_interrupt(sc->gpio_res);
 		acpi_release_new_resource(sc->gpio_res);
+	}
+	if (sc->iic_res != NULL) {
+		acpi_release_new_resource(sc->iic_res);
 	}
 	pci_set_powerstate(dev, PCI_POWERSTATE_D3);
 	if (sc->report_descriptor != NULL)
@@ -475,6 +499,7 @@ iichid_start_read(device_t dev, uint16_t max_len)
 	struct iichid_softc *sc = device_get_softc(dev);
 
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	iichid_setpower(sc, 1);
 	sc->max_len = sc->hid_desc.wMaxInputLength;
 	if (max_len > 0 && max_len < sc->max_len)
 		sc->max_len = max_len;
@@ -490,6 +515,7 @@ iichid_stop_read(device_t dev)
 
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
 	sc->max_len = 0;
+	iichid_setpower(sc, 0);
 	lockmgr(&sc->lk, LK_RELEASE);
 }
 
