@@ -155,10 +155,12 @@ uhid_input_handler(uint8_t id, uint8_t *buf, int len, void *arg)
 {
 	struct uhid_softc *sc = arg;
 
-	sc->tmpbuf->len = len;
-	sc->tmpbuf->id = id;
-	memcpy(sc->tmpbuf->report, buf, len);
-	flexfifo_enqueue_ring(sc->sc_fifo, (void *)sc->tmpbuf);
+	if (len <= sc->sc_isize) {
+		sc->tmpbuf->len = len;
+		sc->tmpbuf->id = id;
+		memcpy(sc->tmpbuf->report, buf, len);
+		flexfifo_enqueue_ring(sc->sc_fifo, (void *)sc->tmpbuf);
+	}
 }
 
 static void
