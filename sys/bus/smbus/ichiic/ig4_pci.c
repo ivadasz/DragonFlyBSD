@@ -148,6 +148,9 @@ ig4iic_pci_attach(device_t dev)
 	sc->regs_h = rman_get_bushandle(sc->regs_res);
 	sc->pci_attached = 1;
 
+	/* power up the controller */
+	pci_set_powerstate(dev, PCI_POWERSTATE_D0);
+
 	error = ig4iic_attach(sc);
 	if (error)
 		ig4iic_pci_detach(dev);
@@ -183,6 +186,8 @@ ig4iic_pci_detach(device_t dev)
 	}
 	sc->regs_t = 0;
 	sc->regs_h = 0;
+
+	pci_set_powerstate(dev, PCI_POWERSTATE_D3);
 
 	return 0;
 }
