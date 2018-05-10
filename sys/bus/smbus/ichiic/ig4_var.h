@@ -64,6 +64,8 @@ struct ig4iic_softc {
 	int		intr_rid;
 	void		*intr_handle;
 	int		intr_type;
+	int		intr_cpu;
+	int		intr_await;
 	enum ig4_vers	version;
 	enum ig4_op	op;
 	int		cmd;

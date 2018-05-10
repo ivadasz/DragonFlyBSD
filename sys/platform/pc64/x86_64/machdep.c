@@ -164,6 +164,7 @@ cpumask_t smp_idleinvl_mask;
 cpumask_t smp_idleinvl_reqs;
 
 static int cpu_mwait_halt_global; /* MWAIT hint (EAX) or CPU_MWAIT_HINT_ */
+static int cpu_mwait_iowait_global; /* MWAIT hint (EAX) or CPU_MWAIT_HINT_ */
 
 #if defined(SWTCH_OPTIM_STATS)
 extern int swtch_optim_stats;
@@ -174,6 +175,8 @@ SYSCTL_INT(_debug, OID_AUTO, tlb_flush_count,
 #endif
 SYSCTL_INT(_hw, OID_AUTO, cpu_mwait_halt,
 	CTLFLAG_RD, &cpu_mwait_halt_global, 0, "");
+SYSCTL_INT(_hw, OID_AUTO, cpu_mwait_iowait,
+	CTLFLAG_RD, &cpu_mwait_iowait_global, 0, "");
 SYSCTL_INT(_hw, OID_AUTO, cpu_mwait_spin,
 	CTLFLAG_RD, &cpu_mwait_spin, 0, "monitor/mwait target state");
 
@@ -231,11 +234,14 @@ SYSCTL_INT(_machdep_mwait_CX, OID_AUTO, c3_preamble, CTLFLAG_RD,
 static int	cpu_mwait_cx_select_sysctl(SYSCTL_HANDLER_ARGS,
 		    int *, boolean_t);
 static int	cpu_mwait_cx_idle_sysctl(SYSCTL_HANDLER_ARGS);
+static int	cpu_mwait_cx_iowait_sysctl(SYSCTL_HANDLER_ARGS);
 static int	cpu_mwait_cx_pcpu_idle_sysctl(SYSCTL_HANDLER_ARGS);
 static int	cpu_mwait_cx_spin_sysctl(SYSCTL_HANDLER_ARGS);
 
 SYSCTL_PROC(_machdep_mwait_CX, OID_AUTO, idle, CTLTYPE_STRING|CTLFLAG_RW,
     NULL, 0, cpu_mwait_cx_idle_sysctl, "A", "");
+SYSCTL_PROC(_machdep_mwait_CX, OID_AUTO, iowait, CTLTYPE_STRING|CTLFLAG_RW,
+    NULL, 0, cpu_mwait_cx_iowait_sysctl, "A", "");
 SYSCTL_PROC(_machdep_mwait_CX, OID_AUTO, spin, CTLTYPE_STRING|CTLFLAG_RW,
     NULL, 0, cpu_mwait_cx_spin_sysctl, "A", "");
 SYSCTL_UINT(_machdep_mwait_CX, OID_AUTO, repeat_shift, CTLFLAG_RW,
@@ -498,7 +504,8 @@ again:
 
 struct cpu_idle_stat {
 	int	hint;
-	int	reserved;
+	u_int	iowait_hint;
+	u_int	iowait_active;
 	u_long	halt;
 	u_long	spin;
 	u_long	repeat;
@@ -558,6 +565,8 @@ cpu_mwait_attach(void)
 {
 	struct sbuf sb;
 	int hint_idx, i;
+
+	cpu_mwait_iowait_global = -1;
 
 	if (!CPU_MWAIT_HAS_CX)
 		return;
@@ -691,6 +700,8 @@ cpu_mwait_attach(void)
 		    SYSCTL_STATIC_CHILDREN(_machdep_mwait_CX), OID_AUTO,
 		    name, (CTLTYPE_STRING | CTLFLAG_RW), &cpu_idle_stats[i],
 		    0, cpu_mwait_cx_pcpu_idle_sysctl, "A", "");
+
+		cpu_idle_stats[i].iowait_hint = 0xff;
 	}
 }
 
@@ -1129,6 +1140,8 @@ cpu_mwait_cx_hint(struct cpu_idle_stat *stat)
 		hint = cpu_mwait_hints[idx];
 	}
 done:
+	if (stat->iowait_active > 0 && hint > stat->iowait_hint)
+		hint = stat->iowait_hint;
 	cx_idx = MWAIT_EAX_TO_CX(hint);
 	if (cx_idx >= 0 && cx_idx < CPU_MWAIT_CX_MAX)
 		stat->mwait_cx[cx_idx]++;
@@ -3397,6 +3410,48 @@ cpu_mwait_cx_idle_sysctl(SYSCTL_HANDLER_ARGS)
 }
 
 static int
+cpu_mwait_cx_iowait_sysctl(SYSCTL_HANDLER_ARGS)
+{
+	int hint = cpu_mwait_iowait_global;
+	int error, cx_idx, cpu;
+	char name[CPU_MWAIT_CX_NAMELEN], cx_name[CPU_MWAIT_CX_NAMELEN];
+
+	if (hint == -1) {
+		strlcpy(name, "NONE", sizeof(name));
+	} else {
+		cpu_mwait_cx_hint2name(hint, name, sizeof(name), FALSE);
+	}
+
+	error = sysctl_handle_string(oidp, name, sizeof(name), req);
+	if (error != 0 || req->newptr == NULL)
+		return error;
+
+	if (!CPU_MWAIT_HAS_CX)
+		return EOPNOTSUPP;
+
+	if (strcmp(name, "NONE") == 0) {
+		for (cpu = 0; cpu < ncpus; ++cpu)
+			cpu_idle_stats[cpu].iowait_hint = 0xff;
+		cpu_mwait_iowait_global = -1;
+		return 0;
+	}
+
+	/* Save name for later per-cpu CX configuration */
+	strlcpy(cx_name, name, sizeof(cx_name));
+
+	cx_idx = cpu_mwait_cx_name2hint(name, &hint, FALSE);
+	if (cx_idx < 0)
+		return EINVAL;
+
+	/* Change per-cpu CX configuration */
+	for (cpu = 0; cpu < ncpus; ++cpu)
+		cpu_idle_stats[cpu].iowait_hint = hint;
+
+	cpu_mwait_iowait_global = hint;
+	return 0;
+}
+
+static int
 cpu_mwait_cx_pcpu_idle_sysctl(SYSCTL_HANDLER_ARGS)
 {
 	struct cpu_idle_stat *stat = arg1;
@@ -3415,6 +3470,28 @@ cpu_mwait_cx_spin_sysctl(SYSCTL_HANDLER_ARGS)
 	error = cpu_mwait_cx_select_sysctl(oidp, arg1, arg2, req,
 	    &cpu_mwait_spin, FALSE);
 	return error;
+}
+
+/* This signals that mwait should use a lighter sleep state on this cpuid. */
+void
+cpu_mwait_cx_io_wait(int cpu)
+{
+	atomic_add_int(&cpu_idle_stats[cpu].iowait_active, 1);
+}
+
+void
+cpu_mwait_cx_io_done(int cpu)
+{
+	KKASSERT(cpu_idle_stats[cpu].iowait_active >= 0);
+	atomic_subtract_int(&cpu_idle_stats[cpu].iowait_active, 1);
+}
+
+int
+cpu_mwait_cx_io_available(void)
+{
+	return (cpu_mwait_iowait_global != -1 &&
+	    cpu_mwait_iowait_global !=
+	    cpu_mwait_deep_hints[cpu_mwait_deep_hints_cnt - 1]);
 }
 
 /*
