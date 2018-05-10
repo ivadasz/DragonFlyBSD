@@ -275,20 +275,15 @@ kblgpio_pad_ownership(struct gpio_intel_softc *sc, uint16_t pin)
 	if (pin < 24) {
 		reg = KBL_GPIO_OWNER_A0 + 4 * (pin / 8);
 	} else if (pin < 48) {
-		pin -= 24;
-		reg = KBL_GPIO_OWNER_B0 + 4 * (pin / 8);
+		reg = KBL_GPIO_OWNER_B0 + 4 * ((pin - 24) / 8);
 	} else if (pin < 72) {
-		pin -= 48;
-		reg = KBL_GPIO_OWNER_C0 + 4 * (pin / 8);
+		reg = KBL_GPIO_OWNER_C0 + 4 * ((pin - 48) / 8);
 	} else if (pin < 96) {
-		pin -= 72;
-		reg = KBL_GPIO_OWNER_D0 + 4 * (pin / 8);
+		reg = KBL_GPIO_OWNER_D0 + 4 * ((pin - 72) / 8);
 	} else if (pin < 120) {
-		pin -= 96;
-		reg = KBL_GPIO_OWNER_E0 + 4 * (pin / 8);
+		reg = KBL_GPIO_OWNER_E0 + 4 * ((pin - 96) / 8);
 	} else if (pin < 144) {
-		pin -= 120;
-		reg = KBL_GPIO_OWNER_F0 + 4 * (pin / 8);
+		reg = KBL_GPIO_OWNER_F0 + 4 * ((pin - 120) / 8);
 	} else {
 		reg = KBL_GPIO_OWNER_G0;
 	}
