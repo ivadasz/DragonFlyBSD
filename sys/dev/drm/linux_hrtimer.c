@@ -107,7 +107,13 @@ common_hrtimer_function(void *context, int prio __unused)
 	data->infunction = true;
 	TAILQ_FOREACH_MUTABLE(t, &data->hrtimer_activeq, entries, temp) {
 		TAILQ_REMOVE(&data->hrtimer_activeq, t, entries);
-		__hrtimer_function(t);
+		if (t->function) {
+			lockmgr(&data->timer_lock, LK_RELEASE);
+			__hrtimer_function(t);
+			lockmgr(&data->timer_lock, LK_EXCLUSIVE);
+		} else {
+			__hrtimer_function(t);
+		}
 	}
 	data->timer->data = NULL;
 	if (TAILQ_EMPTY(&data->hrtimer_nextq)) {
@@ -118,11 +124,17 @@ common_hrtimer_function(void *context, int prio __unused)
 	while (true) {
 		bool didwork = false;
 		/* Check if any more entries timed out already. */
-		TAILQ_FOREACH(t, &data->hrtimer_nextq, entries) {
+		TAILQ_FOREACH_MUTABLE(t, &data->hrtimer_nextq, entries, temp) {
 			if (timevalcmp(&now, &t->expire, >=)) {
 				didwork = true;
 				TAILQ_REMOVE(&data->hrtimer_nextq, t, entries);
-				__hrtimer_function(t);
+				if (t->function) {
+					lockmgr(&data->timer_lock, LK_RELEASE);
+					__hrtimer_function(t);
+					lockmgr(&data->timer_lock, LK_EXCLUSIVE);
+				} else {
+					__hrtimer_function(t);
+				}
 				microuptime(&now);
 			}
 		}
@@ -145,7 +157,7 @@ common_hrtimer_function(void *context, int prio __unused)
 	timevalsub(&next_expire, &now);
 	TAILQ_REMOVE(&data->hrtimer_nextq, temp, entries);
 	TAILQ_INSERT_TAIL(&data->hrtimer_activeq, temp, entries);
-	TAILQ_FOREACH(t, &data->hrtimer_nextq, entries) {
+	TAILQ_FOREACH_MUTABLE(t, &data->hrtimer_nextq, entries, temp) {
 		if (timevalcmp(&t->expire, &next_target, <=)) {
 			TAILQ_REMOVE(&data->hrtimer_nextq, t, entries);
 			TAILQ_INSERT_TAIL(&data->hrtimer_activeq, t, entries);
