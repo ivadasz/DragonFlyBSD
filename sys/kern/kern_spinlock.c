@@ -108,6 +108,9 @@ static long spin_backoff_max = 4096;
 SYSCTL_LONG(_debug, OID_AUTO, spin_backoff_max, CTLFLAG_RW,
     &spin_backoff_max, 0,
     "Spinlock exponential backoff limit");
+static int spin_backoff_tsc_shift __cachealign = 15;   /* == ca. 30us */
+SYSCTL_INT(_debug, OID_AUTO, spin_backoff_tsc_shift, CTLFLAG_RW,
+    &spin_backoff_tsc_shift, 0, "Spin backoff limit in TSC shift");
 static long spin_window_shift = 8;	/* 1 << n clock cycles, approx */
 SYSCTL_LONG(_debug, OID_AUTO, spin_window_shift, CTLFLAG_RW,
     &spin_window_shift, 0,
@@ -164,9 +167,11 @@ void
 _spin_lock_contested(struct spinlock *spin, const char *ident, int value)
 {
 	indefinite_info_t info;
+	uint64_t tscval;
 	uint32_t ovalue;
 	long expbackoff;
 	long loop;
+	uint64_t maxspin;
 
 	/*
 	 * WARNING! Caller has already incremented the lock.  We must
@@ -204,14 +209,23 @@ _spin_lock_contested(struct spinlock *spin, const char *ident, int value)
 		ovalue &= ~SPINLOCK_SHARED;
 	}
 
+	tscval = rdtsc();
+	expbackoff = 1;
+	maxspin = tsc_frequency >> spin_backoff_tsc_shift;
 	for (;;) {
-		expbackoff = (expbackoff + 1) * 3 / 2;
+		uint64_t val;
+
 		if (expbackoff == 6)		/* 1, 3, 6, 10, ... */
 			indefinite_init(&info, ident, 0, 'S');
-		if ((rdtsc() >> spin_window_shift) % ncpus != mycpuid)  {
+		if ((tscval >> spin_window_shift) % ncpus != mycpuid)  {
 			for (loop = expbackoff; loop; --loop)
 				cpu_pause();
 		}
+		val = rdtsc();
+		if (expbackoff < 10 || val - tscval < maxspin) {
+			expbackoff = (expbackoff + 1) * 3 / 2;
+		}
+		tscval = val;
 		/*cpu_lfence();*/
 
 		/*

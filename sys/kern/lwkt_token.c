@@ -150,6 +150,9 @@ struct lwkt_token vnode_token = LWKT_TOKEN_INITIALIZER(vnode_token);
 static int token_backoff_max __cachealign = 4096;
 SYSCTL_INT(_lwkt, OID_AUTO, token_backoff_max, CTLFLAG_RW,
     &token_backoff_max, 0, "Tokens exponential backoff");
+static int token_backoff_tsc_shift __cachealign = 15;	/* == ca. 30us */
+SYSCTL_INT(_lwkt, OID_AUTO, token_backoff_tsc_shift, CTLFLAG_RW,
+    &token_backoff_tsc_shift, 0, "Tokens backoff limit in TSC shift");
 static int token_window_shift __cachealign = 8;
 SYSCTL_INT(_lwkt, OID_AUTO, token_window_shift, CTLFLAG_RW,
     &token_window_shift, 0, "Tokens TSC windowing shift");
@@ -382,16 +385,22 @@ _lwkt_trytokref_spin(lwkt_tokref_t ref, thread_t td, long mode)
 		 */
 		long expbackoff;
 		long loop;
+		uint64_t tsc_start = rdtsc(), val;
+		uint64_t limit = tsc_start + (tsc_frequency >> token_backoff_tsc_shift);
 
 		expbackoff = 0;
+		val = tsc_start;
 		while (expbackoff < 6 + token_backoff_max) {
 			expbackoff = (expbackoff + 1) * 3 / 2;
-			if ((rdtsc() >> token_window_shift) % ncpus != mycpuid)  {
+			if ((val >> token_window_shift) % ncpus != mycpuid)  {
 				for (loop = expbackoff; loop; --loop)
 					cpu_pause();
 			}
 			if (_lwkt_trytokref(ref, td, mode))
 				return TRUE;
+			val = rdtsc();
+			if (val > limit)
+				break;
 		}
 	} else {
 		/*
