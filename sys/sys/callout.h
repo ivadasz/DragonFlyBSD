@@ -208,6 +208,7 @@ int	callout_stop_sync (struct callout *);
 void	callout_terminate (struct callout *);
 void	callout_reset_bycpu (struct callout *, int, void (*)(void *), void *,
 	    int);
+int	callout_can_skip(struct globaldata *, int);
 
 #define	callout_drain(x) callout_stop_sync(x)
 

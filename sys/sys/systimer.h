@@ -70,6 +70,8 @@ typedef struct systimer {
     void			*data;
     int				flags;
     int				freq;		/* frequency if periodic */
+    int				skipped;	/* calling func after skip. */
+    int				skipping;	/* skipping at the moment. */
     struct cputimer		*which;		/* which timer was used? */
     struct globaldata		*gd;		/* cpu owning structure */
 } *systimer_t;
@@ -92,6 +94,7 @@ void systimer_init_periodic_nq100khz(systimer_t, systimer_func_t, void *, int);
 void systimer_init_periodic_flags(systimer_t, systimer_func_t, void *,
 			int, int);
 void systimer_adjust_periodic(systimer_t, int);
+int systimer_skip_periodic(systimer_t, int);
 void systimer_init_oneshot(systimer_t, systimer_func_t, void *, int);
 
 /*

@@ -106,11 +106,14 @@ systimer_intr(sysclock_t *timep, int in_ipi, struct intrframe *frame)
 	 * this code sequence and becomes stale otherwise.
 	 */
 	info->flags &= ~SYSTF_ONQUEUE;
+	info->skipped = info->skipping;
+	info->skipping = 0;
 	TAILQ_REMOVE(info->queue, info, node);
 	gd->gd_systimer_inprog = info;
 	crit_exit();
 	info->func(info, in_ipi, frame);
 	crit_enter();
+	info->skipped = 0;
 
 	/*
 	 * The caller may deleted or even re-queue the systimer itself
@@ -245,7 +248,8 @@ systimer_del(systimer_t info)
     struct globaldata *gd = info->gd;
     systimer_t scan1;
 
-    KKASSERT(gd == mycpu && (info->flags & SYSTF_IPIRUNNING) == 0);
+    KKASSERT(gd == mycpu);
+    KKASSERT((info->flags & SYSTF_IPIRUNNING) == 0);
 
     crit_enter();
 
@@ -383,6 +387,48 @@ systimer_adjust_periodic(systimer_t info, int freq)
     info->freq = freq;
     info->which = sys_cputimer;
     crit_exit();
+}
+
+/* Returns 1, when cnt == 0 and the systimer would have fired already. */
+int
+systimer_skip_periodic(systimer_t info, int cnt)
+{
+	int ret = 0;
+
+	/* For now only allow skipping a single interrupt. */
+	KKASSERT(cnt >= 0 && cnt <= 2);
+
+	if (cnt == 0) {
+		crit_enter();
+		if (info->skipping > 0) {
+			sysclock_t now;
+
+			KKASSERT(info->skipping <= 2);
+			now = sys_cputimer->count();
+			if (now + 2 * info->periodic >= info->time) {
+				ret = 2;
+			} else if (now + info->periodic >= info->time) {
+				ret = 1;
+				systimer_del(info);
+				info->time -= info->periodic;
+				_systimer_add(info, now);
+			} else {
+				systimer_del(info);
+				info->time -= 2 * info->periodic;
+				_systimer_add(info, now);
+			}
+			info->skipping = 0;
+		}
+		crit_exit();
+	} else {
+		crit_enter();
+		systimer_del(info);
+		info->time += cnt * info->periodic;
+		info->skipping = cnt;
+		systimer_add(info);
+		crit_exit();
+	}
+	return ret;
 }
 
 /*

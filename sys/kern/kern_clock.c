@@ -132,6 +132,10 @@ static int sniff_target = -1;
 SYSCTL_INT(_kern, OID_AUTO, sniff_enable, CTLFLAG_RW, &sniff_enable, 0 , "");
 SYSCTL_INT(_kern, OID_AUTO, sniff_target, CTLFLAG_RW, &sniff_target, 0 , "");
 
+static int in_powersave_mode = 1;
+SYSCTL_INT(_kern, OID_AUTO, powersave_mode, CTLFLAG_RW, &in_powersave_mode, 0 ,
+    "Save power by reducing effective HZ clock on some cores.");
+
 static int
 sysctl_cputime(SYSCTL_HANDLER_ARGS)
 {
@@ -504,7 +508,104 @@ set_timeofday(struct timespec *ts)
 
 	crit_exit();
 }
-	
+
+#ifdef TICKSTAT
+uint64_t tickstat[100];
+uint32_t tickdiffs[8];
+
+static int
+sysctl_tickdiffs_print(SYSCTL_HANDLER_ARGS)
+{
+	char buf[128];
+	int cnt;
+	int error;
+
+	cnt = ksnprintf(buf, sizeof(buf),
+	    "%u.%uus %u.%uus %u.%uus %u.%uus %u.%uus %u.%uus %u.%uus %u.%uus",
+	    tickdiffs[0] / 1000, tickdiffs[0] % 1000,
+	    tickdiffs[1] / 1000, tickdiffs[1] % 1000,
+	    tickdiffs[2] / 1000, tickdiffs[2] % 1000,
+	    tickdiffs[3] / 1000, tickdiffs[3] % 1000,
+	    tickdiffs[4] / 1000, tickdiffs[4] % 1000,
+	    tickdiffs[5] / 1000, tickdiffs[5] % 1000,
+	    tickdiffs[6] / 1000, tickdiffs[6] % 1000,
+	    tickdiffs[7] / 1000, tickdiffs[7] % 1000);
+	KKASSERT(cnt < sizeof(buf));
+	error = SYSCTL_OUT(req, buf, cnt + 1);
+	if (error)
+		return error;
+	if (req->newptr != NULL)
+		return EINVAL;
+	return 0;
+}
+
+SYSCTL_PROC(_kern, OID_AUTO, tickdiffs, CTLFLAG_RD|CTLTYPE_STRING, 0, 0,
+	    sysctl_tickdiffs_print, "A", "Show tick interrupt time offsets");
+#endif
+
+/* Return 1, when hardclock gets skipped. */
+/* To be called in a critical section only. */
+int
+hardclock_maybe_skip(void)
+{
+	struct globaldata *gd = mycpu;
+	int cnt;
+
+	if (in_powersave_mode == 0)
+		return 0;
+
+	KKASSERT(gd->gd_cpuid != 0);
+
+	if (clocks_running == 0)
+		return 0;
+
+	if (gd->gd_hardclock.gd == NULL)
+		return 0;
+
+	cnt = callout_can_skip(gd, 2);
+	if (cnt == 0)
+		return 0;
+
+	systimer_skip_periodic(&gd->gd_hardclock, cnt);
+	return 1;
+}
+
+/* To be called in critical section only. */
+void
+hardclock_unskip(void)
+{
+	struct globaldata *gd = mycpu;
+	int cnt;
+
+	KKASSERT(gd->gd_cpuid != 0);
+
+	if ((gd->gd_reqflags & RQF_IPIQ) == 0 && lwkt_need_ipiq_process(gd)) {
+		/* Defer to doreti on passive IPIQ processing */
+		need_ipiq();
+	}
+
+	cnt = systimer_skip_periodic(&gd->gd_hardclock, 0);
+	if (cnt > 0) {
+		int i, ni;
+
+		/* The original timeout is already over. */
+		ni = basetime_index;
+		cpu_lfence();
+		gd->gd_time_seconds = hardtime[ni].time_second;
+		gd->gd_cpuclock_base = hardtime[ni].cpuclock_base;
+
+		lwkt_schedulerclock(curthread);
+		for (i = 0; i < cnt; i++)
+			hardclock_softtick(gd);
+
+		vmstats_rollup_cpu(gd);
+		vfscache_rollup_cpu(gd);
+		mycpu->gd_vmstats = vmstats;
+
+		/* No itimer handling yet. */
+	}
+}
+
 /*
  * Each cpu has its own hardclock, but we only increments ticks and softticks
  * on cpu #0.
@@ -518,6 +619,19 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 	sysclock_t cputicks;
 	struct proc *p;
 	struct globaldata *gd = mycpu;
+
+#ifdef TICKSTAT
+	if (gd->gd_cpuid == 0) {
+		tickstat[(ticks + 1) % 100] = rdtsc();
+		cpu_sfence();
+	} else {
+		uint64_t mytsc = rdtsc();
+		uint64_t bsptsc = tickstat[ticks % 100];
+
+		tickdiffs[gd->gd_cpuid] =
+		    (mytsc - bsptsc) * 1000 * 1000 * 1000 / tsc_frequency;
+	}
+#endif
 
 	if ((gd->gd_reqflags & RQF_IPIQ) == 0 && lwkt_need_ipiq_process(gd)) {
 		/* Defer to doreti on passive IPIQ processing */
@@ -733,6 +847,13 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 	 * softticks are handled for all cpus
 	 */
 	hardclock_softtick(gd);
+	if (info->skipped) {
+		int i;
+
+		KKASSERT(info->skipped > 0 && info->skipped < 10);
+		for (i = 0; i < info->skipped; i++)
+			hardclock_softtick(gd);
+	}
 
 	/*
 	 * Rollup accumulated vmstats, copy-back for critical path checks.

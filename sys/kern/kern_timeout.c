@@ -229,6 +229,38 @@ hardclock_softtick(globaldata_t gd)
 	}
 }
 
+/* Only call in critical section. */
+int
+callout_can_skip(struct globaldata *gd, int max)
+{
+	softclock_pcpu_t sc;
+	struct callout *c;
+	struct callout_tailq *bucket;
+
+	KKASSERT(max >= 1);
+
+	sc = softclock_pcpu_ary[gd->gd_cpuid];
+	if (sc->isrunning)
+		return 0;
+
+	bucket = &sc->callwheel[(sc->softticks + 1) & cwheelmask];
+
+	TAILQ_FOREACH(c, bucket, c_links.tqe) {
+		if (c->c_time == sc->softticks + 1)
+			return 0;
+	}
+	if (max >= 2) {
+		bucket = &sc->callwheel[(sc->softticks + 2) & cwheelmask];
+
+		TAILQ_FOREACH(c, bucket, c_links.tqe) {
+			if (c->c_time == sc->softticks + 2)
+				return 1;
+		}
+		return 2;
+	}
+	return 1;
+}
+
 /*
  * This procedure is the main loop of our per-cpu helper thread.  The
  * sc->isrunning flag prevents us from racing hardclock_softtick() and
