@@ -72,6 +72,7 @@ static void dummy_exiting(struct lwp *plp, struct proc *child);
 static void dummy_uload_update(struct lwp *lp);
 static void dummy_yield(struct lwp *lp);
 static void dummy_changedcpu(struct lwp *lp);
+static int dummy_schedisidle(void);
 
 struct usched usched_dummy = {
 	{ NULL },
@@ -89,7 +90,8 @@ struct usched usched_dummy = {
 	dummy_uload_update,
 	NULL,			/* setcpumask not supported */
 	dummy_yield,
-	dummy_changedcpu
+	dummy_changedcpu,
+	dummy_schedisidle
 };
 
 struct usched_dummy_pcpu {
@@ -342,6 +344,13 @@ dummy_schedulerclock(struct lwp *lp, sysclock_t period, sysclock_t cpstamp)
 		dd->rrcount = 0;
 		need_user_resched();
 	}
+}
+
+static
+int
+dummy_schedisidle(void)
+{
+	return 63;
 }
 
 /*

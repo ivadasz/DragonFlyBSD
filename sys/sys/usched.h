@@ -45,6 +45,7 @@ struct usched {
     void (*setcpumask)(struct usched *, cpumask_t);
     void (*yield)(struct lwp *);
     void (*changedcpu)(struct lwp *);
+    int (*schedisidle)(void);
 };
 
 union usched_data {
@@ -108,6 +109,7 @@ extern int sched_ticks; /* From sys/kern/kern_clock.c */
 int usched_ctl(struct usched *, int);
 struct usched *usched_init(void);
 void usched_schedulerclock(struct lwp *, sysclock_t, sysclock_t);
+int usched_is_idle(void);
 
 #endif
 

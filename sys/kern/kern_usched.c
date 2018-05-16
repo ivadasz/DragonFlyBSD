@@ -50,6 +50,8 @@ cpumask_t usched_mastermask = CPUMASK_INITIALIZER_ALLONES;
 
 static int setaffinity_lp(struct lwp *lp, cpumask_t *mask);
 
+extern int in_powersave_mode;
+
 /*
  * Called from very low level boot code, sys/kern/init_main.c:mi_proc0init().
  * We cannot do anything fancy.  no malloc's, no nothing other then
@@ -141,6 +143,23 @@ usched_ctl(struct usched *usched, int action)
 		break;
 	}
 	return (error);
+}
+
+int
+usched_is_idle(void)
+{
+	struct usched *item;
+	int min = 63;
+
+	if (in_powersave_mode >= 2)
+		return 99;
+
+	TAILQ_FOREACH(item, &usched_list, entry) {
+		min = imin(min, item->schedisidle());
+		if (min == 0)
+			return 0;
+	}
+	return min;
 }
 
 /*

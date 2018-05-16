@@ -197,7 +197,7 @@ extern int	ncallout;
 
 struct globaldata;
 
-void	hardclock_softtick(struct globaldata *);
+void	hardclock_softtick(struct globaldata *, int);
 void	callout_init (struct callout *);
 void	callout_init_mp (struct callout *);
 void	callout_init_lk (struct callout *, struct lock *);
@@ -208,6 +208,7 @@ int	callout_stop_sync (struct callout *);
 void	callout_terminate (struct callout *);
 void	callout_reset_bycpu (struct callout *, int, void (*)(void *), void *,
 	    int);
+int	callout_can_skip(struct globaldata *, int);
 
 #define	callout_drain(x) callout_stop_sync(x)
 

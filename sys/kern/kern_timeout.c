@@ -200,12 +200,12 @@ SYSINIT(softclock_setup, SI_BOOT2_SOFTCLOCK, SI_ORDER_SECOND,
  * depending on whether the helper thread is running or not.
  */
 void
-hardclock_softtick(globaldata_t gd)
+hardclock_softtick(globaldata_t gd, int cnt)
 {
 	softclock_pcpu_t sc;
 
 	sc = softclock_pcpu_ary[gd->gd_cpuid];
-	++sc->curticks;
+	sc->curticks += cnt;
 	if (sc->isrunning)
 		return;
 	if (sc->softticks + cnt == sc->curticks + 1) {
@@ -233,6 +233,41 @@ hardclock_softtick(globaldata_t gd)
 		sc->isrunning = 1;
 		lwkt_schedule(&sc->thread);
 	}
+}
+
+/* Only call in critical section. */
+int
+callout_can_skip(struct globaldata *gd, int max)
+{
+	softclock_pcpu_t sc;
+	int i, iters;
+
+	KKASSERT(max >= 1);
+
+	sc = softclock_pcpu_ary[gd->gd_cpuid];
+	if (sc->isrunning)
+		return 0;
+
+	/* Only skip callouts, when callout thread actually caught up. */
+	if (sc->softticks != sc->curticks + 1)
+		return 0;
+
+	iters = 0;
+	for (i = 1; i <= max; i++) {
+		struct callout *c;
+		struct callout_tailq *bucket;
+
+		bucket = &sc->callwheel[(sc->curticks + i) & cwheelmask];
+		TAILQ_FOREACH(c, bucket, c_links.tqe) {
+			if (c->c_time == sc->curticks + i)
+				return i - 1;
+			/* Limit the time spent here. */
+			iters++;
+			if (iters > 50)
+				return i - 1;
+		}
+	}
+	return max;
 }
 
 /*

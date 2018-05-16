@@ -275,6 +275,9 @@ void	startprofclock (struct proc *);
 void	stopprofclock (struct proc *);
 void	setstatclockrate (int hzrate);
 
+int	hardclock_maybe_skip(void);
+void	hardclock_unskip(int mask);
+
 /*
  * Kernel environment support functions and sundry.
  */

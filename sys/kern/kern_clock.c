@@ -132,6 +132,10 @@ static int sniff_target = -1;
 SYSCTL_INT(_kern, OID_AUTO, sniff_enable, CTLFLAG_RW, &sniff_enable, 0 , "");
 SYSCTL_INT(_kern, OID_AUTO, sniff_target, CTLFLAG_RW, &sniff_target, 0 , "");
 
+int in_powersave_mode = 1;
+SYSCTL_INT(_kern, OID_AUTO, powersave_mode, CTLFLAG_RW, &in_powersave_mode, 0 ,
+    "Save power by reducing effective HZ clock on some cores.");
+
 static int
 sysctl_cputime(SYSCTL_HANDLER_ARGS)
 {
@@ -286,13 +290,20 @@ SYSCTL_PROC(_kern, OID_AUTO, basetime, CTLTYPE_STRUCT|CTLFLAG_RD, 0, 0,
 static void hardclock(systimer_t info, int, struct intrframe *frame);
 static void statclock(systimer_t info, int, struct intrframe *frame);
 static void schedclock(systimer_t info, int, struct intrframe *frame);
-static void getnanotime_nbt(struct timespec *nbt, struct timespec *tsp);
+static void getnanouptime_fast(struct timespec *tsp, struct globaldata *gd,
+    sysclock_t now);
+static void getnanotime_fast(struct timespec *tsp, struct globaldata *gd,
+    sysclock_t now);
+static void getnanotime_nbt(struct timespec *nbt, struct timespec *tsp,
+    sysclock_t now);
 
 int	ticks;			/* system master ticks at hz */
 int	clocks_running;		/* tsleep/timeout clocks operational */
 int64_t	nsec_adj;		/* ntpd per-tick adjustment in nsec << 32 */
 int64_t	nsec_acc;		/* accumulator */
 int	sched_ticks;		/* global schedule clock ticks */
+
+static sysclock_t schedticks_next_clock;
 
 /* NTPD time correction fields */
 int64_t	ntp_tick_permanent;	/* per-tick adjustment in nsec << 32 */
@@ -430,8 +441,11 @@ initclocks_other(void *dummy)
 		systimer_init_periodic_flags(&gd->gd_hardclock, hardclock,
 					  NULL, hz, SYSTF_MSSYNC);
 		/* XXX correct the frequency for scheduler / estcpu tests */
+		crit_enter();
 		systimer_init_periodic_flags(&gd->gd_schedclock, schedclock,
 					  NULL, ESTCPUFREQ, SYSTF_MSSYNC);
+		schedticks_next_clock = gd->gd_schedclock.time;
+		crit_exit();
 	}
 	lwkt_setcpu_self(ogd);
 
@@ -504,25 +518,276 @@ set_timeofday(struct timespec *ts)
 
 	crit_exit();
 }
-	
-/*
- * Each cpu has its own hardclock, but we only increments ticks and softticks
- * on cpu #0.
- *
- * NOTE! systimer! the MP lock might not be held here.  We can only safely
- * manipulate objects owned by the current cpu.
- */
+
+#ifdef TICKSTAT
+uint64_t tickstat[100];
+uint32_t tickdiffs[8];
+
+static int
+sysctl_tickdiffs_print(SYSCTL_HANDLER_ARGS)
+{
+	char buf[128];
+	int cnt;
+	int error;
+
+	cnt = ksnprintf(buf, sizeof(buf),
+	    "%u.%uus %u.%uus %u.%uus %u.%uus %u.%uus %u.%uus %u.%uus %u.%uus",
+	    tickdiffs[0] / 1000, tickdiffs[0] % 1000,
+	    tickdiffs[1] / 1000, tickdiffs[1] % 1000,
+	    tickdiffs[2] / 1000, tickdiffs[2] % 1000,
+	    tickdiffs[3] / 1000, tickdiffs[3] % 1000,
+	    tickdiffs[4] / 1000, tickdiffs[4] % 1000,
+	    tickdiffs[5] / 1000, tickdiffs[5] % 1000,
+	    tickdiffs[6] / 1000, tickdiffs[6] % 1000,
+	    tickdiffs[7] / 1000, tickdiffs[7] % 1000);
+	KKASSERT(cnt < sizeof(buf));
+	error = SYSCTL_OUT(req, buf, cnt + 1);
+	if (error)
+		return error;
+	if (req->newptr != NULL)
+		return EINVAL;
+	return 0;
+}
+
+SYSCTL_PROC(_kern, OID_AUTO, tickdiffs, CTLFLAG_RD|CTLTYPE_STRING, 0, 0,
+	    sysctl_tickdiffs_print, "A", "Show tick interrupt time offsets");
+#endif
+
 static void
-hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
+hardclock_ntp_update(int cnt, sysclock_t now)
+{
+    struct timespec *nbt;
+    struct timespec nts;
+    int leap;
+    int ni;
+
+#if 0
+    if (tco->tc_poll_pps)
+	tco->tc_poll_pps(tco);
+#endif
+
+    /*
+     * Calculate the new basetime index.  We are in a critical section
+     * on cpu #0 and can safely play with basetime_index.  Start
+     * with the current basetime and then make adjustments.
+     */
+    ni = (basetime_index + 1) & BASETIME_ARYMASK;
+    nbt = &basetime[ni];
+    *nbt = basetime[basetime_index];
+
+    /*
+     * ntp adjustments only occur on cpu 0 and are protected by
+     * ntp_spin.  This spinlock virtually never conflicts.
+     */
+    spin_lock(&ntp_spin);
+
+    /*
+     * Apply adjtime corrections.  (adjtime() API)
+     *
+     * adjtime() only runs on cpu #0 so our critical section is
+     * sufficient to access these variables.
+     */
+    if (ntp_delta != 0) {
+	nbt->tv_nsec += cnt * ntp_tick_delta;
+	ntp_delta -= cnt * ntp_tick_delta;
+	if ((ntp_delta > 0 && ntp_delta < ntp_tick_delta) ||
+	    (ntp_delta < 0 && ntp_delta > ntp_tick_delta)) {
+		ntp_tick_delta = ntp_delta;
+	}
+    }
+
+    /*
+     * Apply permanent frequency corrections.  (sysctl API)
+     */
+    if (ntp_tick_permanent != 0) {
+	ntp_tick_acc += cnt * ntp_tick_permanent;
+	if (ntp_tick_acc >= (1LL << 32)) {
+	    nbt->tv_nsec += ntp_tick_acc >> 32;
+	    ntp_tick_acc -= (ntp_tick_acc >> 32) << 32;
+	} else if (ntp_tick_acc <= -(1LL << 32)) {
+	    /* Negate ntp_tick_acc to avoid shifting the sign bit. */
+	    nbt->tv_nsec -= (-ntp_tick_acc) >> 32;
+	    ntp_tick_acc += ((-ntp_tick_acc) >> 32) << 32;
+	}
+    }
+
+    if (nbt->tv_nsec >= 1000000000) {
+	    nbt->tv_sec++;
+	    nbt->tv_nsec -= 1000000000;
+    } else if (nbt->tv_nsec < 0) {
+	    nbt->tv_sec--;
+	    nbt->tv_nsec += 1000000000;
+    }
+
+    /*
+     * Another per-tick compensation.  (for ntp_adjtime() API)
+     */
+    if (nsec_adj != 0) {
+	nsec_acc += cnt * nsec_adj;
+	if (nsec_acc >= 0x100000000LL) {
+	    nbt->tv_nsec += nsec_acc >> 32;
+	    nsec_acc = (nsec_acc & 0xFFFFFFFFLL);
+	} else if (nsec_acc <= -0x100000000LL) {
+	    nbt->tv_nsec -= -nsec_acc >> 32;
+	    nsec_acc = -(-nsec_acc & 0xFFFFFFFFLL);
+	}
+	if (nbt->tv_nsec >= 1000000000) {
+	    nbt->tv_nsec -= 1000000000;
+	    ++nbt->tv_sec;
+	} else if (nbt->tv_nsec < 0) {
+	    nbt->tv_nsec += 1000000000;
+	    --nbt->tv_sec;
+	}
+    }
+    spin_unlock(&ntp_spin);
+
+    /************************************************************
+     *			LEAP SECOND CORRECTION			*
+     ************************************************************
+     *
+     * Taking into account all the corrections made above, figure
+     * out the new real time.  If the seconds field has changed
+     * then apply any pending leap-second corrections.
+     */
+    getnanotime_nbt(nbt, &nts, now);
+
+    if (time_second != nts.tv_sec) {
+	/*
+	 * Apply leap second (sysctl API).  Adjust nts for changes
+	 * so we do not have to call getnanotime_nbt again.
+	 */
+	if (ntp_leap_second) {
+	    if (ntp_leap_second == nts.tv_sec) {
+		if (ntp_leap_insert) {
+		    nbt->tv_sec++;
+		    nts.tv_sec++;
+		} else {
+		    nbt->tv_sec--;
+		    nts.tv_sec--;
+		}
+		ntp_leap_second--;
+	    }
+	}
+
+	/*
+	 * Apply leap second (ntp_adjtime() API), calculate a new
+	 * nsec_adj field.  ntp_update_second() returns nsec_adj
+	 * as a per-second value but we need it as a per-tick value.
+	 */
+	leap = ntp_update_second(time_second, &nsec_adj);
+	nsec_adj /= hz;
+	nbt->tv_sec += leap;
+	nts.tv_sec += leap;
+
+	/*
+	 * Update the time_second 'approximate time' global.
+	 */
+	time_second = nts.tv_sec;
+    }
+
+    /*
+     * Finally, our new basetime is ready to go live!
+     */
+    cpu_sfence();
+    basetime_index = ni;
+
+    /*
+     * Update kpmap on each tick.  TS updates are integrated with
+     * fences and upticks allowing userland to read the data
+     * deterministically.
+     */
+    if (kpmap) {
+	int w;
+
+	w = (kpmap->upticks + 1) & 1;
+	getnanouptime_fast(&kpmap->ts_uptime[w], mycpu, now);
+	getnanotime_fast(&kpmap->ts_realtime[w], mycpu, now);
+	cpu_sfence();
+	kpmap->upticks += cnt;
+	cpu_sfence();
+    }
+}
+
+static sysclock_t skipsleep_next_clock;
+static volatile int tick_skipsleep_state = 0;
+
+static int
+try_hardclock_skip(struct globaldata *gd)
+{
+	systimer_t info;
+	int cnt;
+
+	if (gd->gd_cpuid == 0) {
+		sysclock_t now;
+
+		info = &gd->gd_hardclock;
+		/* Make sure that we aren't close to a hardclock. */
+		now = sys_cputimer->count();
+		if ((int)(info->time - now - (info->periodic / 5)) < 0)
+			return 0;
+
+		cnt = callout_can_skip(gd, 99);
+		if (cnt == 0)
+			return 0;
+
+		if (atomic_cmpset_acq_int(&tick_skipsleep_state, 0, 1) == 0)
+			return 0;
+
+		systimer_skip_periodic(info, cnt);
+	} else {
+		cnt = callout_can_skip(gd, 99);
+		if (cnt == 0)
+			return 0;
+
+		info = &gd->gd_hardclock;
+		systimer_skip_periodic(info, cnt);
+	}
+
+	return 1;
+}
+
+/* Return 1, when hardclock gets skipped. */
+/* To be called in a critical section only. */
+int
+hardclock_maybe_skip(void)
+{
+	struct globaldata *gd = mycpu;
+	int cnt, mask = 0;
+
+	if (in_powersave_mode == 0)
+		return 0;
+
+	if (clocks_running == 0)
+		return 0;
+
+	if (gd->gd_hardclock.gd == NULL)
+		return 0;
+
+	/*
+	 * XXX Avoid reloading the systimer for each individual
+	 *     systimer_skip_periodic() call.
+	 */
+
+	if (try_hardclock_skip(gd))
+		mask |= 0x1;
+
+	cnt = usched_is_idle();
+	if (cnt > 0) {
+		systimer_skip_periodic(&gd->gd_schedclock, cnt);
+		mask |= 0x2;
+	}
+
+	systimer_skip_periodic(&gd->gd_statclock, imin(63, 4 * stathz - 1));
+	mask |= 0x4;
+
+	return mask;
+}
+
+static void
+hardclock_time_handle(struct globaldata *gd, systimer_t info)
 {
 	sysclock_t cputicks;
-	struct proc *p;
-	struct globaldata *gd = mycpu;
-
-	if ((gd->gd_reqflags & RQF_IPIQ) == 0 && lwkt_need_ipiq_process(gd)) {
-		/* Defer to doreti on passive IPIQ processing */
-		need_ipiq();
-	}
+	int cnt;
 
 	/*
 	 * We update the compensation base to calculate fine-grained time
@@ -540,189 +805,267 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 	 * immediately.
 	 */
 	if (gd->gd_cpuid == 0) {
+		sysclock_t now;
 		int ni;
 
-		cputicks = info->time - gd->gd_cpuclock_base;
-		if (cputicks >= sys_cputimer->freq) {
-			cputicks /= sys_cputimer->freq;
-			if (cputicks != 0 && cputicks != 1)
-				kprintf("Warning: hardclock missed > 1 sec\n");
-			gd->gd_time_seconds += cputicks;
-			gd->gd_cpuclock_base += sys_cputimer->freq * cputicks;
-			/* uncorrected monotonic 1-sec gran */
-			time_uptime += cputicks;
+		if (info == NULL) {
+			now = sys_cputimer->count();
+		} else {
+			now = info->time;
 		}
-		ni = (basetime_index + 1) & BASETIME_ARYMASK;
-		hardtime[ni].time_second = gd->gd_time_seconds;
-		hardtime[ni].cpuclock_base = gd->gd_cpuclock_base;
+		cnt = 0;
+		while ((int)(now - skipsleep_next_clock) >= 0) {
+			cnt++;
+			skipsleep_next_clock += gd->gd_hardclock.periodic;
+		}
+		if (info == NULL)
+			now = skipsleep_next_clock - gd->gd_hardclock.periodic;
+
+		if (cnt > 0) {
+			cputicks = now - gd->gd_cpuclock_base;
+			if (cputicks >= sys_cputimer->freq) {
+				cputicks /= sys_cputimer->freq;
+				if (cputicks != 0 && cputicks != 1)
+					kprintf("Warning: hardclock missed > 1 sec\n");
+				gd->gd_time_seconds += cputicks;
+				gd->gd_cpuclock_base += sys_cputimer->freq * cputicks;
+				/* uncorrected monotonic 1-sec gran */
+				time_uptime += cputicks;
+			}
+			ni = (basetime_index + 1) & BASETIME_ARYMASK;
+			hardtime[ni].time_second = gd->gd_time_seconds;
+			hardtime[ni].cpuclock_base = gd->gd_cpuclock_base;
+
+			/*
+			 * The system-wide ticks counter and NTP related timedelta/tickdelta
+			 * adjustments only occur on cpu #0.  NTP adjustments are accomplished
+			 * by updating basetime.
+			 */
+			ticks += cnt;
+			hardclock_ntp_update(cnt, now);
+		} else {
+			/* We have sufficiently recent data. */
+			ni = basetime_index;
+			cpu_lfence();
+			gd->gd_time_seconds = hardtime[ni].time_second;
+			gd->gd_cpuclock_base = hardtime[ni].cpuclock_base;
+		}
 	} else {
 		int ni;
 
+		if (tick_skipsleep_state != 0) {
+			sysclock_t now;
+
+			if (info == NULL) {
+				now = sys_cputimer->count();
+			} else {
+				now = info->time;
+			}
+			if ((int)(skipsleep_next_clock - now) > 0) {
+				/* We have sufficiently recent data. */
+				ni = basetime_index;
+				cpu_lfence();
+				gd->gd_time_seconds = hardtime[ni].time_second;
+				gd->gd_cpuclock_base = hardtime[ni].cpuclock_base;
+				return;
+			}
+			if (atomic_cmpset_acq_int(&tick_skipsleep_state, 1, 2)) {
+				int ni;
+
+				/* Make sure we have recent data. */
+				ni = basetime_index;
+				cpu_lfence();
+				gd->gd_time_seconds = hardtime[ni].time_second;
+				gd->gd_cpuclock_base = hardtime[ni].cpuclock_base;
+
+				cnt = 0;
+				while ((int)(now - skipsleep_next_clock) >= 0) {
+					cnt++;
+					skipsleep_next_clock += gd->gd_hardclock.periodic;
+				}
+				if (info == NULL)
+					now = skipsleep_next_clock - gd->gd_hardclock.periodic;
+
+				if (cnt > 0) {
+					/* Now update the global hardclock. */
+					cputicks = now - gd->gd_cpuclock_base;
+					if (cputicks >= sys_cputimer->freq) {
+						cputicks /= sys_cputimer->freq;
+						if (cputicks != 0 && cputicks != 1)
+							kprintf("Warning: hardclock missed > 1 sec\n");
+						gd->gd_time_seconds += cputicks;
+						gd->gd_cpuclock_base += sys_cputimer->freq * cputicks;
+						/* uncorrected monotonic 1-sec gran */
+						time_uptime += cputicks;
+					}
+					ni = (basetime_index + 1) & BASETIME_ARYMASK;
+					hardtime[ni].time_second = gd->gd_time_seconds;
+					hardtime[ni].cpuclock_base = gd->gd_cpuclock_base;
+
+					ticks += cnt;
+					hardclock_ntp_update(cnt, now);
+				} else {
+					atomic_store_rel_int(&tick_skipsleep_state, 1);
+					ni = basetime_index;
+					cpu_lfence();
+					gd->gd_time_seconds = hardtime[ni].time_second;
+					gd->gd_cpuclock_base = hardtime[ni].cpuclock_base;
+					return;
+				}
+				atomic_store_rel_int(&tick_skipsleep_state, 1);
+				return;
+			} else {
+				cnt = 0;
+				while (tick_skipsleep_state == 2) {
+					cpu_pause();
+					cnt++;
+					if (cnt > 100) {
+						uint64_t start = rdtsc();
+
+						while (tick_skipsleep_state == 2) {
+							if (rdtsc() - start > tsc_frequency >> 12)
+								break;
+							cpu_pause();
+						}
+					}
+				}
+			}
+		}
+		/* The original timeout is already over. */
 		ni = basetime_index;
 		cpu_lfence();
 		gd->gd_time_seconds = hardtime[ni].time_second;
 		gd->gd_cpuclock_base = hardtime[ni].cpuclock_base;
 	}
+}
 
-	/*
-	 * The system-wide ticks counter and NTP related timedelta/tickdelta
-	 * adjustments only occur on cpu #0.  NTP adjustments are accomplished
-	 * by updating basetime.
-	 */
+/* To be called in critical section only. */
+void
+hardclock_unskip(int mask)
+{
+	struct globaldata *gd = mycpu;
+	int cnt;
+
+	if ((gd->gd_reqflags & RQF_IPIQ) == 0 && lwkt_need_ipiq_process(gd)) {
+		/* Defer to doreti on passive IPIQ processing */
+		need_ipiq();
+	}
+
+	if (mask & 1) {
+		if (gd->gd_cpuid == 0) {
+			int ni;
+
+			/*
+			 * This waits until there is no longer an ongoing update on
+			 * another cpu core.
+			 */
+			while (atomic_cmpset_acq_int(&tick_skipsleep_state, 1, 0) == 0)
+				cpu_pause();
+
+			/* Make sure we have recent data. */
+			ni = basetime_index;
+			cpu_lfence();
+			gd->gd_time_seconds = hardtime[ni].time_second;
+			gd->gd_cpuclock_base = hardtime[ni].cpuclock_base;
+		}
+		cnt = systimer_skip_periodic(&gd->gd_hardclock, 0);
+		if (cnt > 0) {
+			hardclock_time_handle(gd, NULL);
+
+			lwkt_schedulerclock(curthread);
+			hardclock_softtick(gd, cnt);
+
+			vmstats_rollup_cpu(gd);
+			vfscache_rollup_cpu(gd);
+			mycpu->gd_vmstats = vmstats;
+
+			/* No itimer handling yet. XXX Move it into a thread. */
+		}
+	}
+
+	if (mask & 2) {
+		cnt = systimer_skip_periodic(&gd->gd_schedclock, 0);
+		if (cnt > 0) {
+			sysclock_t t, now;
+
+			/* Increment the global sched_ticks */
+			t = schedticks_next_clock;
+			now = sys_cputimer->count();
+			for (;;) {
+				if ((int)(now - t) >= 0) {
+					if (atomic_cmpset_int(&schedticks_next_clock, t,
+					    t + gd->gd_schedclock.periodic)) {
+						atomic_add_int(&sched_ticks, 1);
+						t += gd->gd_schedclock.periodic;
+					} else {
+						break;
+					}
+				} else {
+					break;
+				}
+			}
+		}
+	}
+
+	if (mask & 4) {
+		cnt = systimer_skip_periodic(&gd->gd_statclock, 0);
+		if (cnt > 0) {
+			thread_t td;
+			int bump;
+
+			gd->statint.gd_statcv += cnt * gd->gd_statclock.periodic;
+			bump = (sys_cputimer->freq64_usec * (cnt * gd->gd_statclock.periodic)) >> 32;
+			if (bump < 0)
+				bump = 0;
+			if (bump > 1000000)
+				bump = 1000000;
+			td = curthread;
+			td->td_sticks += bump;
+			/*
+			 * We want to count token contention as
+			 * system time.  When token contention occurs
+			 * the cpu may only be outside its critical
+			 * section while switching through the idle
+			 * thread.  In this situation, various flags
+			 * will be set in gd_reqflags.
+			 */
+			cpu_time.cp_idle += bump;
+		}
+	}
+}
+
+/*
+ * Each cpu has its own hardclock, but we only increments ticks and softticks
+ * on cpu #0.
+ *
+ * NOTE! systimer! the MP lock might not be held here.  We can only safely
+ * manipulate objects owned by the current cpu.
+ */
+static void
+hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
+{
+	struct proc *p;
+	struct globaldata *gd = mycpu;
+
+#ifdef TICKSTAT
 	if (gd->gd_cpuid == 0) {
-	    struct timespec *nbt;
-	    struct timespec nts;
-	    int leap;
-	    int ni;
+		tickstat[(ticks + 1) % 100] = rdtsc();
+		cpu_sfence();
+	} else {
+		uint64_t mytsc = rdtsc();
+		uint64_t bsptsc = tickstat[ticks % 100];
 
-	    ++ticks;
-
-#if 0
-	    if (tco->tc_poll_pps) 
-		tco->tc_poll_pps(tco);
+		tickdiffs[gd->gd_cpuid] =
+		    (mytsc - bsptsc) * 1000 * 1000 * 1000 / tsc_frequency;
+	}
 #endif
 
-	    /*
-	     * Calculate the new basetime index.  We are in a critical section
-	     * on cpu #0 and can safely play with basetime_index.  Start
-	     * with the current basetime and then make adjustments.
-	     */
-	    ni = (basetime_index + 1) & BASETIME_ARYMASK;
-	    nbt = &basetime[ni];
-	    *nbt = basetime[basetime_index];
-
-	    /*
-	     * ntp adjustments only occur on cpu 0 and are protected by
-	     * ntp_spin.  This spinlock virtually never conflicts.
-	     */
-	    spin_lock(&ntp_spin);
-
-	    /*
-	     * Apply adjtime corrections.  (adjtime() API)
-	     *
-	     * adjtime() only runs on cpu #0 so our critical section is
-	     * sufficient to access these variables.
-	     */
-	    if (ntp_delta != 0) {
-		nbt->tv_nsec += ntp_tick_delta;
-		ntp_delta -= ntp_tick_delta;
-		if ((ntp_delta > 0 && ntp_delta < ntp_tick_delta) ||
-		    (ntp_delta < 0 && ntp_delta > ntp_tick_delta)) {
-			ntp_tick_delta = ntp_delta;
- 		}
- 	    }
-
-	    /*
-	     * Apply permanent frequency corrections.  (sysctl API)
-	     */
-	    if (ntp_tick_permanent != 0) {
-		ntp_tick_acc += ntp_tick_permanent;
-		if (ntp_tick_acc >= (1LL << 32)) {
-		    nbt->tv_nsec += ntp_tick_acc >> 32;
-		    ntp_tick_acc -= (ntp_tick_acc >> 32) << 32;
-		} else if (ntp_tick_acc <= -(1LL << 32)) {
-		    /* Negate ntp_tick_acc to avoid shifting the sign bit. */
-		    nbt->tv_nsec -= (-ntp_tick_acc) >> 32;
-		    ntp_tick_acc += ((-ntp_tick_acc) >> 32) << 32;
-		}
- 	    }
-
-	    if (nbt->tv_nsec >= 1000000000) {
-		    nbt->tv_sec++;
-		    nbt->tv_nsec -= 1000000000;
-	    } else if (nbt->tv_nsec < 0) {
-		    nbt->tv_sec--;
-		    nbt->tv_nsec += 1000000000;
-	    }
-
-	    /*
-	     * Another per-tick compensation.  (for ntp_adjtime() API)
-	     */
-	    if (nsec_adj != 0) {
-		nsec_acc += nsec_adj;
-		if (nsec_acc >= 0x100000000LL) {
-		    nbt->tv_nsec += nsec_acc >> 32;
-		    nsec_acc = (nsec_acc & 0xFFFFFFFFLL);
-		} else if (nsec_acc <= -0x100000000LL) {
-		    nbt->tv_nsec -= -nsec_acc >> 32;
-		    nsec_acc = -(-nsec_acc & 0xFFFFFFFFLL);
-		}
-		if (nbt->tv_nsec >= 1000000000) {
-		    nbt->tv_nsec -= 1000000000;
-		    ++nbt->tv_sec;
-		} else if (nbt->tv_nsec < 0) {
-		    nbt->tv_nsec += 1000000000;
-		    --nbt->tv_sec;
-		}
-	    }
-	    spin_unlock(&ntp_spin);
-
-	    /************************************************************
-	     *			LEAP SECOND CORRECTION			*
-	     ************************************************************
-	     *
-	     * Taking into account all the corrections made above, figure
-	     * out the new real time.  If the seconds field has changed
-	     * then apply any pending leap-second corrections.
-	     */
-	    getnanotime_nbt(nbt, &nts);
-
-	    if (time_second != nts.tv_sec) {
-		/*
-		 * Apply leap second (sysctl API).  Adjust nts for changes
-		 * so we do not have to call getnanotime_nbt again.
-		 */
-		if (ntp_leap_second) {
-		    if (ntp_leap_second == nts.tv_sec) {
-			if (ntp_leap_insert) {
-			    nbt->tv_sec++;
-			    nts.tv_sec++;
-			} else {
-			    nbt->tv_sec--;
-			    nts.tv_sec--;
-			}
-			ntp_leap_second--;
-		    }
-		}
-
-		/*
-		 * Apply leap second (ntp_adjtime() API), calculate a new
-		 * nsec_adj field.  ntp_update_second() returns nsec_adj
-		 * as a per-second value but we need it as a per-tick value.
-		 */
-		leap = ntp_update_second(time_second, &nsec_adj);
-		nsec_adj /= hz;
-		nbt->tv_sec += leap;
-		nts.tv_sec += leap;
-
-		/*
-		 * Update the time_second 'approximate time' global.
-		 */
-		time_second = nts.tv_sec;
-	    }
-
-	    /*
-	     * Finally, our new basetime is ready to go live!
-	     */
-	    cpu_sfence();
-	    basetime_index = ni;
-
-	    /*
-	     * Update kpmap on each tick.  TS updates are integrated with
-	     * fences and upticks allowing userland to read the data
-	     * deterministically.
-	     */
-	    if (kpmap) {
-		int w;
-
-		w = (kpmap->upticks + 1) & 1;
-		getnanouptime(&kpmap->ts_uptime[w]);
-		getnanotime(&kpmap->ts_realtime[w]);
-		cpu_sfence();
-		++kpmap->upticks;
-		cpu_sfence();
-	    }
+	if ((gd->gd_reqflags & RQF_IPIQ) == 0 && lwkt_need_ipiq_process(gd)) {
+		/* Defer to doreti on passive IPIQ processing */
+		need_ipiq();
 	}
+
+	hardclock_time_handle(gd, info);
 
 	/*
 	 * lwkt thread scheduler fair queueing
@@ -732,7 +1075,15 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 	/*
 	 * softticks are handled for all cpus
 	 */
-	hardclock_softtick(gd);
+	hardclock_softtick(gd, 1);
+#if 0 /* Not actually used. */
+	if (info->skipped) {
+		int i;
+
+		KKASSERT(info->skipped > 0 && info->skipped < 63);
+		hardclock_softtick(gd, info->skipped);
+	}
+#endif
 
 	/*
 	 * Rollup accumulated vmstats, copy-back for critical path checks.
@@ -1076,6 +1427,7 @@ schedclock(systimer_t info, int in_ipi __unused, struct intrframe *frame)
 	struct lwp *lp;
 	struct rusage *ru;
 	struct vmspace *vm;
+	sysclock_t t;
 	long rss;
 
 	if ((lp = lwkt_preempted_proc()) != NULL) {
@@ -1107,8 +1459,20 @@ schedclock(systimer_t info, int in_ipi __unused, struct intrframe *frame)
 		}
 	}
 	/* Increment the global sched_ticks */
-	if (mycpu->gd_cpuid == 0)
-		++sched_ticks;
+	t = schedticks_next_clock;
+	for (;;) {
+		if ((int)(info->time - t) >= 0) {
+			if (atomic_cmpset_int(&schedticks_next_clock, t,
+			    t + info->periodic)) {
+				atomic_add_int(&sched_ticks, 1);
+				t += info->periodic;
+			} else {
+				break;
+			}
+		} else {
+			break;
+		}
+	}
 }
 
 /*
@@ -1347,11 +1711,18 @@ void
 getnanouptime(struct timespec *tsp)
 {
 	struct globaldata *gd = mycpu;
+
+	getnanouptime_fast(tsp, gd, gd->gd_hardclock.time);
+}
+
+static void
+getnanouptime_fast(struct timespec *tsp, struct globaldata *gd, sysclock_t now)
+{
 	sysclock_t delta;
 
 	do {
 		tsp->tv_sec = gd->gd_time_seconds;
-		delta = gd->gd_hardclock.time - gd->gd_cpuclock_base;
+		delta = now - gd->gd_cpuclock_base;
 	} while (tsp->tv_sec != gd->gd_time_seconds);
 
 	if (delta >= sys_cputimer->freq) {
@@ -1432,12 +1803,19 @@ void
 getnanotime(struct timespec *tsp)
 {
 	struct globaldata *gd = mycpu;
+
+	getnanotime_fast(tsp, gd, gd->gd_hardclock.time);
+}
+
+static void
+getnanotime_fast(struct timespec *tsp, struct globaldata *gd, sysclock_t now)
+{
 	struct timespec *bt;
 	sysclock_t delta;
 
 	do {
 		tsp->tv_sec = gd->gd_time_seconds;
-		delta = gd->gd_hardclock.time - gd->gd_cpuclock_base;
+		delta = now - gd->gd_cpuclock_base;
 	} while (tsp->tv_sec != gd->gd_time_seconds);
 
 	if (delta >= sys_cputimer->freq) {
@@ -1457,14 +1835,14 @@ getnanotime(struct timespec *tsp)
 }
 
 static void
-getnanotime_nbt(struct timespec *nbt, struct timespec *tsp)
+getnanotime_nbt(struct timespec *nbt, struct timespec *tsp, sysclock_t now)
 {
 	struct globaldata *gd = mycpu;
 	sysclock_t delta;
 
 	do {
 		tsp->tv_sec = gd->gd_time_seconds;
-		delta = gd->gd_hardclock.time - gd->gd_cpuclock_base;
+		delta = now - gd->gd_cpuclock_base;
 	} while (tsp->tv_sec != gd->gd_time_seconds);
 
 	if (delta >= sys_cputimer->freq) {
