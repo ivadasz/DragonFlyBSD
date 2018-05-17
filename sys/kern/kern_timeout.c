@@ -236,6 +236,7 @@ callout_can_skip(struct globaldata *gd, int max)
 	softclock_pcpu_t sc;
 	struct callout *c;
 	struct callout_tailq *bucket;
+	int cnt;
 
 	KKASSERT(max >= 1);
 
@@ -243,22 +244,33 @@ callout_can_skip(struct globaldata *gd, int max)
 	if (sc->isrunning)
 		return 0;
 
+	cnt = 0;
 	bucket = &sc->callwheel[(sc->softticks + 1) & cwheelmask];
 
 	TAILQ_FOREACH(c, bucket, c_links.tqe) {
 		if (c->c_time == sc->softticks + 1)
-			return 0;
+			return cnt;
 	}
+	cnt = 1;
 	if (max >= 2) {
 		bucket = &sc->callwheel[(sc->softticks + 2) & cwheelmask];
 
 		TAILQ_FOREACH(c, bucket, c_links.tqe) {
 			if (c->c_time == sc->softticks + 2)
-				return 1;
+				return cnt;
 		}
-		return 2;
+		cnt = 2;
 	}
-	return 1;
+	if (max >= 3) {
+		bucket = &sc->callwheel[(sc->softticks + 3) & cwheelmask];
+
+		TAILQ_FOREACH(c, bucket, c_links.tqe) {
+			if (c->c_time == sc->softticks + 3)
+				return cnt;
+		}
+		cnt = 3;
+	}
+	return cnt;
 }
 
 /*

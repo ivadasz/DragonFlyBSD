@@ -143,6 +143,20 @@ usched_ctl(struct usched *usched, int action)
 	return (error);
 }
 
+int
+usched_is_idle(void)
+{
+	struct usched *item;
+	int min = 3;
+
+	TAILQ_FOREACH(item, &usched_list, entry) {
+		min = imin(min, item->schedisidle());
+		if (min == 0)
+			return 0;
+	}
+	return min;
+}
+
 /*
  * Called from the scheduler clock on each cpu independently at the
  * common scheduling rate.  If th scheduler clock interrupted a running

@@ -162,6 +162,7 @@ static struct lwp *dfly_chooseproc_locked(dfly_pcpu_t rdd, dfly_pcpu_t dd,
 static void dfly_remrunqueue_locked(dfly_pcpu_t dd, struct lwp *lp);
 static void dfly_setrunqueue_locked(dfly_pcpu_t dd, struct lwp *lp);
 static void dfly_changedcpu(struct lwp *lp);
+static int dfly_schedisidle(void);
 
 struct usched usched_dfly = {
 	{ NULL },
@@ -179,7 +180,8 @@ struct usched usched_dfly = {
 	dfly_uload_update,
 	NULL,			/* setcpumask not supported */
 	dfly_yield,
-	dfly_changedcpu
+	dfly_changedcpu,
+	dfly_schedisidle
 };
 
 /*
@@ -1281,6 +1283,31 @@ dfly_changedcpu(struct lwp *lp)
 		dfly_changeqcpu_locked(lp, dd, rdd);
 		spin_unlock(&dd->spin);
 	}
+}
+
+static
+int
+dfly_schedisidle(void)
+{
+	globaldata_t gd = mycpu;
+	int cnt = 3;
+
+	if (usched_dfly_features & 0x04) {
+		int curticks = sched_ticks;
+
+		if (((u_int)(curticks + 1) & 7) == 0 &&
+		    ((u_int)(curticks + 1) / 8) % ncpus == gd->gd_cpuid) {
+			return 0;
+		} else if (((u_int)(curticks + 2) & 7) == 0 &&
+		    ((u_int)(curticks + 2) / 8) % ncpus == gd->gd_cpuid) {
+			return 1;
+		} else if (((u_int)(curticks + 3) & 7) == 0 &&
+		    ((u_int)(curticks + 3) / 8) % ncpus == gd->gd_cpuid) {
+			return 2;
+		}
+	}
+
+	return cnt;
 }
 
 /*

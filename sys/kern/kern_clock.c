@@ -562,11 +562,18 @@ hardclock_maybe_skip(void)
 	if (gd->gd_hardclock.gd == NULL)
 		return 0;
 
-	cnt = callout_can_skip(gd, 2);
+	cnt = callout_can_skip(gd, 3);
 	if (cnt == 0)
 		return 0;
 
 	systimer_skip_periodic(&gd->gd_hardclock, cnt);
+
+	cnt = usched_is_idle();
+	if (cnt > 0) {
+		systimer_skip_periodic(&gd->gd_schedclock, cnt);
+	}
+
+	systimer_skip_periodic(&gd->gd_statclock, 3);
 	return 1;
 }
 
@@ -603,6 +610,11 @@ hardclock_unskip(void)
 		mycpu->gd_vmstats = vmstats;
 
 		/* No itimer handling yet. */
+	}
+	systimer_skip_periodic(&gd->gd_schedclock, 0);
+	cnt = systimer_skip_periodic(&gd->gd_statclock, 0);
+	if (cnt > 0) {
+		gd->statint.gd_statcv += cnt * gd->gd_statclock.periodic;
 	}
 }
 

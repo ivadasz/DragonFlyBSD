@@ -396,25 +396,30 @@ systimer_skip_periodic(systimer_t info, int cnt)
 	int ret = 0;
 
 	/* For now only allow skipping a single interrupt. */
-	KKASSERT(cnt >= 0 && cnt <= 2);
+	KKASSERT(cnt >= 0 && cnt <= 3);
 
 	if (cnt == 0) {
 		crit_enter();
 		if (info->skipping > 0) {
 			sysclock_t now;
 
-			KKASSERT(info->skipping <= 2);
+			KKASSERT(info->skipping <= 3);
 			now = sys_cputimer->count();
-			if (now + 2 * info->periodic >= info->time) {
-				ret = 2;
-			} else if (now + info->periodic >= info->time) {
-				ret = 1;
-				systimer_del(info);
-				info->time -= info->periodic;
-				_systimer_add(info, now);
+			if (now + info->periodic >= info->time) {
+				ret = info->skipping;
+			} else if (info->skipping >= 2 &&
+			    now + 2 * info->periodic >= info->time) {
+				ret = info->skipping - 1;
+			} else if (info->skipping >= 3 &&
+			    now + 3 * info->periodic >= info->time) {
+				ret = info->skipping - 2;
 			} else {
+				ret = 0;
+			}
+			if (ret < info->skipping) {
 				systimer_del(info);
-				info->time -= 2 * info->periodic;
+				info->time -=
+				    (info->skipping - ret) * info->periodic;
 				_systimer_add(info, now);
 			}
 			info->skipping = 0;
