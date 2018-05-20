@@ -200,12 +200,12 @@ SYSINIT(softclock_setup, SI_BOOT2_SOFTCLOCK, SI_ORDER_SECOND,
  * depending on whether the helper thread is running or not.
  */
 void
-hardclock_softtick(globaldata_t gd)
+hardclock_softtick(globaldata_t gd, int cnt)
 {
 	softclock_pcpu_t sc;
 
 	sc = softclock_pcpu_ary[gd->gd_cpuid];
-	++sc->curticks;
+	sc->curticks += cnt;
 	if (sc->isrunning)
 		return;
 	if (sc->softticks == sc->curticks) {

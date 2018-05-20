@@ -405,13 +405,13 @@ systimer_skip_periodic(systimer_t info, int cnt)
 
 			KKASSERT(info->skipping <= 3);
 			now = sys_cputimer->count();
-			if (now + info->periodic >= info->time) {
+			if ((int)(now + info->periodic - info->time) >= 0) {
 				ret = info->skipping;
 			} else if (info->skipping >= 2 &&
-			    now + 2 * info->periodic >= info->time) {
+			    (int)(now + 2 * info->periodic - info->time) >= 0) {
 				ret = info->skipping - 1;
 			} else if (info->skipping >= 3 &&
-			    now + 3 * info->periodic >= info->time) {
+			    (int)(now + 3 * info->periodic - info->time) >= 0) {
 				ret = info->skipping - 2;
 			} else {
 				ret = 0;

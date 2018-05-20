@@ -197,7 +197,7 @@ extern int	ncallout;
 
 struct globaldata;
 
-void	hardclock_softtick(struct globaldata *);
+void	hardclock_softtick(struct globaldata *, int);
 void	callout_init (struct callout *);
 void	callout_init_mp (struct callout *);
 void	callout_init_lk (struct callout *, struct lock *);
