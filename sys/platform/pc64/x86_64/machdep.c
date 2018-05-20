@@ -1264,6 +1264,8 @@ do_spin:
 			 * MONITOR/MWAIT not available).
 			 */
 			if (cpu_mi_feature & CPU_MI_MONITOR) {
+				int skipped = 0;
+
 				splz(); /* XXX */
 				reqflags = gd->gd_reqflags;
 				if (reqflags & RQF_IDLECHECK_WK_MASK)
@@ -1277,8 +1279,14 @@ do_spin:
 				    SPEC_CTRL_DUMMY_ENABLE) {
 					wrmsr(MSR_SPEC_CTRL, pscpu->trampoline.tr_pcb_spec_ctrl[1] & (SPEC_CTRL_IBRS|SPEC_CTRL_STIBP));
 				}
+				if (stat->iowait_active == 0) {
+					skipped = hardclock_maybe_skip();
+				}
 				cpu_mmw_pause_int(&gd->gd_reqflags, reqflags,
 						  cpu_mwait_cx_hint(stat), 0);
+				if (skipped) {
+					hardclock_unskip();
+				}
 				if (pscpu->trampoline.tr_pcb_spec_ctrl[0] &
 				    SPEC_CTRL_DUMMY_ENABLE) {
 					wrmsr(MSR_SPEC_CTRL, pscpu->trampoline.tr_pcb_spec_ctrl[0] & (SPEC_CTRL_IBRS|SPEC_CTRL_STIBP));
