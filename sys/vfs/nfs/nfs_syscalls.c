@@ -415,6 +415,10 @@ nfssvc_addsock(struct file *fp, struct sockaddr *mynam, struct thread *td)
 
 	lwkt_gettoken(&nfs_token);
 	nfsrv_slpref(slp);
+	if (TAILQ_EMPTY(&nfssvc_sockhead) && TAILQ_EMPTY(&nfs_mountq)) {
+		callout_reset(&nfs_timer_handle, nfs_ticks, nfs_timer_callout,
+		    NULL);
+	}
 	TAILQ_INSERT_TAIL(&nfssvc_sockhead, slp, ns_chain);
 	lwkt_gettoken(&slp->ns_token);
 
@@ -999,6 +1003,7 @@ nfsrv_init(int terminating)
 	STAILQ_INIT(&nfs_cltpsock->ns_rec);
 	TAILQ_INIT(&nfs_cltpsock->ns_uidlruhead);
 	TAILQ_INSERT_TAIL(&nfssvc_sockhead, nfs_cltpsock, ns_chain);
+	callout_reset(&nfs_timer_handle, nfs_ticks, nfs_timer_callout, NULL);
 #endif
 }
 
