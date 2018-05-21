@@ -1135,6 +1135,10 @@ mountnfs(struct nfs_args *argp, struct mount *mp, struct sockaddr *nam,
 	 */
 	vn_unlock(*vpp);
 	lwkt_gettoken(&nfs_token);
+	if (TAILQ_EMPTY(&nfs_mountq)) {
+		callout_reset(&nfs_timer_handle, nfs_ticks, nfs_timer_callout,
+		    NULL);
+	}
 	TAILQ_INSERT_TAIL(&nfs_mountq, nmp, nm_entry);
 	lwkt_reltoken(&nfs_token);
 

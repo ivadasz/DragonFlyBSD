@@ -1731,9 +1731,11 @@ nfs_timer_callout(void *arg /* never used */)
 	struct nfssvc_sock *slp;
 	u_quad_t cur_usec;
 #endif /* NFS_NOSERVER */
+	int something = 0;
 
 	lwkt_gettoken(&nfs_token);
 	TAILQ_FOREACH(nmp, &nfs_mountq, nm_entry) {
+		something = 1;
 		lwkt_gettoken(&nmp->nm_token);
 		TAILQ_FOREACH(req, &nmp->nm_reqq, r_chain) {
 			KKASSERT(nmp == req->r_nmp);
@@ -1779,6 +1781,7 @@ nfs_timer_callout(void *arg /* never used */)
 	cur_usec = nfs_curusec();
 
 	TAILQ_FOREACH(slp, &nfssvc_sockhead, ns_chain) {
+		something = 1;
 		/* XXX race against removal */
 		if (lwkt_trytoken(&slp->ns_token)) {
 			if (slp->ns_tq.lh_first &&
@@ -1790,7 +1793,10 @@ nfs_timer_callout(void *arg /* never used */)
 	}
 #endif /* NFS_NOSERVER */
 
-	callout_reset(&nfs_timer_handle, nfs_ticks, nfs_timer_callout, NULL);
+	if (something) {
+		callout_reset(&nfs_timer_handle, nfs_ticks, nfs_timer_callout,
+		    NULL);
+	}
 	lwkt_reltoken(&nfs_token);
 }
 
