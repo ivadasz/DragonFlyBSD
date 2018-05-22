@@ -115,6 +115,16 @@ struct callout {
 	struct lock *c_lk;		/* auto-lock */
 };
 
+TAILQ_HEAD(periodic_call_tailq, periodic_call);
+
+struct periodic_call {
+	TAILQ_ENTRY(periodic_call) tqe;
+	void	*c_arg;			/* function argument */
+	void	(*c_func) (void *);	/* function to call */
+	int	cpu;
+	int	timo;
+};
+
 /*
  * ACTIVE	- If cleared this the callout is prevented from issuing its
  *		  callback.  The callout remains on its timer queue.
@@ -211,6 +221,11 @@ void	callout_reset_bycpu (struct callout *, int, void (*)(void *), void *,
 int	callout_can_skip(struct globaldata *, int);
 
 #define	callout_drain(x) callout_stop_sync(x)
+
+void	callout_init_periodic (struct periodic_call *);
+void	callout_start_periodic (struct periodic_call *, int,
+	    void (*)(void *), void *);
+void	callout_stop_periodic (struct periodic_call *);
 
 #endif
 
