@@ -107,6 +107,13 @@ static int cwheelsize;
 static int cwheelmask;
 static softclock_pcpu_t softclock_pcpu_ary[MAXCPU];
 
+static struct callout herz_percpu[MAXCPU];
+static struct callout slow_herz_percpu[MAXCPU];
+static struct callout fast_herz_percpu[MAXCPU];
+static struct periodic_call_tailq periodic_calls[MAXCPU];
+static struct periodic_call_tailq periodic_calls_slow[MAXCPU];
+static struct periodic_call_tailq periodic_calls_fast[MAXCPU];
+
 static void softclock_handler(void *arg);
 static void slotimer_callback(void *arg);
 static void callout_reset_ipi(void *arg);
@@ -178,6 +185,15 @@ swi_softclock_setup(void *arg)
 		lwkt_create(softclock_handler, sc, NULL, &sc->thread,
 			    TDF_NOSTART | TDF_INTTHREAD,
 			    cpu, "softclock %d", cpu);
+	}
+
+	for (cpu = 0; cpu < ncpus; cpu++) {
+		callout_init_mp(&herz_percpu[cpu]);
+		callout_init_mp(&slow_herz_percpu[cpu]);
+		callout_init_mp(&fast_herz_percpu[cpu]);
+		TAILQ_INIT(&periodic_calls[cpu]);
+		TAILQ_INIT(&periodic_calls_slow[cpu]);
+		TAILQ_INIT(&periodic_calls_fast[cpu]);
 	}
 }
 
@@ -963,4 +979,154 @@ callout_init_lk(struct callout *c, struct lock *lk)
 {
 	_callout_init(c, CALLOUT_DID_INIT | CALLOUT_MPSAFE | CALLOUT_AUTOLOCK);
 	c->c_lk = lk;
+}
+
+void
+callout_init_periodic(struct periodic_call *c)
+{
+	bzero(c, sizeof(struct periodic_call));
+	c->cpu = -1;
+}
+
+static void
+handle_periodic_callout(struct periodic_call_tailq *q)
+{
+	struct periodic_call *c, *tmp;
+
+	TAILQ_FOREACH_MUTABLE(c, q, tqe, tmp) {
+		void (*fn)(void *);
+		void *val;
+
+		fn = c->c_func;
+		val = c->c_arg;
+		crit_exit();
+		fn(val);
+		crit_enter();
+	}
+}
+
+static void
+handle_periodic_slow_callout(void *arg)
+{
+	struct periodic_call_tailq *q;
+
+	q = arg;
+	crit_enter();
+	handle_periodic_callout(q);
+	if (!TAILQ_EMPTY(q)) {
+		callout_reset(&slow_herz_percpu[mycpuid], hz/2,
+		    handle_periodic_slow_callout, q);
+	}
+	crit_exit();
+}
+
+static void
+handle_periodic_fast_callout(void *arg)
+{
+	struct periodic_call_tailq *q;
+
+	q = arg;
+	crit_enter();
+	handle_periodic_callout(q);
+	if (!TAILQ_EMPTY(q)) {
+		callout_reset(&fast_herz_percpu[mycpuid], hz/5,
+		    handle_periodic_fast_callout, q);
+	}
+	crit_exit();
+}
+
+static void
+handle_periodic_hz_callout(void *arg)
+{
+	struct periodic_call_tailq *q;
+
+	q = arg;
+	crit_enter();
+	handle_periodic_callout(q);
+	if (!TAILQ_EMPTY(q)) {
+		callout_reset(&herz_percpu[mycpuid], hz,
+		    handle_periodic_hz_callout, q);
+	}
+	crit_exit();
+}
+
+void
+callout_start_periodic(struct periodic_call *c, int to_ticks,
+    void (*ftn)(void *), void *arg)
+{
+	struct periodic_call_tailq *q;
+	int cpu = mycpuid;
+
+	/* PR_FASTHZ == 5 and PR_SLOWHZ == 2 */
+	KKASSERT(to_ticks == hz || to_ticks == hz / 5 || to_ticks == hz / 2);
+
+	if (to_ticks == hz / 5)
+		q = &periodic_calls_fast[cpu];
+	else if (to_ticks == hz / 2)
+		q = &periodic_calls_slow[cpu];
+	else
+		q = &periodic_calls[cpu];
+	atomic_store_rel_int(&c->cpu, cpu);
+	c->c_arg = arg;
+	c->c_func = ftn;
+	c->timo = to_ticks;
+	crit_enter();
+	if (TAILQ_EMPTY(q)) {
+		struct callout *co;
+
+		if (c->timo == hz / 5) {
+			co = &fast_herz_percpu[cpu];
+			callout_reset(co, c->timo,
+			    handle_periodic_fast_callout, q);
+		} else if (c->timo == hz / 2) {
+			co = &slow_herz_percpu[cpu];
+			callout_reset(co, c->timo,
+			    handle_periodic_slow_callout, q);
+		} else {
+			co = &herz_percpu[cpu];
+			callout_reset(co, c->timo,
+			    handle_periodic_hz_callout, q);
+		}
+	}
+	TAILQ_INSERT_TAIL(q, c, tqe);
+	crit_exit();
+}
+
+static void
+_callout_stop_periodic(struct periodic_call *c)
+{
+	struct periodic_call_tailq *q;
+	int cpu;
+
+	cpu = mycpuid;
+	KKASSERT(cpu == c->cpu);
+
+	crit_enter();
+	if (c->timo == hz / 5)
+		q = &periodic_calls_fast[cpu];
+	else if (c->timo == hz / 2)
+		q = &periodic_calls_slow[cpu];
+	else
+		q = &periodic_calls[cpu];
+	q = &periodic_calls[cpu];
+	TAILQ_REMOVE(q, c, tqe);
+	atomic_store_rel_int(&c->cpu, -1);
+	bzero(c, sizeof(struct periodic_call));
+	crit_exit();
+}
+
+void
+callout_stop_periodic(struct periodic_call *c)
+{
+	int target, cpu;
+
+	target = atomic_load_acq_int(&c->cpu);
+	if (target == mycpuid) {
+		_callout_stop_periodic(c);
+	} else if (target != -1) {
+		cpu = mycpuid;
+		lwkt_migratecpu(target);
+		_callout_stop_periodic(c);
+		lwkt_migratecpu(cpu);
+	}
 }

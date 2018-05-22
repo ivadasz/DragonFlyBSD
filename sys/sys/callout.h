@@ -212,6 +212,21 @@ int	callout_can_skip(struct globaldata *, int);
 
 #define	callout_drain(x) callout_stop_sync(x)
 
+TAILQ_HEAD(periodic_call_tailq, periodic_call);
+
+struct periodic_call {
+	TAILQ_ENTRY(periodic_call) tqe;
+	void	*c_arg;			/* function argument */
+	void	(*c_func) (void *);	/* function to call */
+	int	cpu;
+	int	timo;
+};
+
+void	callout_init_periodic (struct periodic_call *);
+void	callout_start_periodic (struct periodic_call *, int,
+	    void (*)(void *), void *);
+void	callout_stop_periodic (struct periodic_call *);
+
 #endif
 
 #endif /* _SYS_CALLOUT_H_ */
