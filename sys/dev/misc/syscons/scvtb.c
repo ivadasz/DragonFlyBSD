@@ -205,7 +205,7 @@ sc_vtb_copy(sc_vtb_t *vtb1, int from, sc_vtb_t *vtb2, int to, int count)
 		sc_vtb_bcopy(vtb1->vtb_buffer + from, vtb2->vtb_buffer + to,
 			     count*sizeof(uint16_t));
 	} else {
-		sc_vtb_bcopy(vtb1->vtb_buffer + from, vtb2->vtb_buffer + to,
+		bcopy(vtb1->vtb_buffer + from, vtb2->vtb_buffer + to,
 		      count*sizeof(uint16_t));
 	}
 }
@@ -225,7 +225,7 @@ sc_vtb_append(sc_vtb_t *vtb1, int from, sc_vtb_t *vtb2, int count)
 				     vtb2->vtb_buffer + vtb2->vtb_tail,
 				     len*sizeof(uint16_t));
 		} else {
-			sc_vtb_bcopy(vtb1->vtb_buffer + from,
+			bcopy(vtb1->vtb_buffer + from,
 			      vtb2->vtb_buffer + vtb2->vtb_tail,
 			      len*sizeof(uint16_t));
 		}
@@ -265,7 +265,7 @@ sc_vtb_move(sc_vtb_t *vtb, int from, int to, int count)
 		sc_vtb_bcopy(vtb->vtb_buffer + from, vtb->vtb_buffer + to,
 			 count*sizeof(uint16_t)); 
 	} else {
-		sc_vtb_bcopy(vtb->vtb_buffer + from, vtb->vtb_buffer + to,
+		bcopy(vtb->vtb_buffer + from, vtb->vtb_buffer + to,
 		      count*sizeof(uint16_t));
 	}
 }
@@ -284,7 +284,7 @@ sc_vtb_delete(sc_vtb_t *vtb, int at, int count, int c, int attr)
 				 vtb->vtb_buffer + at,
 				 len*sizeof(uint16_t)); 
 		} else {
-			sc_vtb_bcopy(vtb->vtb_buffer + at + count,
+			bcopy(vtb->vtb_buffer + at + count,
 			      vtb->vtb_buffer + at,
 			      len*sizeof(uint16_t)); 
 		}
@@ -308,7 +308,7 @@ sc_vtb_ins(sc_vtb_t *vtb, int at, int count, int c, int attr)
 				 vtb->vtb_buffer + at + count,
 				 (vtb->vtb_size - at - count)*sizeof(uint16_t));
 		} else {
-			sc_vtb_bcopy(vtb->vtb_buffer + at,
+			bcopy(vtb->vtb_buffer + at,
 			      vtb->vtb_buffer + at + count,
 			      (vtb->vtb_size - at - count)*sizeof(uint16_t)); 
 		}
