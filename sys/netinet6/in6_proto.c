@@ -501,8 +501,8 @@ SYSCTL_INT(_net_inet6_icmp6, ICMPV6CTL_REDIRTIMEOUT, redirtimeout, CTLFLAG_RW,
     &icmp6_redirtimeout, 0, "Cache time for redirect routes");
 SYSCTL_STRUCT(_net_inet6_icmp6, ICMPV6CTL_STATS, stats, CTLFLAG_RD,
     &icmp6stat, icmp6stat, "Stats");
-SYSCTL_INT(_net_inet6_icmp6, ICMPV6CTL_ND6_PRUNE, nd6_prune, CTLFLAG_RW,
-    &nd6_prune, 0, "Prune interval");
+//SYSCTL_INT(_net_inet6_icmp6, ICMPV6CTL_ND6_PRUNE, nd6_prune, CTLFLAG_RW,
+//    &nd6_prune, 0, "Prune interval");
 SYSCTL_INT(_net_inet6_icmp6, ICMPV6CTL_ND6_DELAY, nd6_delay, CTLFLAG_RW,
     &nd6_delay, 0, "Reachability timeout for stale neighbors");
 SYSCTL_INT(_net_inet6_icmp6, ICMPV6CTL_ND6_UMAXTRIES, nd6_umaxtries, CTLFLAG_RW,

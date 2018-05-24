@@ -170,21 +170,31 @@ static void			icmp6_fasttimo_dispatch(netmsg_t);
 static struct route_in6 icmp6_reflect_rt;
 #endif
 
-static struct callout		icmp6_fasttimo_ch;
+static struct periodic_call	icmp6_fasttimo_ch;
 static struct netmsg_base	icmp6_fasttimo_nmsg;
+
+
+static int fasttimo_running = 0;
 
 void
 icmp6_init(void)
 {
+	int cpu;
 
 	mld6_init();
 
-	callout_init_mp(&icmp6_fasttimo_ch);
+	callout_init_periodic(&icmp6_fasttimo_ch);
 	netmsg_init(&icmp6_fasttimo_nmsg, NULL, &netisr_adone_rport,
 	    MSGF_PRIORITY, icmp6_fasttimo_dispatch);
 
-	callout_reset_bycpu(&icmp6_fasttimo_ch, ICMP6_FASTTIMO,
-	    icmp6_fasttimo, NULL, 0);
+	cpu = mycpuid;
+	lwkt_migratecpu(0);
+	crit_enter();
+	fasttimo_running = 1;
+	callout_start_periodic(&icmp6_fasttimo_ch, ICMP6_FASTTIMO,
+	    icmp6_fasttimo, NULL);
+	crit_exit();
+	lwkt_migratecpu(cpu);
 }
 
 static void
@@ -2107,6 +2117,33 @@ bad:
 	return;
 }
 
+static int state = 0;
+
+static void
+_icmp6_start_fasttimo(void *arg)
+{
+	crit_enter();
+	if (state == 1) {
+		state = 2;
+	} else if (fasttimo_running == 0) {
+		fasttimo_running = 1;
+		callout_start_periodic(&icmp6_fasttimo_ch, ICMP6_FASTTIMO,
+		    icmp6_fasttimo, NULL);
+	}
+	crit_exit();
+}
+
+void icmp6_start_fasttimo(void);
+
+void
+icmp6_start_fasttimo(void)
+{
+	if (mycpuid != 0)
+		lwkt_send_ipiq(globaldata_find(0), _icmp6_start_fasttimo, NULL);
+	else
+		_icmp6_start_fasttimo(NULL);
+}
+
 static void
 icmp6_fasttimo_dispatch(netmsg_t nmsg)
 {
@@ -2115,12 +2152,23 @@ icmp6_fasttimo_dispatch(netmsg_t nmsg)
 
 	/* Reply ASAP. */
 	crit_enter();
+	state = 1;
 	netisr_replymsg(&nmsg->base, 0);
 	crit_exit();
 
-	mld6_fasttimeo();
+	if (mld6_fasttimeo() == 0) {
+		crit_enter();
+		if (state == 1) {
+			callout_stop_periodic(&icmp6_fasttimo_ch);
+			fasttimo_running = 0;
+		}
+		crit_exit();
+	}
+	crit_enter();
+	state = 0;
+	crit_exit();
 
-	callout_reset(&icmp6_fasttimo_ch, ICMP6_FASTTIMO, icmp6_fasttimo, NULL);
+//	callout_reset(&icmp6_fasttimo_ch, ICMP6_FASTTIMO, icmp6_fasttimo, NULL);
 }
 
 static void

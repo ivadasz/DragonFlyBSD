@@ -133,6 +133,8 @@ mld6_init(void)
 	ip6_opts.ip6po_hbh = hbh;
 }
 
+extern void icmp6_start_fasttimo(void);
+
 void
 mld6_start_listening(struct in6_multi *in6m)
 {
@@ -156,6 +158,7 @@ mld6_start_listening(struct in6_multi *in6m)
 			MLD6_UNSOLICITED_REPORT_INTERVAL * PR_FASTHZ);
 		in6m->in6m_state = MLD6_IREPORTEDLAST;
 		mld6_timers_are_running = 1;
+		icmp6_start_fasttimo();
 	}
 	lwkt_reltoken(&mld6_token);
 }
@@ -317,6 +320,7 @@ mld6_input(struct mbuf *m, int off)
 					in6m->in6m_timer =
 						MLD6_RANDOM_DELAY(timer);
 					mld6_timers_are_running = 1;
+					icmp6_start_fasttimo();
 				}
 			}
 		}
@@ -369,11 +373,12 @@ mld6_input(struct mbuf *m, int off)
 	lwkt_reltoken(&mld6_token);
 }
 
-void
+int
 mld6_fasttimeo(void)
 {
 	struct in6_multi *in6m;
 	struct in6_multistep step;
+	int ret;
 
 	/*
 	 * Quick check to see if any work needs to be done, in order
@@ -383,7 +388,7 @@ mld6_fasttimeo(void)
 
 	if (!mld6_timers_are_running) {
 		lwkt_reltoken(&mld6_token);
-		return;
+		return 0;
 	}
 
 	mld6_timers_are_running = 0;
@@ -399,8 +404,9 @@ mld6_fasttimeo(void)
 		}
 		IN6_NEXT_MULTI(step, in6m);
 	}
-
+	ret = mld6_timers_are_running;
 	lwkt_reltoken(&mld6_token);
+	return ret;
 }
 
 static void
