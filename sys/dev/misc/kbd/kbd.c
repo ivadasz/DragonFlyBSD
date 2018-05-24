@@ -248,7 +248,7 @@ kbd_register(keyboard_t *kbd)
 	kbd->kb_token = NULL;
 	kbd->kb_callback.kc_func = NULL;
 	kbd->kb_callback.kc_arg = NULL;
-	callout_init_mp(&kbd->kb_atkbd_timeout_ch);
+	callout_init_periodic(&kbd->kb_atkbd_timeout_ch);
 
 	SLIST_FOREACH(p, &keyboard_drivers, link) {
 		if (strcmp(p->name, kbd->kb_name) == 0) {
@@ -305,7 +305,7 @@ kbd_unregister(keyboard_t *kbd)
 	}
 
 	crit_enter();
-	callout_stop(&kbd->kb_atkbd_timeout_ch);
+	callout_stop_periodic(&kbd->kb_atkbd_timeout_ch);
 	if (KBD_IS_BUSY(kbd)) {
 		error = (*kbd->kb_callback.kc_func)(kbd, KBDIO_UNLOADING,
 						    kbd->kb_callback.kc_arg);

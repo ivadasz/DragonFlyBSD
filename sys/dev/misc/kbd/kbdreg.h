@@ -98,7 +98,7 @@ struct keyboard {
 	unsigned long	kb_count;	/* # of processed key strokes */
 	int		kb_pref;	/* keyboard preference */
 	u_char		kb_lastact[NUM_KEYS/2];
-	struct callout  kb_atkbd_timeout_ch;
+	struct periodic_call kb_atkbd_timeout_ch;
 	struct lock	kb_lock;
 };
 

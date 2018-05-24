@@ -49,6 +49,7 @@
 
 #include <bus/isa/isareg.h>
 
+static void		atkbd_timeout_work(keyboard_t *kbd);
 static timeout_t	atkbd_timeout;
 
 #if 0
@@ -77,11 +78,13 @@ atkbd_probe_unit(int unit, int ctlr, int irq, int flags)
 }
 
 int
-atkbd_attach_unit(int unit, keyboard_t **kbd, int ctlr, int irq, int flags)
+atkbd_attach_unit(int unit, keyboard_t **kbd, int ctlr, int irq, int flags,
+    int cpu)
 {
 	keyboard_switch_t *sw;
 	int args[2];
 	int error;
+	int fromcpu;
 
 	sw = kbd_get_switch(ATKBD_DRIVER_NAME);
 	if (sw == NULL) {
@@ -114,7 +117,12 @@ atkbd_attach_unit(int unit, keyboard_t **kbd, int ctlr, int irq, int flags)
 	 * This is a kludge to compensate for lost keyboard interrupts.
 	 * A similar code used to be in syscons. See below. XXX
 	 */
-	atkbd_timeout(*kbd);
+	atkbd_timeout_work(*kbd);
+	fromcpu = mycpuid;
+	lwkt_migratecpu(cpu);
+	callout_start_periodic(&(*kbd)->kb_atkbd_timeout_ch, hz, atkbd_timeout,
+	    *kbd);
+	lwkt_migratecpu(fromcpu);
 
 	if (bootverbose)
 		(*sw->diag)(*kbd, bootverbose);
@@ -123,10 +131,8 @@ atkbd_attach_unit(int unit, keyboard_t **kbd, int ctlr, int irq, int flags)
 }
 
 static void
-atkbd_timeout(void *arg)
+atkbd_timeout_work(keyboard_t *kbd)
 {
-	keyboard_t *kbd;
-
 	/*
 	 * The original text of the following comments are extracted 
 	 * from syscons.c (1.287)
@@ -153,7 +159,6 @@ atkbd_timeout(void *arg)
 	 * The keyboard apparently unwedges the irq in most cases.
 	 */
 	crit_enter();
-	kbd = (keyboard_t *)arg;
 	if (kbd_lock(kbd, TRUE)) {
 		/*
 		 * We have seen the lock flag is not set. Let's reset
@@ -164,8 +169,16 @@ atkbd_timeout(void *arg)
 		if (kbd_check_char(kbd))
 			kbd_intr(kbd, NULL);
 	}
-	callout_reset(&kbd->kb_atkbd_timeout_ch, hz / 10, atkbd_timeout, arg);
 	crit_exit();
+}
+
+static void
+atkbd_timeout(void *arg)
+{
+	keyboard_t *kbd;
+
+	kbd = (keyboard_t *)arg;
+	atkbd_timeout_work(kbd);
 }
 
 /* LOW-LEVEL */
