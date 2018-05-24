@@ -363,13 +363,13 @@ wait_while_controller_busy(struct atkbdc_softc *kbdc)
 
     while ((f = read_status(kbdc)) & KBDS_INPUT_BUFFER_FULL) {
 	if ((f & KBDS_BUFFER_FULL) == KBDS_KBD_BUFFER_FULL) {
-	    DELAY(KBDD_DELAYTIME);
 	    c = read_data(kbdc);
 	    addq(&kbdc->kbd, c);
-	} else if ((f & KBDS_BUFFER_FULL) == KBDS_AUX_BUFFER_FULL) {
 	    DELAY(KBDD_DELAYTIME);
+	} else if ((f & KBDS_BUFFER_FULL) == KBDS_AUX_BUFFER_FULL) {
 	    c = read_data(kbdc);
 	    addq(&kbdc->aux, c);
+	    DELAY(KBDD_DELAYTIME);
 	}
         DELAY(KBDC_DELAYTIME);
 	if (CHECKTIMEOUT(&retry))
@@ -410,9 +410,9 @@ wait_for_kbd_data(struct atkbdc_softc *kbdc)
     while ((f = read_status(kbdc) & KBDS_BUFFER_FULL)
 	    != KBDS_KBD_BUFFER_FULL) {
         if (f == KBDS_AUX_BUFFER_FULL) {
-	    DELAY(KBDD_DELAYTIME);
 	    c = read_data(kbdc);
 	    addq(&kbdc->aux, c);
+	    DELAY(KBDD_DELAYTIME);
 	}
         DELAY(KBDC_DELAYTIME);
         if (CHECKTIMEOUT(&retry))
@@ -436,7 +436,6 @@ wait_for_kbd_ack(struct atkbdc_softc *kbdc)
 
     while (CHECKTIMEOUT(&retry) == 0) {
         if ((f = read_status(kbdc)) & KBDS_ANY_BUFFER_FULL) {
-	    DELAY(KBDD_DELAYTIME);
             b = read_data(kbdc);
 	    if ((f & KBDS_BUFFER_FULL) == KBDS_KBD_BUFFER_FULL) {
 		if ((b == KBD_ACK) || (b == KBD_RESEND) 
@@ -446,6 +445,7 @@ wait_for_kbd_ack(struct atkbdc_softc *kbdc)
 	    } else if ((f & KBDS_BUFFER_FULL) == KBDS_AUX_BUFFER_FULL) {
 		addq(&kbdc->aux, b);
 	    }
+	    DELAY(KBDD_DELAYTIME);
 	}
         DELAY(KBDC_DELAYTIME);
     }
@@ -464,9 +464,9 @@ wait_for_aux_data(struct atkbdc_softc *kbdc)
     while ((f = read_status(kbdc) & KBDS_BUFFER_FULL)
 	    != KBDS_AUX_BUFFER_FULL) {
         if (f == KBDS_KBD_BUFFER_FULL) {
-	    DELAY(KBDD_DELAYTIME);
 	    b = read_data(kbdc);
 	    addq(&kbdc->kbd, b);
+	    DELAY(KBDD_DELAYTIME);
 	}
         DELAY(KBDC_DELAYTIME);
 	if (CHECKTIMEOUT(&retry))
@@ -490,7 +490,6 @@ wait_for_aux_ack(struct atkbdc_softc *kbdc)
 
     while (CHECKTIMEOUT(&retry) == 0) {
         if ((f = read_status(kbdc)) & KBDS_ANY_BUFFER_FULL) {
-	    DELAY(KBDD_DELAYTIME);
             b = read_data(kbdc);
 	    if ((f & KBDS_BUFFER_FULL) == KBDS_AUX_BUFFER_FULL) {
 		if ((b == PSM_ACK) || (b == PSM_RESEND) 
@@ -500,6 +499,7 @@ wait_for_aux_ack(struct atkbdc_softc *kbdc)
 	    } else if ((f & KBDS_BUFFER_FULL) == KBDS_KBD_BUFFER_FULL) {
 		addq(&kbdc->kbd, b);
 	    }
+	    DELAY(KBDD_DELAYTIME);
 	}
         DELAY(KBDC_DELAYTIME);
     }
@@ -728,13 +728,13 @@ read_kbd_data_no_wait(KBDC p)
         return removeq(&kbdcp(p)->kbd);
     f = read_status(kbdcp(p)) & KBDS_BUFFER_FULL;
     while (f == KBDS_AUX_BUFFER_FULL) {
-        DELAY(KBDD_DELAYTIME);
 	b = read_data(kbdcp(p));
         addq(&kbdcp(p)->aux, b);
+        DELAY(KBDD_DELAYTIME);
         f = read_status(kbdcp(p)) & KBDS_BUFFER_FULL;
     }
     if (f == KBDS_KBD_BUFFER_FULL) {
-        DELAY(KBDD_DELAYTIME);
+//        DELAY(KBDD_DELAYTIME);
 	b = read_data(kbdcp(p));
         return (int)b;
     }
@@ -767,13 +767,13 @@ read_aux_data_no_wait(KBDC p)
         return removeq(&kbdcp(p)->aux);
     f = read_status(kbdcp(p)) & KBDS_BUFFER_FULL;
     while (f == KBDS_KBD_BUFFER_FULL) {
-        DELAY(KBDD_DELAYTIME);
 	b = read_data(kbdcp(p));
         addq(&kbdcp(p)->kbd, b);
+        DELAY(KBDD_DELAYTIME);
         f = read_status(kbdcp(p)) & KBDS_BUFFER_FULL;
     }
     if (f == KBDS_AUX_BUFFER_FULL) {
-        DELAY(KBDD_DELAYTIME);
+//        DELAY(KBDD_DELAYTIME);
 	b = read_data(kbdcp(p));
         return b;
     }
@@ -795,7 +795,6 @@ empty_kbd_buffer(KBDC p, int wait)
 
     for (t = wait; t > 0; ) { 
         if ((f = read_status(kbdcp(p))) & KBDS_ANY_BUFFER_FULL) {
-	    DELAY(KBDD_DELAYTIME);
             b = read_data(kbdcp(p));
 	    if ((f & KBDS_BUFFER_FULL) == KBDS_AUX_BUFFER_FULL) {
 		addq(&kbdcp(p)->aux, b);
@@ -805,6 +804,7 @@ empty_kbd_buffer(KBDC p, int wait)
 		++c1;
 #endif
 	    }
+	    DELAY(KBDD_DELAYTIME);
 	    t = wait;
 	} else {
 	    t -= delta;
@@ -834,7 +834,6 @@ empty_aux_buffer(KBDC p, int wait)
 
     for (t = wait; t > 0; ) { 
         if ((f = read_status(kbdcp(p))) & KBDS_ANY_BUFFER_FULL) {
-	    DELAY(KBDD_DELAYTIME);
             b = read_data(kbdcp(p));
 	    if ((f & KBDS_BUFFER_FULL) == KBDS_KBD_BUFFER_FULL) {
 		addq(&kbdcp(p)->kbd, b);
@@ -844,6 +843,7 @@ empty_aux_buffer(KBDC p, int wait)
 		++c2;
 #endif
 	    }
+	    DELAY(KBDD_DELAYTIME);
 	    t = wait;
 	} else {
 	    t -= delta;
@@ -872,7 +872,6 @@ empty_both_buffers(KBDC p, int wait)
 
     for (t = wait; t > 0; ) { 
         if ((f = read_status(kbdcp(p))) & KBDS_ANY_BUFFER_FULL) {
-	    DELAY(KBDD_DELAYTIME);
             (void)read_data(kbdcp(p));
 #if KBDIO_DEBUG >= 2
 	    if ((f & KBDS_BUFFER_FULL) == KBDS_KBD_BUFFER_FULL)
@@ -881,6 +880,7 @@ empty_both_buffers(KBDC p, int wait)
 		++c2;
 #endif
 	    t = wait;
+	    DELAY(KBDD_DELAYTIME);
 	} else {
 	    t -= delta;
 	}
