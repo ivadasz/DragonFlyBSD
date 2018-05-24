@@ -73,6 +73,7 @@ static void frag6_freef (struct ip6q *);
 static void frag6_slowtimo_dispatch (netmsg_t);
 static void frag6_slowtimo (void *);
 static void frag6_drain_dispatch (netmsg_t);
+static void frag6_start_timo(void);
 
 /* XXX we eventually need splreass6, or some real semaphore */
 int frag6_doing_reass;
@@ -83,7 +84,7 @@ struct	ip6q ip6q;	/* ip6 reassemble queue */
 /* FreeBSD tweak */
 MALLOC_DEFINE(M_FTABLE, "fragment", "fragment reassembly header");
 
-static struct callout		frag6_slowtimo_ch;
+static struct periodic_call	frag6_slowtimo_ch;
 static struct netmsg_base	frag6_slowtimo_nmsg;
 static struct netmsg_base	frag6_drain_nmsg;
 static volatile int		frag6_draining;
@@ -95,6 +96,7 @@ void
 frag6_init(void)
 {
 	struct timeval tv;
+	int cpu;
 
 	ip6_maxfragpackets = nmbclusters / 4;
 	ip6_maxfrags = nmbclusters / 4;
@@ -110,12 +112,15 @@ frag6_init(void)
 	netmsg_init(&frag6_drain_nmsg, NULL, &netisr_adone_rport,
 	    MSGF_PRIORITY, frag6_drain_dispatch);
 
-	callout_init_mp(&frag6_slowtimo_ch);
+	callout_init_periodic(&frag6_slowtimo_ch);
 	netmsg_init(&frag6_slowtimo_nmsg, NULL, &netisr_adone_rport,
 	    MSGF_PRIORITY, frag6_slowtimo_dispatch);
 
-	callout_reset_bycpu(&frag6_slowtimo_ch, FRAG6_SLOWTIMO,
-	    frag6_slowtimo, NULL, 0);
+	cpu = mycpuid;
+	lwkt_migratecpu(0);
+	callout_start_periodic(&frag6_slowtimo_ch, FRAG6_SLOWTIMO,
+	    frag6_slowtimo, NULL);
+	lwkt_migratecpu(cpu);
 }
 
 /*
@@ -270,7 +275,12 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 		if (q6 == NULL)
 			goto dropfrag;
 
-		frag6_insque(q6, &ip6q);
+		if (ip6q.ip6q_next == NULL) {
+			frag6_insque(q6, &ip6q);
+			frag6_start_timo();
+		} else {
+			frag6_insque(q6, &ip6q);
+		}
 
 		/* ip6q_nxt will be filled afterwards, from 1st fragment */
 		q6->ip6q_down	= q6->ip6q_up = (struct ip6asfrag *)q6;
@@ -610,6 +620,22 @@ frag6_remque(struct ip6q *p6)
 	p6->ip6q_next->ip6q_prev = p6->ip6q_prev;
 }
 
+static void
+_frag6_start_timo(void *arg)
+{
+	callout_start_periodic(&frag6_slowtimo_ch, FRAG6_SLOWTIMO,
+	    frag6_slowtimo, NULL);
+}
+
+static void
+frag6_start_timo(void)
+{
+	if (mycpuid == 0)
+		_frag6_start_timo(NULL);
+	else
+		lwkt_send_ipiq(globaldata_find(0), _frag6_start_timo, NULL);
+}
+
 /*
  * IPv6 reassembling timer processing;
  * if a timer expires on a reassembly
@@ -629,7 +655,10 @@ frag6_slowtimo_dispatch(netmsg_t nmsg)
 
 	frag6_doing_reass = 1;
 	q6 = ip6q.ip6q_next;
-	if (q6)
+	if (q6 == NULL || q6 == &ip6q) {
+		callout_stop_periodic(&frag6_slowtimo_ch);
+	}
+	if (q6) {
 		while (q6 != &ip6q) {
 			--q6->ip6q_ttl;
 			q6 = q6->ip6q_next;
@@ -639,11 +668,13 @@ frag6_slowtimo_dispatch(netmsg_t nmsg)
 				frag6_freef(q6->ip6q_prev);
 			}
 		}
+	}
 	/*
 	 * If we are over the maximum number of fragments
 	 * (due to the limit being lowered), drain off
 	 * enough to get down to the new limit.
 	 */
+	/* XXX The sysctl should also start the periodic callout. */
 	while (frag6_nfragpackets > (u_int)ip6_maxfragpackets &&
 	    ip6q.ip6q_prev) {
 		ip6stat.ip6s_fragoverflow++;
@@ -667,7 +698,7 @@ frag6_slowtimo_dispatch(netmsg_t nmsg)
 		ipsrcchk_rt.ro_rt = NULL;
 	}
 #endif
-	callout_reset(&frag6_slowtimo_ch, FRAG6_SLOWTIMO, frag6_slowtimo, NULL);
+//	callout_reset(&frag6_slowtimo_ch, FRAG6_SLOWTIMO, frag6_slowtimo, NULL);
 }
 
 static void

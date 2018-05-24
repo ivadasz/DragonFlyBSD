@@ -76,7 +76,7 @@
 #define SDL(s) ((struct sockaddr_dl *)s)
 
 /* timer values */
-int	nd6_prune	= 1;	/* walk list every 1 seconds */
+//int	nd6_prune	= 1;	/* walk list every 1 seconds */
 int	nd6_delay	= 5;	/* delay first probe time 5 second */
 int	nd6_umaxtries	= 3;	/* maximum unicast query */
 int	nd6_mmaxtries	= 3;	/* maximum multicast query */
@@ -115,7 +115,7 @@ static void nd6_timer_dispatch(netmsg_t);
 static struct callout nd6_slowtimo_ch;
 static struct netmsg_base nd6_slowtimo_netmsg;
 
-static struct callout nd6_timer_ch;
+static struct periodic_call nd6_timer_ch;
 static struct netmsg_base nd6_timer_netmsg;
 
 void
@@ -632,7 +632,7 @@ addrloop:
 
 	mtx_unlock(&nd6_mtx);
 
-	callout_reset(&nd6_timer_ch, nd6_prune * hz, nd6_timer, NULL);
+//	callout_reset(&nd6_timer_ch, nd6_prune * hz, nd6_timer, NULL);
 }
 
 static void
@@ -650,10 +650,14 @@ nd6_timer(void *arg __unused)
 void
 nd6_timer_init(void)
 {
-	callout_init_mp(&nd6_timer_ch);
+	int cpu = mycpuid;
+
+	callout_init_periodic(&nd6_timer_ch);
 	netmsg_init(&nd6_timer_netmsg, NULL, &netisr_adone_rport,
 	    MSGF_PRIORITY, nd6_timer_dispatch);
-	callout_reset_bycpu(&nd6_timer_ch, hz, nd6_timer, NULL, 0);
+	lwkt_migratecpu(0);
+	callout_start_periodic(&nd6_timer_ch, hz, nd6_timer, NULL);
+	lwkt_migratecpu(cpu);
 }
 
 static int
