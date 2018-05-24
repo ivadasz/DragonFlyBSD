@@ -83,6 +83,24 @@ static void ahci_empty_done(struct ahci_ccb *ccb);
 static void ahci_ata_cmd_done(struct ahci_ccb *ccb);
 static u_int32_t ahci_pactive(struct ahci_port *ap);
 
+static void
+ahci_start_iowait(struct ahci_softc *sc)
+{
+	if (sc->sc_iowait == 0) {
+		cpu_mwait_cx_io_wait(sc->sc_intr_cpu);
+		sc->sc_iowait = 1;
+	}
+}
+
+static void
+ahci_end_iowait(struct ahci_softc *sc)
+{
+	if (sc->sc_iowait > 0) {
+		cpu_mwait_cx_io_done(sc->sc_intr_cpu);
+		sc->sc_iowait = 0;
+	}
+}
+
 /*
  * Initialize the global AHCI hardware.  This code does not set up any of
  * its ports.
@@ -1223,6 +1241,8 @@ ahci_port_stop(struct ahci_port *ap, int stop_fis_rx)
 {
 	u_int32_t	r;
 
+	ahci_end_iowait(ap->ap_sc);
+
 #ifdef AHCI_COALESCE
 	/*
 	 * Disable coalescing on the port while it is stopped.
@@ -2249,6 +2269,7 @@ ahci_poll(struct ahci_ccb *ccb, int timeout,
 		ccb->ccb_xa.fis->command, ccb->ccb_slot);
 #endif
 	ahci_start(ccb);
+	ahci_end_iowait(ap->ap_sc);
 
 	do {
 		ahci_port_intr(ap, 1);
@@ -2565,6 +2586,8 @@ ahci_issue_pending_commands(struct ahci_port *ap, struct ahci_ccb *ccb)
 			}
 		}
 	}
+
+	ahci_start_iowait(ap->ap_sc);
 }
 
 void
@@ -2681,6 +2704,8 @@ ahci_port_intr(struct ahci_port *ap, int blockable)
 
 	enum { NEED_NOTHING, NEED_REINIT, NEED_RESTART,
 	       NEED_HOTPLUG_INSERT, NEED_HOTPLUG_REMOVE } need = NEED_NOTHING;
+
+	ahci_end_iowait(ap->ap_sc);
 
 	/*
 	 * All basic command completions are always processed.
@@ -3901,6 +3926,8 @@ ahci_ata_cmd_timeout_unserialized(void *arg)
 	struct ahci_ccb		*ccb = arg;
 	struct ahci_port	*ap = ccb->ccb_port;
 
+	ahci_end_iowait(ap->ap_sc);
+
 	KKASSERT(ccb->ccb_xa.flags & ATA_F_TIMEOUT_RUNNING);
 	ccb->ccb_xa.flags &= ~ATA_F_TIMEOUT_RUNNING;
 	ccb->ccb_xa.flags |= ATA_F_TIMEOUT_EXPIRED;
@@ -3925,6 +3952,8 @@ ahci_ata_cmd_timeout(struct ahci_ccb *ccb)
 	u_int32_t		ci_saved;
 	u_int32_t		mask;
 	int			slot;
+
+	ahci_end_iowait(ap->ap_sc);
 
 	at = ccb->ccb_xa.at;
 

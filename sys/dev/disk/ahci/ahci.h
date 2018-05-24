@@ -518,6 +518,9 @@ struct ahci_softc {
 	device_t		sc_dev;
 	const struct ahci_device *sc_ad;	/* special casing */
 
+	int			sc_iowait;
+	int			sc_intr_cpu;
+
 	struct resource		*sc_irq;	/* bus resources */
 	struct resource		*sc_regs;	/* bus resources */
 	bus_space_tag_t		sc_iot;		/* split from sc_regs */

@@ -282,6 +282,9 @@ ahci_pci_attach(device_t dev)
 		return (ENXIO);
 	}
 
+	sc->sc_iowait = 0;
+	sc->sc_intr_cpu = rman_get_cpuid(sc->sc_irq);
+
 	/*
 	 * When mapping the register window store the tag and handle
 	 * separately so we can use the tag with per-port bus handle
