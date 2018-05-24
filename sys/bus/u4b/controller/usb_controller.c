@@ -75,6 +75,8 @@ static device_shutdown_t usb_shutdown;
 
 static void	usb_attach_sub(device_t, struct usb_bus *);
 
+static void	usb_power_wdog(void *);
+
 /* static variables */
 
 #ifdef USB_DEBUG
@@ -313,6 +315,8 @@ usb_suspend(device_t dev)
 		return (0);
 	}
 
+	/* Stop power watchdog */
+	usb_callout_drain(&bus->power_wdog);
 	USB_BUS_LOCK(bus);
 	usb_proc_msignal(USB_BUS_EXPLORE_PROC(bus),
 	    &bus->suspend_msg[0], &bus->suspend_msg[1]);
@@ -344,6 +348,8 @@ usb_resume(device_t dev)
 	USB_BUS_LOCK(bus);
 	usb_proc_msignal(USB_BUS_EXPLORE_PROC(bus),
 	    &bus->resume_msg[0], &bus->resume_msg[1]);
+	usb_callout_reset(&bus->power_wdog,
+	    4 * hz, usb_power_wdog, bus);
 	USB_BUS_UNLOCK(bus);
 
 	return (0);
