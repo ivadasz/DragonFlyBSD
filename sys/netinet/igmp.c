@@ -93,18 +93,21 @@ static struct router_info *Head;
 static void igmp_sendpkt (struct in_multi *, int, unsigned long);
 static void igmp_fasttimo_dispatch(netmsg_t);
 static void igmp_fasttimo(void *);
+static void igmp_start_fasttimo(void);
 static void igmp_slowtimo_dispatch(netmsg_t);
 static void igmp_slowtimo(void *);
+static void igmp_start_slowtimo(void);
 
 static struct netmsg_base igmp_slowtimo_netmsg;
-static struct callout igmp_slowtimo_ch;
+static struct periodic_call igmp_slowtimo_ch;
 static struct netmsg_base igmp_fasttimo_netmsg;
-static struct callout igmp_fasttimo_ch;
+static struct periodic_call igmp_fasttimo_ch;
 
 void
 igmp_init(void)
 {
 	struct ipoption *ra;
+	int cpu;
 
 	/*
 	 * To avoid byte-swapping the same value over and over again.
@@ -128,18 +131,21 @@ igmp_init(void)
 
 	Head = NULL;
 
-	callout_init_mp(&igmp_slowtimo_ch);
+	callout_init_periodic(&igmp_slowtimo_ch);
 	netmsg_init(&igmp_slowtimo_netmsg, NULL, &netisr_adone_rport,
 	    MSGF_PRIORITY, igmp_slowtimo_dispatch);
 
-	callout_init_mp(&igmp_fasttimo_ch);
+	callout_init_periodic(&igmp_fasttimo_ch);
 	netmsg_init(&igmp_fasttimo_netmsg, NULL, &netisr_adone_rport,
 	    MSGF_PRIORITY, igmp_fasttimo_dispatch);
 
-	callout_reset_bycpu(&igmp_slowtimo_ch, IGMP_SLOWTIMO,
-	    igmp_slowtimo, NULL, 0);
-	callout_reset_bycpu(&igmp_fasttimo_ch, IGMP_FASTTIMO,
-	    igmp_fasttimo, NULL, 0);
+	cpu = mycpuid;
+	lwkt_migratecpu(0);
+	callout_start_periodic(&igmp_slowtimo_ch, IGMP_SLOWTIMO,
+	    igmp_slowtimo, NULL);
+	callout_start_periodic(&igmp_fasttimo_ch, IGMP_FASTTIMO,
+	    igmp_fasttimo, NULL);
+	lwkt_migratecpu(cpu);
 }
 
 static struct router_info *
@@ -169,6 +175,38 @@ find_rti(struct ifnet *ifp)
 	kprintf("[igmp.c, _find_rti] --> created an entry \n");
 #endif
 	return rti;
+}
+
+static void
+_igmp_start_slowtimo(void *arg)
+{
+	callout_start_periodic(&igmp_slowtimo_ch, IGMP_SLOWTIMO,
+	    igmp_slowtimo, NULL);
+}
+
+static void
+igmp_start_slowtimo(void)
+{
+	if (mycpuid == 0)
+		_igmp_start_slowtimo(NULL);
+	else
+		lwkt_send_ipiq(globaldata_find(0), _igmp_start_slowtimo, NULL);
+}
+
+static void
+_igmp_start_fasttimo(void *arg)
+{
+	callout_start_periodic(&igmp_fasttimo_ch, IGMP_FASTTIMO,
+	    igmp_fasttimo, NULL);
+}
+
+static void
+igmp_start_fasttimo(void)
+{
+	if (mycpuid == 0)
+		_igmp_start_fasttimo(NULL);
+	else
+		lwkt_send_ipiq(globaldata_find(0), _igmp_start_fasttimo, NULL);
 }
 
 int
@@ -258,6 +296,7 @@ igmp_input(struct mbuf **mp, int *offp, int proto)
 
 			rti->rti_type = IGMP_V1_ROUTER;
 			rti->rti_time = 0;
+			igmp_start_slowtimo();
 
 			timer = IGMP_MAX_HOST_REPORT_DELAY * PR_FASTHZ;
 
@@ -300,6 +339,8 @@ igmp_input(struct mbuf **mp, int *offp, int proto)
 				    inm->inm_timer > timer) {
 					inm->inm_timer =
 						IGMP_RANDOM_DELAY(timer);
+					if (igmp_timers_are_running == 0)
+						igmp_start_fasttimo();
 					igmp_timers_are_running = 1;
 				}
 			}
@@ -382,6 +423,8 @@ igmp_joingroup(struct in_multi *inm)
 		inm->inm_timer = IGMP_RANDOM_DELAY(
 					IGMP_MAX_HOST_REPORT_DELAY*PR_FASTHZ);
 		inm->inm_state = IGMP_IREPORTEDLAST;
+		if (igmp_timers_are_running == 0)
+			igmp_start_fasttimo();
 		igmp_timers_are_running = 1;
 	}
 	crit_exit();
@@ -427,8 +470,10 @@ igmp_fasttimo_dispatch(netmsg_t nmsg)
 	 * to minimize the overhead of fasttimo processing.
 	 */
 
-	if (!igmp_timers_are_running)
-		goto done;
+	if (!igmp_timers_are_running) {
+		callout_stop_periodic(&igmp_fasttimo_ch);
+//		goto done;
+	}
 
 	igmp_timers_are_running = 0;
 	IN_FIRST_MULTI(step, inm);
@@ -443,8 +488,9 @@ igmp_fasttimo_dispatch(netmsg_t nmsg)
 		}
 		IN_NEXT_MULTI(step, inm);
 	}
-done:
-	callout_reset(&igmp_fasttimo_ch, IGMP_FASTTIMO, igmp_fasttimo, NULL);
+//done:
+	;
+//	callout_reset(&igmp_fasttimo_ch, IGMP_FASTTIMO, igmp_fasttimo, NULL);
 }
 
 static void
@@ -464,6 +510,7 @@ static void
 igmp_slowtimo_dispatch(netmsg_t nmsg)
 {
 	struct router_info *rti = Head;
+	int any = 0;
 
 	ASSERT_NETISR0;
 
@@ -476,6 +523,7 @@ igmp_slowtimo_dispatch(netmsg_t nmsg)
 #endif
 	while (rti) {
 	    if (rti->rti_type == IGMP_V1_ROUTER) {
+		any = 1;
 		rti->rti_time++;
 		if (rti->rti_time >= IGMP_AGE_THRESHOLD) {
 			rti->rti_type = IGMP_V2_ROUTER;
@@ -483,10 +531,12 @@ igmp_slowtimo_dispatch(netmsg_t nmsg)
 	    }
 	    rti = rti->rti_next;
 	}
+	if (any == 0)
+		callout_stop_periodic(&igmp_slowtimo_ch);
 #ifdef IGMP_DEBUG	
 	kprintf("[igmp.c,_slowtimo] -- > exiting \n");
 #endif
-	callout_reset(&igmp_slowtimo_ch, IGMP_SLOWTIMO, igmp_slowtimo, NULL);
+//	callout_reset(&igmp_slowtimo_ch, IGMP_SLOWTIMO, igmp_slowtimo, NULL);
 }
 
 static struct route igmprt;

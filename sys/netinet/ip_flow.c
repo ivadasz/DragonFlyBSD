@@ -104,7 +104,7 @@ struct ipflow_pcpu {
 	struct ipflowhead	ipf_table[IPFLOW_HASHSIZE];
 	struct ipflowhead	ipf_list;
 	int			ipf_inuse;
-	struct callout		ipf_timeo;
+	struct periodic_call	ipf_timeo;
 	struct netmsg_base	ipf_timeo_netmsg;
 };
 
@@ -374,6 +374,10 @@ ipflow_timeo_dispatch(netmsg_t nmsg)
 	netisr_replymsg(&nmsg->base, 0);	/* reply ASAP */
 	crit_exit();
 
+	if (LIST_EMPTY(&pcpu->ipf_list)) {
+		callout_stop_periodic(&pcpu->ipf_timeo);
+		return;
+	}
 	LIST_FOREACH_MUTABLE(ipf, &pcpu->ipf_list, ipf_list, next_ipf) {
 		if (--ipf->ipf_timer == 0) {
 			IPFLOW_REMOVE(ipf);
@@ -387,7 +391,7 @@ ipflow_timeo_dispatch(netmsg_t nmsg)
 			ipf->ipf_uses = 0;
 		}
 	}
-	callout_reset(&pcpu->ipf_timeo, IPFLOW_TIMEOUT, ipflow_timeo, pcpu);
+//	callout_reset(&pcpu->ipf_timeo, IPFLOW_TIMEOUT, ipflow_timeo, pcpu);
 }
 
 static void
@@ -456,6 +460,8 @@ ipflow_create(const struct route *ro, struct mbuf *m)
 	 */
 	hash = ipflow_hash(ip->ip_dst, ip->ip_src, ip->ip_tos);
 	IPFLOW_INSERT(pcpu, &pcpu->ipf_table[hash], ipf);
+	callout_start_periodic(&pcpu->ipf_timeo, IPFLOW_TIMEOUT, ipflow_timeo,
+	    pcpu);
 }
 
 void
@@ -526,7 +532,7 @@ ipflow_init_dispatch(netmsg_t nm)
 
 	netmsg_init(&pcpu->ipf_timeo_netmsg, NULL, &netisr_adone_rport,
 	    MSGF_PRIORITY, ipflow_timeo_dispatch);
-	callout_init_mp(&pcpu->ipf_timeo);
+	callout_init_periodic(&pcpu->ipf_timeo);
 
 	ksnprintf(oid_name, sizeof(oid_name), "inuse%d", cpuid);
 	SYSCTL_ADD_INT(NULL, SYSCTL_STATIC_CHILDREN(_net_inet_ip_ipflow),
@@ -535,7 +541,8 @@ ipflow_init_dispatch(netmsg_t nm)
 
 	ipflow_pcpu_data[cpuid] = pcpu;
 
-	callout_reset(&pcpu->ipf_timeo, IPFLOW_TIMEOUT, ipflow_timeo, pcpu);
+	callout_start_periodic(&pcpu->ipf_timeo, IPFLOW_TIMEOUT, ipflow_timeo,
+	    pcpu);
 
 	netisr_forwardmsg(&nm->base, cpuid + 1);
 }
