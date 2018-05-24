@@ -735,10 +735,10 @@ hardclock_maybe_skip(void)
 		info = &gd->gd_hardclock;
 		/* Make sure that we aren't close to a hardclock. */
 		now = sys_cputimer->count();
-		if ((int)(info->time - now - (info->periodic / 4)) < 0)
+		if ((int)(info->time - now - (info->periodic / 5)) < 0)
 			return 0;
 
-		cnt = callout_can_skip(gd, 1);
+		cnt = callout_can_skip(gd, 63);
 		if (cnt == 0)
 			return 0;
 
@@ -747,7 +747,7 @@ hardclock_maybe_skip(void)
 
 		systimer_skip_periodic(info, cnt);
 	} else {
-		cnt = callout_can_skip(gd, 3);
+		cnt = callout_can_skip(gd, 63);
 		if (cnt == 0)
 			return 0;
 
@@ -760,7 +760,7 @@ hardclock_maybe_skip(void)
 		systimer_skip_periodic(&gd->gd_schedclock, cnt);
 	}
 
-	systimer_skip_periodic(&gd->gd_statclock, 3);
+	systimer_skip_periodic(&gd->gd_statclock, imin(63, 4 * stathz - 1));
 
 	return 1;
 }
@@ -1056,7 +1056,7 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 	if (info->skipped) {
 		int i;
 
-		KKASSERT(info->skipped > 0 && info->skipped < 10);
+		KKASSERT(info->skipped > 0 && info->skipped < 63);
 		hardclock_softtick(gd, info->skipped);
 	}
 #endif
