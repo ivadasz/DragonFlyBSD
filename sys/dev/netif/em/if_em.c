@@ -517,7 +517,7 @@ em_attach(device_t dev)
 	if (pci_is_pcie(dev) || pci_find_extcap(dev, PCIY_PCIAF, &cap) == 0)
 		adapter->flags |= EM_FLAG_GEN2;
 
-	callout_init_mp(&adapter->timer);
+	callout_init_periodic(&adapter->timer);
 	callout_init_mp(&adapter->tx_fifo_timer);
 	callout_init_mp(&adapter->tx_gc_timer);
 
@@ -1496,7 +1496,7 @@ em_init(void *xsc)
 		    em_txgc_timer, adapter,
 		    rman_get_cpuid(adapter->intr_res));
 	}
-	callout_reset(&adapter->timer, hz, em_timer, adapter);
+	callout_start_periodic(&adapter->timer, hz, em_timer, adapter);
 }
 
 #ifdef IFPOLL_ENABLE
@@ -1515,10 +1515,11 @@ em_npoll_compat(struct ifnet *ifp, void *arg __unused, int count)
 
 		reg_icr = E1000_READ_REG(&adapter->hw, E1000_ICR);
 		if (reg_icr & (E1000_ICR_RXSEQ | E1000_ICR_LSC)) {
-			callout_stop(&adapter->timer);
+			callout_stop_periodic(&adapter->timer);
 			adapter->hw.mac.get_link_status = 1;
 			em_update_link_status(adapter);
-			callout_reset(&adapter->timer, hz, em_timer, adapter);
+			callout_start_periodic(&adapter->timer, hz, em_timer,
+			    adapter);
 		}
 	}
 
@@ -1598,14 +1599,14 @@ em_intr_body(struct adapter *adapter, boolean_t chk_asserted)
 
 	/* Link status change */
 	if (reg_icr & (E1000_ICR_RXSEQ | E1000_ICR_LSC)) {
-		callout_stop(&adapter->timer);
+		callout_stop_periodic(&adapter->timer);
 		adapter->hw.mac.get_link_status = 1;
 		em_update_link_status(adapter);
 
 		/* Deal with TX cruft when link lost */
 		em_tx_purge(adapter);
 
-		callout_reset(&adapter->timer, hz, em_timer, adapter);
+		callout_start_periodic(&adapter->timer, hz, em_timer, adapter);
 	}
 
 	if (reg_icr & E1000_ICR_RXO)
@@ -2201,8 +2202,6 @@ em_timer(void *xsc)
 
 	em_smartspeed(adapter);
 
-	callout_reset(&adapter->timer, hz, em_timer, adapter);
-
 	lwkt_serialize_exit(ifp->if_serializer);
 }
 
@@ -2308,7 +2307,7 @@ em_stop(struct adapter *adapter)
 
 	em_disable_intr(adapter);
 
-	callout_stop(&adapter->timer);
+	callout_stop_periodic(&adapter->timer);
 	callout_stop(&adapter->tx_fifo_timer);
 
 	ifp->if_flags &= ~IFF_RUNNING;
