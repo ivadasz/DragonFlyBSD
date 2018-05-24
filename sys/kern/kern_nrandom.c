@@ -428,15 +428,15 @@ L15_Vector (const LByteType * const key, const size_t keyLen)
  */
 
 static int rand_thread_value;
-static void NANOUP_EVENT(void);
-static thread_t rand_td;
+//static void NANOUP_EVENT(void);
+//static thread_t rand_td;
 static struct spinlock rand_spin;
 
 static int sysctl_kern_random(SYSCTL_HANDLER_ARGS);
 
 static int nrandevents;
 static int rand_mode = 2;
-static struct systimer systimer_rand;
+//static struct systimer systimer_rand;
 
 static int sysctl_kern_rand_mode(SYSCTL_HANDLER_ARGS);
 
@@ -685,6 +685,8 @@ sysctl_kern_rand_mode(SYSCTL_HANDLER_ARGS)
 	return error;
 }
 
+/* XXX At least pause this helper thread, when in powersaving mode. */
+#if 0
 /*
  * Random number generator helper thread.  This limits code overhead from
  * high frequency events by delaying the clearing of rand_thread_value.
@@ -784,4 +786,5 @@ NANOUP_EVENT(void)
 
 	add_buffer_randomness_src((const uint8_t *)&nsec, sizeof(nsec), RAND_SRC_INTR);
 }
+#endif
 
