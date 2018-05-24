@@ -206,7 +206,6 @@ schedcpu(void *arg)
 		wakeup((caddr_t)&lbolt);
 		wakeup(lbolt_syncer);
 	}
-	callout_reset(&mycpu->gd_schedcpu_callout, hz, schedcpu, NULL);
 }
 
 /*
@@ -1472,8 +1471,9 @@ sched_setup(void *dummy __unused)
 		gd = globaldata_find(n);
 		lwkt_setcpu_self(gd);
 		callout_init_mp(&gd->gd_loadav_callout);
-		callout_init_mp(&gd->gd_schedcpu_callout);
-		schedcpu(NULL);
+		callout_init_periodic(&gd->gd_schedcpu_callout);
+		callout_start_periodic(&gd->gd_schedcpu_callout, hz, schedcpu,
+		    NULL);
 		loadav(NULL);
 	}
 	lwkt_setcpu_self(save_gd);
