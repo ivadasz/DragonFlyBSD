@@ -2052,10 +2052,14 @@ precise_sleep(void *ident, int flags, const char *wmesg, int us)
 	tsleep_interlock(ident, flags);
 	systimer_init_oneshot(&info, precise_sleep_intr, &si,
 	    us == 0 ? 1 : us);
+	if (us < 100)
+		cpu_mwait_cx_io_wait(mycpuid);
 	r = tsleep(ident, flags | PINTERLOCKED, wmesg, 0);
 	systimer_del(&info);
 	if (si.timedout)
 		r = EWOULDBLOCK;
+	if (us < 100)
+		cpu_mwait_cx_io_done(mycpuid);
 
 	return r;
 }

@@ -85,8 +85,8 @@ static void	realitexpire(void *arg);
  * For machines under high loads it might be beneficial to increase min_us
  * to e.g. 1000uS (1ms) so spining processes sleep meaningfully.
  */
-static int     nanosleep_min_us = 10;
-static int     nanosleep_hard_us = 100;
+static int     nanosleep_min_us = 5;
+static int     nanosleep_hard_us = 50;
 static int     gettimeofday_quick = 0;
 SYSCTL_INT(_kern, OID_AUTO, nanosleep_min_us, CTLFLAG_RW,
 	   &nanosleep_min_us, 0, "");
@@ -492,8 +492,12 @@ nanosleep1(struct timespec *rqt, struct timespec *rmt)
 						td, tv.tv_usec);
 				lwkt_deschedule_self(td);
 				crit_exit_quick(td);
+				if (tv.tv_usec < 100)
+					cpu_mwait_cx_io_wait(mycpuid);
 				lwkt_switch();
 				systimer_del(&info); /* make sure it's gone */
+				if (tv.tv_usec < 100)
+					cpu_mwait_cx_io_done(mycpuid);
 			}
 			error = iscaught(td->td_lwp);
 		} else if (tv.tv_sec == 0) {
