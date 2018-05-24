@@ -109,15 +109,18 @@ atkbdattach(device_t dev)
 	BUS_READ_IVAR(device_get_parent(dev), dev, KBDC_IVAR_IRQ, &irq);
 	BUS_READ_IVAR(device_get_parent(dev), dev, KBDC_IVAR_FLAGS, &flags);
 
-	error = atkbd_attach_unit(device_get_unit(dev), &kbd,
-				  device_get_unit(device_get_parent(dev)),
-				  irq, flags);
-	if (error)
-		return error;
-
-	/* declare our interrupt handler */
 	rid = 0;
 	sc->intr = bus_alloc_legacy_irq_resource(dev, &rid, irq, RF_ACTIVE);
+
+	error = atkbd_attach_unit(device_get_unit(dev), &kbd,
+				  device_get_unit(device_get_parent(dev)),
+				  irq, flags, rman_get_cpuid(sc->intr));
+	if (error) {
+		bus_release_resource(dev, SYS_RES_IRQ, rid, sc->intr);
+		return error;
+	}
+
+	/* declare our interrupt handler */
 	BUS_SETUP_INTR(device_get_parent(dev), dev, sc->intr, INTR_MPSAFE,
 		       atkbd_isa_intr, kbd, &sc->ih, NULL, NULL);
 
