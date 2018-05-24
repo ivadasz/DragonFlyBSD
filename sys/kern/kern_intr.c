@@ -136,6 +136,7 @@ static void int_moveto_origcpu(int, int);
 static void sched_ithd_intern(struct intr_info *info);
 
 static struct systimer emergency_intr_timer[MAXCPU];
+static int emergency_intr_on[MAXCPU];
 static struct thread *emergency_intr_thread[MAXCPU];
 
 #define ISTATE_NOTHREAD		0
@@ -179,15 +180,22 @@ sysctl_emergency_enable(SYSCTL_HANDLER_ARGS)
 	if (error || req->newptr == NULL)
 		return error;
 	emergency_intr_enable = enabled;
-	if (emergency_intr_enable)
-		freq = emergency_intr_freq;
-	else
-		freq = 1;
+	freq = emergency_intr_freq;
 
 	origcpu = mycpuid;
 	for (cpuid = 0; cpuid < ncpus; ++cpuid) {
 		lwkt_migratecpu(cpuid);
-		systimer_adjust_periodic(&emergency_intr_timer[cpuid], freq);
+		crit_enter();
+		if (!emergency_intr_on[cpuid] && enabled) {
+			systimer_init_periodic_nq(&emergency_intr_timer[cpuid],
+				    emergency_intr_timer_callback,
+				    emergency_intr_thread[cpuid],
+				    freq);
+		} else if (emergency_intr_on[cpuid] && !enabled) {
+			systimer_del(&emergency_intr_timer[cpuid]);
+		}
+		emergency_intr_on[cpuid] = enabled;
+		crit_exit();
 	}
 	lwkt_migratecpu(origcpu);
 	return 0;
@@ -208,15 +216,17 @@ sysctl_emergency_freq(SYSCTL_HANDLER_ARGS)
                 phz = EMERGENCY_INTR_POLLING_FREQ_MAX;
 
         emergency_intr_freq = phz;
-	if (emergency_intr_enable)
-		freq = emergency_intr_freq;
-	else
-		freq = 1;
+	freq = emergency_intr_freq;
 
 	origcpu = mycpuid;
 	for (cpuid = 0; cpuid < ncpus; ++cpuid) {
 		lwkt_migratecpu(cpuid);
-		systimer_adjust_periodic(&emergency_intr_timer[cpuid], freq);
+		crit_enter();
+		if (emergency_intr_on[cpuid]) {
+			systimer_adjust_periodic(&emergency_intr_timer[cpuid],
+			    freq);
+		}
+		crit_exit();
 	}
 	lwkt_migratecpu(origcpu);
         return 0;
@@ -312,10 +322,12 @@ register_int(int intr, inthand2_t *handler, void *arg, const char *name,
 		    emergency_intr_thread[cpuid],
 		    TDF_NOSTART | TDF_INTTHREAD, cpuid, "ithreadE %d",
 		    cpuid);
+#if 0
 	systimer_init_periodic_nq(&emergency_intr_timer[cpuid],
 		    emergency_intr_timer_callback,
 		    emergency_intr_thread[cpuid],
 		    (emergency_intr_enable ? emergency_intr_freq : 1));
+#endif
     }
 
     /*
