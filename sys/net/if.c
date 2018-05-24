@@ -171,7 +171,7 @@ struct ifnethead	ifnet = TAILQ_HEAD_INITIALIZER(ifnet);
 static struct ifnet_array	ifnet_array0;
 static struct ifnet_array	*ifnet_array = &ifnet_array0;
 
-static struct callout		if_slowtimo_timer;
+static struct periodic_call	if_slowtimo_timer;
 static struct netmsg_base	if_slowtimo_netmsg;
 
 int			if_index = 0;
@@ -222,13 +222,23 @@ TAILQ_HEAD(, ifg_group) ifg_head = TAILQ_HEAD_INITIALIZER(ifg_head);
 static void
 ifinit(void *dummy)
 {
+#if 1
+	int cpu;
+#endif
 
-	callout_init_mp(&if_slowtimo_timer);
+	callout_init_periodic(&if_slowtimo_timer);
 	netmsg_init(&if_slowtimo_netmsg, NULL, &netisr_adone_rport,
 	    MSGF_PRIORITY, if_slowtimo_dispatch);
 
+#if 1
+	cpu = mycpuid;
+	lwkt_migratecpu(0);
 	/* Start if_slowtimo */
+	callout_start_periodic(&if_slowtimo_timer, hz, if_slowtimo, NULL);
+	lwkt_migratecpu(cpu);
+#else
 	lwkt_sendmsg(netisr_cpuport(0), &if_slowtimo_netmsg.lmsg);
+#endif
 }
 
 static void
@@ -1706,6 +1716,7 @@ if_slowtimo_dispatch(netmsg_t nmsg)
 	struct globaldata *gd = mycpu;
 	const struct ifnet_array *arr;
 	int i;
+//	int hadone = 0;
 
 	ASSERT_NETISR0;
 
@@ -1734,6 +1745,9 @@ if_slowtimo_dispatch(netmsg_t nmsg)
 			IFNET_STAT_GET(ifp, oqdrops, ifp->if_oqdrops);
 		}
 
+//		if (ifp->if_watchdog)
+//			hadone = 1;
+
 		if (ifp->if_timer == 0 || --ifp->if_timer) {
 			crit_exit_gd(gd);
 			continue;
@@ -1751,7 +1765,8 @@ if_slowtimo_dispatch(netmsg_t nmsg)
 		crit_exit_gd(gd);
 	}
 
-	callout_reset(&if_slowtimo_timer, hz / IFNET_SLOWHZ, if_slowtimo, NULL);
+//	callout_reset(&if_slowtimo_timer,
+//	    hadone ? (hz / IFNET_SLOWHZ) : 2 * hz, if_slowtimo, NULL);
 }
 
 static void
