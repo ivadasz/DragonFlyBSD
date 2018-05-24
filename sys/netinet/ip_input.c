@@ -245,7 +245,7 @@ struct ipfrag_queue {
 	int			nipq;
 	volatile int		draining;
 	struct netmsg_base	timeo_netmsg;
-	struct callout		timeo_ch;
+	struct periodic_call	timeo_ch;
 	struct netmsg_base	drain_netmsg;
 	struct ipqhead		ipq[IPREASS_NHASH];
 } __cachealign;
@@ -321,7 +321,7 @@ ip_init(void)
 {
 	struct ipfrag_queue *fragq;
 	struct protosw *pr;
-	int cpu, i;
+	int cpu, fromcpu, i;
 
 	/*
 	 * Make sure we can handle a reasonable number of fragments but
@@ -385,7 +385,7 @@ ip_init(void)
 		for (i = 0; i < IPREASS_NHASH; i++)
 			TAILQ_INIT(&fragq->ipq[i]);
 
-		callout_init_mp(&fragq->timeo_ch);
+		callout_init_periodic(&fragq->timeo_ch);
 		netmsg_init(&fragq->timeo_netmsg, NULL, &netisr_adone_rport,
 		    MSGF_PRIORITY, ipfrag_timeo_dispatch);
 		netmsg_init(&fragq->drain_netmsg, NULL, &netisr_adone_rport,
@@ -395,11 +395,14 @@ ip_init(void)
 	netisr_register(NETISR_IP, ip_input_handler, ip_hashfn);
 	netisr_register_hashcheck(NETISR_IP, ip_hashcheck);
 
+	fromcpu = mycpuid;
 	for (cpu = 0; cpu < netisr_ncpus; ++cpu) {
+		lwkt_migratecpu(cpu);
 		fragq = &ipfrag_queue_pcpu[cpu];
-		callout_reset_bycpu(&fragq->timeo_ch, IPFRAG_TIMEO,
-		    ipfrag_timeo, NULL, cpu);
+		callout_start_periodic(&fragq->timeo_ch, IPFRAG_TIMEO,
+		    ipfrag_timeo, NULL);
 	}
+	lwkt_migratecpu(fromcpu);
 
 	ip_porthash_trycount = 2 * netisr_ncpus;
 }
@@ -1029,6 +1032,10 @@ found:
 		if ((fp = mpipe_alloc_nowait(&ipq_mpipe)) == NULL)
 			goto dropfrag;
 		TAILQ_INSERT_HEAD(head, fp, ipq_list);
+		if (fragq->nipq == 0) {
+			callout_start_periodic(&fragq->timeo_ch, IPFRAG_TIMEO,
+			    ipfrag_timeo, NULL);
+		}
 		fragq->nipq++;
 		fp->ipq_nfrags = 1;
 		fp->ipq_ttl = IPFRAGTTL;
@@ -1259,8 +1266,10 @@ ipfrag_timeo_dispatch(netmsg_t nmsg)
 	netisr_replymsg(&nmsg->base, 0);  /* reply ASAP */
 	crit_exit();
 
-	if (fragq->nipq == 0)
+	if (fragq->nipq == 0) {
+		callout_stop_periodic(&fragq->timeo_ch);
 		goto done;
+	}
 
 	for (i = 0; i < IPREASS_NHASH; i++) {
 		head = &fragq->ipq[i];
@@ -1287,7 +1296,8 @@ ipfrag_timeo_dispatch(netmsg_t nmsg)
 		}
 	}
 done:
-	callout_reset(&fragq->timeo_ch, IPFRAG_TIMEO, ipfrag_timeo, NULL);
+	;
+//	callout_reset(&fragq->timeo_ch, IPFRAG_TIMEO, ipfrag_timeo, NULL);
 }
 
 static void
