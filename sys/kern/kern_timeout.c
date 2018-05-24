@@ -756,7 +756,9 @@ retry:
 		nflags = flags | CALLOUT_WAITING;
 		tsleep_interlock(c, 0);
 		if (atomic_cmpset_int(&c->c_flags, flags, nflags)) {
+			cpu_mwait_cx_io_wait(gd->gd_cpuid);
 			tsleep(c, PINTERLOCKED, "cstp1", 0);
+			cpu_mwait_cx_io_done(gd->gd_cpuid);
 		}
 	}
 	if (flags & CALLOUT_PENDING)
