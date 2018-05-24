@@ -3851,6 +3851,8 @@ iwm_raw_xmit(struct ieee80211_node *ni, struct mbuf *m,
 	} else {
 		error = iwm_tx(sc, m, ni, 0);
 	}
+	if (sc->sc_tx_timer == 0)
+		callout_reset(&sc->sc_watchdog_to, hz, iwm_watchdog, sc);
 	sc->sc_tx_timer = 5;
 	IWM_UNLOCK(sc);
 
@@ -4798,7 +4800,6 @@ iwm_init(struct iwm_softc *sc)
 	 * Ok, firmware loaded and we are jogging
 	 */
 	sc->sc_flags |= IWM_FLAG_HW_INITED;
-	callout_reset(&sc->sc_watchdog_to, hz, iwm_watchdog, sc);
 }
 
 static int
@@ -4844,6 +4845,10 @@ iwm_start(struct iwm_softc *sc)
 			ieee80211_free_node(ni);
 			continue;
 		}
+		if (sc->sc_tx_timer == 0) {
+			callout_reset(&sc->sc_watchdog_to, hz, iwm_watchdog,
+			    sc);
+		}
 		sc->sc_tx_timer = 15;
 	}
 	IWM_DPRINTF(sc, IWM_DEBUG_XMIT | IWM_DEBUG_TRACE, "<-%s\n", __func__);
@@ -4881,8 +4886,8 @@ iwm_watchdog(void *arg)
 #endif
 			return;
 		}
+		callout_reset(&sc->sc_watchdog_to, hz, iwm_watchdog, sc);
 	}
-	callout_reset(&sc->sc_watchdog_to, hz, iwm_watchdog, sc);
 }
 
 static void
