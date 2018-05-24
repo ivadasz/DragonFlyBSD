@@ -281,7 +281,7 @@ struct adapter {
 	int			intr_type;
 
 	struct ifmedia		media;
-	struct callout		timer;
+	struct periodic_call	timer;
 	struct callout		tx_fifo_timer;
 	int			if_flags;
 	int			min_frame_size;
