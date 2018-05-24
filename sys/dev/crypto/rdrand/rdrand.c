@@ -96,6 +96,10 @@ rdrand_attach(device_t dev)
 	callout_reset(&sc->sc_rng_co, sc->sc_rng_ticks,
 		      rdrand_rng_harvest, sc);
 
+	SYSCTL_ADD_INT(device_get_sysctl_ctx(dev),
+	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)), OID_AUTO, "rng_ticks",
+	    CTLFLAG_RW, &sc->sc_rng_ticks, 0, "control debugging");
+
 	return 0;
 }
 
@@ -137,7 +141,8 @@ rdrand_rng_harvest(void *arg)
 		}
 	}
 
-	callout_reset(&sc->sc_rng_co, sc->sc_rng_ticks,
+	callout_reset(&sc->sc_rng_co, sc->sc_rng_ticks <= 0 ? 1 :
+		      (sc->sc_rng_ticks > 2 * hz ? hz : sc->sc_rng_ticks),
 		      rdrand_rng_harvest, sc);
 }
 
