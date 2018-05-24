@@ -147,7 +147,7 @@ int
 usched_is_idle(void)
 {
 	struct usched *item;
-	int min = 3;
+	int min = 31;
 
 	TAILQ_FOREACH(item, &usched_list, entry) {
 		min = imin(min, item->schedisidle());

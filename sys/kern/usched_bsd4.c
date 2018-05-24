@@ -1255,7 +1255,7 @@ static
 int
 bsd4_schedisidle(void)
 {
-	return 3;
+	return 31;
 }
 
 /*

@@ -1290,20 +1290,16 @@ int
 dfly_schedisidle(void)
 {
 	globaldata_t gd = mycpu;
-	int cnt = 3;
+	int cnt = 31;
 
 	if (usched_dfly_features & 0x04) {
 		int curticks = sched_ticks;
+		int i;
 
-		if (((u_int)(curticks + 1) & 7) == 0 &&
-		    ((u_int)(curticks + 1) / 8) % ncpus == gd->gd_cpuid) {
-			return 0;
-		} else if (((u_int)(curticks + 2) & 7) == 0 &&
-		    ((u_int)(curticks + 2) / 8) % ncpus == gd->gd_cpuid) {
-			return 1;
-		} else if (((u_int)(curticks + 3) & 7) == 0 &&
-		    ((u_int)(curticks + 3) / 8) % ncpus == gd->gd_cpuid) {
-			return 2;
+		for (i = 1; i <= cnt; i++) {
+			if (((u_int)(curticks + i) & 7) == 0 &&
+			    ((u_int)(curticks + i) / 8) % ncpus == gd->gd_cpuid)
+				return i - 1;
 		}
 	}
 
