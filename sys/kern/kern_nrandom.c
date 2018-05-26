@@ -565,6 +565,25 @@ random_filter_read(struct knote *kn, long hint)
 	return (1);
 }
 
+void (*random_background_start)(void *arg);
+void *random_background_arg;
+int rand_bkgd_paused = 0;
+int random_read_requests = 0;
+
+void
+register_random_background(void (*fn)(void *arg), void *arg)
+{
+	random_background_arg = arg;
+	random_background_start = fn;
+}
+void random_background_paused(void);
+
+void
+random_background_paused(void)
+{
+	rand_bkgd_paused = 1;
+}
+
 /*
  * Heavy weight random number generator.  May return less then the
  * requested number of bytes.
@@ -593,6 +612,13 @@ read_random(void *buf, u_int nbytes)
 			((u_char *)buf)[j] ^= IBAA_Byte();
 		spin_unlock(&rand_spin);
 	}
+	atomic_add_int(&random_read_requests, 1);
+	if (rand_bkgd_paused != 0) {
+		if (atomic_cmpset_int(&rand_bkgd_paused, 1, 0)) {
+			if (random_background_start != NULL)
+				random_background_start(random_background_arg);
+		}
+	}
 
 	add_interrupt_randomness(0);
 	return (i > 0) ? i : 0;
@@ -611,6 +637,13 @@ read_random_unlimited(void *buf, u_int nbytes)
 	for (i = 0; i < nbytes; ++i)
 		((u_char *)buf)[i] = IBAA_Byte();
 	spin_unlock(&rand_spin);
+	atomic_add_int(&random_read_requests, 1);
+	if (rand_bkgd_paused != 0) {
+		if (atomic_cmpset_int(&rand_bkgd_paused, 1, 0)) {
+			if (random_background_start != NULL)
+				random_background_start(random_background_arg);
+		}
+	}
 	add_interrupt_randomness(0);
 	return (i);
 }

@@ -50,6 +50,12 @@ struct rdrand_softc {
 	int32_t		sc_rng_ticks;
 };
 
+static int iter = 0;
+extern int rand_bkgd_paused;
+extern int random_read_requests;
+
+static void rdrand_restart_callout(void *arg);
+
 
 static void rdrand_rng_harvest(void *);
 int rdrand_rng(uint8_t *out, long limit);
@@ -92,6 +98,8 @@ rdrand_attach(device_t dev)
 	else
 		sc->sc_rng_ticks = 1;
 
+	register_random_background(rdrand_restart_callout, sc);
+
 	callout_init_mp(&sc->sc_rng_co);
 	callout_reset(&sc->sc_rng_co, sc->sc_rng_ticks,
 		      rdrand_rng_harvest, sc);
@@ -111,11 +119,21 @@ rdrand_detach(device_t dev)
 
 	sc = device_get_softc(dev);
 
+	register_random_background(NULL, NULL);
 	callout_stop_sync(&sc->sc_rng_co);
 
 	return (0);
 }
 
+static void
+rdrand_restart_callout(void *arg)
+{
+	struct rdrand_softc *sc = arg;
+
+	callout_reset(&sc->sc_rng_co, sc->sc_rng_ticks <= 0 ? 1 :
+		      (sc->sc_rng_ticks > hz ? hz : sc->sc_rng_ticks),
+		      rdrand_rng_harvest, sc);
+}
 
 static void
 rdrand_rng_harvest(void *arg)
@@ -124,6 +142,8 @@ rdrand_rng_harvest(void *arg)
 	uint8_t randomness[RDRAND_SIZE + 32];
 	uint8_t *arandomness; /* randomness aligned */
 	int cnt;
+
+	iter++;
 
 	arandomness = RDRAND_ALIGN(randomness);
 
@@ -141,8 +161,14 @@ rdrand_rng_harvest(void *arg)
 		}
 	}
 
+	if (iter > 10 && random_read_requests == 0) {
+		rand_bkgd_paused = 1;
+		return;
+	}
+	atomic_store_rel_int(&random_read_requests, 0);
+
 	callout_reset(&sc->sc_rng_co, sc->sc_rng_ticks <= 0 ? 1 :
-		      (sc->sc_rng_ticks > 2 * hz ? hz : sc->sc_rng_ticks),
+		      (sc->sc_rng_ticks > hz ? hz : sc->sc_rng_ticks),
 		      rdrand_rng_harvest, sc);
 }
 
