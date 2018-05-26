@@ -111,6 +111,7 @@ u_int write_random(const char *buf, u_int nbytes);
 struct thread;
 struct knote;
 int random_filter_read(struct knote *kn, long hint);
+void register_random_background(void (*fn)(void *arg), void *arg);
 
 #endif /* _KERNEL */
 
