@@ -33,6 +33,7 @@
 #include <sys/malloc.h>
 #include <sys/bus.h>
 #include <sys/sysctl.h>
+#include <sys/kcollect.h>
 
 #include "acpi.h"
 
@@ -449,6 +450,24 @@ acpi_battery_units_sysctl(SYSCTL_HANDLER_ARGS)
     return (error);
 }
 
+static uint64_t
+acpi_battery_collect(int n)
+{
+	struct acpi_battinfo bi;
+
+	if (acpi_battery_get_battinfo(NULL, &bi) != 0) {
+		kcollect_setvalue(KCOLLECT_BATTRATE, 0);
+		return 0;
+	}
+
+	if (bi.state == ACPI_BATT_STAT_DISCHARG)
+		kcollect_setvalue(KCOLLECT_BATTRATE, bi.rate);
+	else
+		kcollect_setvalue(KCOLLECT_BATTRATE, 0);
+
+	return bi.cap * 100;
+}
+
 static int
 acpi_battery_init(void)
 {
@@ -509,6 +528,11 @@ acpi_battery_init(void)
 	"time in seconds until info is refreshed");
 
     acpi_batteries_initted = TRUE;
+
+    kcollect_register(KCOLLECT_BATTPCT, "battperc", acpi_battery_collect,
+	KCOLLECT_SCALE(KCOLLECT_BATTPCT_FORMAT, 0));
+    kcollect_register(KCOLLECT_BATTRATE, "battrate", NULL,
+	KCOLLECT_SCALE(KCOLLECT_BATTRATE_FORMAT, 0));
 
 out:
     if (error != 0) {
