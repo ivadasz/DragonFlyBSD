@@ -367,6 +367,12 @@ format_output(uintmax_t value,char fmt,uintmax_t scale, char* ret)
 		}
 		sprintf(ret,"%8.8s", buf);
 		break;
+	case 'w':
+		/*
+		 * Battery discharge rate in milliwatts.
+		 */
+		sprintf(ret,"%3ju.%03juW", value / 1000, value % 1000);
+		break;
 	default:
 		sprintf(ret,"%s","        ");
 		break;

@@ -58,6 +58,9 @@ typedef struct {
 #define KCOLLECT_IPI		19	/* inter-cpu interrupts */
 #define KCOLLECT_TIMER		20	/* timer interrupts */
 
+#define KCOLLECT_BATTPCT	21	/* battery percentage */
+#define KCOLLECT_BATTRATE	22	/* battery discharge rate */
+
 #define KCOLLECT_DYNAMIC_START	24	/* dynamic entries */
 
 #define KCOLLECT_LOAD_FORMAT	'2'	/* N.NN (modulo 100) */
@@ -84,6 +87,9 @@ typedef struct {
 #define KCOLLECT_INTR_FORMAT	 	'c'	/* count over period */
 #define KCOLLECT_IPI_FORMAT 		'c'	/* count over period */
 #define KCOLLECT_TIMER_FORMAT 		'c'	/* count over period */
+
+#define KCOLLECT_BATTRATE_FORMAT	'w'	/* rate in milliwatts */
+#define KCOLLECT_BATTPCT_FORMAT		'p'	/* percentage of battery cap */
 
 #define KCOLLECT_SCALE(fmt, scale)	((fmt) | ((uint64_t)(scale) << 8))
 #define KCOLLECT_GETFMT(scale)		((char)(scale))
