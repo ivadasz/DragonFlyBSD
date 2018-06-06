@@ -1834,15 +1834,39 @@ enum iwm_phy_ops_subcmd_ids {
 	IWM_DTS_MEASUREMENT_NOTIF_WIDE = 0xFF,
 };
 
-/* command groups */
-enum {
+/**
+ * enum iwm_mvm_command_groups - command groups for the firmware
+ * @LEGACY_GROUP: legacy group, uses command IDs from &enum iwl_legacy_cmds
+ * @LONG_GROUP: legacy group with long header, also uses command IDs
+ *      from &enum iwl_legacy_cmds
+ * @SYSTEM_GROUP: system group, uses command IDs from
+ *      &enum iwl_system_subcmd_ids
+ * @MAC_CONF_GROUP: MAC configuration group, uses command IDs from
+ *      &enum iwl_mac_conf_subcmd_ids
+ * @PHY_OPS_GROUP: PHY operations group, uses command IDs from
+ *      &enum iwl_phy_ops_subcmd_ids
+ * @DATA_PATH_GROUP: data path group, uses command IDs from
+ *      &enum iwl_data_path_subcmd_ids
+ * @NAN_GROUP: NAN group, uses command IDs from &enum iwl_nan_subcmd_ids
+ * @TOF_GROUP: TOF group, uses command IDs from &enum iwl_tof_subcmd_ids
+ * @PROT_OFFLOAD_GROUP: protocol offload group, uses command IDs from
+ *      &enum iwl_prot_offload_subcmd_ids
+ * @REGULATORY_AND_NVM_GROUP: regulatory/NVM group, uses command IDs from
+ *      &enum iwl_regulatory_and_nvm_subcmd_ids
+ * @DEBUG_GROUP: Debug group, uses command IDs from &enum iwl_debug_cmds
+ */
+enum iwm_mvm_command_groups {
 	IWM_LEGACY_GROUP = 0x0,
 	IWM_LONG_GROUP = 0x1,
 	IWM_SYSTEM_GROUP = 0x2,
 	IWM_MAC_CONF_GROUP = 0x3,
 	IWM_PHY_OPS_GROUP = 0x4,
 	IWM_DATA_PATH_GROUP = 0x5,
+	IWM_NAN_GROUP = 0x7,
+	IWM_TOF_GROUP = 0x8,
 	IWM_PROT_OFFLOAD_GROUP = 0xb,
+	IWM_REGULATORY_AND_NVM_GROUP = 0xc,
+	IWM_DEBUG_GROUP = 0xf,
 };
 
 /**
@@ -1976,30 +2000,72 @@ struct iwm_phy_cfg_cmd {
 #define IWM_PHY_CFG_RX_CHAIN_B	(1 << 13)
 #define IWM_PHY_CFG_RX_CHAIN_C	(1 << 14)
 
+/**
+ * enum iwm_regulatory_and_nvm_subcmd_ids - regulatory/NVM commands
+ */
+enum iwm_regulatory_and_nvm_subcmd_ids {
+	/**
+	 * @NVM_ACCESS_COMPLETE: &struct iwl_nvm_access_complete_cmd
+	 */
+	IWM_NVM_ACCESS_COMPLETE = 0x0,
 
-/* Target of the IWM_NVM_ACCESS_CMD */
-enum {
+	/**
+	 * @NVM_GET_INFO:
+	 * Command is &struct iwl_nvm_get_info,
+	 * response is &struct iwl_nvm_get_info_rsp
+	 */
+	IWM_NVM_GET_INFO = 0x2,
+};
+
+/**
+ * enum iwm_nvm_access_op - NVM access opcode
+ * @IWM_NVM_READ: read NVM
+ * @IWM_NVM_WRITE: write NVM
+ */
+enum iwm_nvm_access_op {
+	IWM_NVM_READ    = 0,
+	IWM_NVM_WRITE   = 1,
+};
+
+/**
+ * enum iwm_nvm_access_target - target of the NVM_ACCESS_CMD
+ * @NVM_ACCESS_TARGET_CACHE: access the cache
+ * @NVM_ACCESS_TARGET_OTP: access the OTP
+ * @NVM_ACCESS_TARGET_EEPROM: access the EEPROM
+ */
+enum iwm_nvm_access_target {
 	IWM_NVM_ACCESS_TARGET_CACHE = 0,
 	IWM_NVM_ACCESS_TARGET_OTP = 1,
 	IWM_NVM_ACCESS_TARGET_EEPROM = 2,
 };
 
-/* Section types for IWM_NVM_ACCESS_CMD */
-enum {
+/**
+ * enum iwm_nvm_section_type - section types for NVM_ACCESS_CMD
+ * @NVM_SECTION_TYPE_SW: software section
+ * @NVM_SECTION_TYPE_REGULATORY: regulatory section
+ * @NVM_SECTION_TYPE_CALIBRATION: calibration section
+ * @NVM_SECTION_TYPE_PRODUCTION: production section
+ * @NVM_SECTION_TYPE_REGULATORY_SDP: regulatory section used by 3168 series
+ * @NVM_SECTION_TYPE_MAC_OVERRIDE: MAC override section
+ * @NVM_SECTION_TYPE_PHY_SKU: PHY SKU section
+ * @NVM_MAX_NUM_SECTIONS: number of sections
+ */
+enum iwm_nvm_section_type {
 	IWM_NVM_SECTION_TYPE_SW = 1,
 	IWM_NVM_SECTION_TYPE_REGULATORY = 3,
 	IWM_NVM_SECTION_TYPE_CALIBRATION = 4,
 	IWM_NVM_SECTION_TYPE_PRODUCTION = 5,
+	IWM_NVM_SECTION_TYPE_REGULATORY_SDP = 8,
 	IWM_NVM_SECTION_TYPE_MAC_OVERRIDE = 11,
 	IWM_NVM_SECTION_TYPE_PHY_SKU = 12,
 	IWM_NVM_MAX_NUM_SECTIONS = 13,
 };
 
 /**
- * struct iwm_nvm_access_cmd_ver2 - Request the device to send an NVM section
- * @op_code: 0 - read, 1 - write
- * @target: IWM_NVM_ACCESS_TARGET_*
- * @type: IWM_NVM_SECTION_TYPE_*
+ * struct iwm_nvm_access_cmd - Request the device to send an NVM section
+ * @op_code: &enum iwm_nvm_access_op
+ * @target: &enum iwm_nvm_access_target
+ * @type: &enum iwm_nvm_section_type
  * @offset: offset in bytes into the section
  * @length: in bytes, to read/write
  * @data: if write operation, the data to write. On read its empty
@@ -2012,6 +2078,116 @@ struct iwm_nvm_access_cmd {
 	uint16_t length;
 	uint8_t data[];
 } __packed; /* IWM_NVM_ACCESS_CMD_API_S_VER_2 */
+
+/**
+ * struct iwm_nvm_access_resp_ver2 - response to IWM_NVM_ACCESS_CMD
+ * @offset: offset in bytes into the section
+ * @length: in bytes, either how much was written or read
+ * @type: IWM_NVM_SECTION_TYPE_*
+ * @status: 0 for success, fail otherwise
+ * @data: if read operation, the data returned. Empty on write.
+ */
+struct iwm_nvm_access_resp {
+	uint16_t offset;
+	uint16_t length;
+	uint16_t type;
+	uint16_t status;
+	uint8_t data[];
+} __packed; /* IWM_NVM_ACCESS_CMD_RESP_API_S_VER_2 */
+
+/*
+ * struct iwm_nvm_get_info - request to get NVM data
+ */
+struct iwm_nvm_get_info {
+	uint32_t reserved;
+} __packed; /* GRP_REGULATORY_NVM_GET_INFO_CMD_S_VER_1 */
+
+/**
+ * enum iwm_nvm_info_general_flags - flags in NVM_GET_INFO resp
+ * @NVM_GENERAL_FLAGS_EMPTY_OTP: 1 if OTP is empty
+ */
+enum iwm_nvm_info_general_flags {
+	IWM_NVM_GENERAL_FLAGS_EMPTY_OTP	= (1 << 0),
+};
+
+/**
+ * struct iwm_nvm_get_info_general - general NVM data
+ * @flags: bit 0: 1 - empty, 0 - non-empty
+ * @nvm_version: nvm version
+ * @board_type: board type
+ * @reserved: reserved
+ */
+struct iwm_nvm_get_info_general {
+	uint32_t flags;
+	uint16_t nvm_version;
+	uint8_t board_type;
+	uint8_t reserved;
+} __packed; /* GRP_REGULATORY_NVM_GET_INFO_GENERAL_S_VER_1 */
+
+/**
+ * struct iwm_nvm_get_info_sku - mac information
+ * @enable_24g: band 2.4G enabled
+ * @enable_5g: band 5G enabled
+ * @enable_11n: 11n enabled
+ * @enable_11ac: 11ac enabled
+ * @mimo_disable: MIMO enabled
+ * @ext_crypto: Extended crypto enabled
+ */
+struct iwm_nvm_get_info_sku {
+	uint32_t enable_24g;
+	uint32_t enable_5g;
+	uint32_t enable_11n;
+	uint32_t enable_11ac;
+	uint32_t mimo_disable;
+	uint32_t ext_crypto;
+} __packed; /* GRP_REGULATORY_NVM_GET_INFO_MAC_SKU_SECTION_S_VER_1 */
+
+/**
+ * struct iwm_nvm_get_info_phy - phy information
+ * @tx_chains: BIT 0 chain A, BIT 1 chain B
+ * @rx_chains: BIT 0 chain A, BIT 1 chain B
+ */
+struct iwm_nvm_get_info_phy {
+	uint32_t tx_chains;
+	uint32_t rx_chains;
+} __packed; /* GRP_REGULATORY_NVM_GET_INFO_PHY_SKU_SECTION_S_VER_1 */
+
+#define IWM_NUM_CHANNELS	39
+#define IWM_NUM_CHANNELS_8000	51
+
+/**
+ * struct iwm_nvm_get_info_regulatory - regulatory information
+ * @lar_enabled: is LAR enabled
+ * @channel_profile: regulatory data of this channel
+ * @reserved: reserved
+ */
+struct iwm_nvm_get_info_regulatory {
+	uint32_t lar_enabled;
+	uint16_t channel_profile[IWM_NUM_CHANNELS_8000];
+	uint16_t reserved;
+} __packed; /* GRP_REGULATORY_NVM_GET_INFO_REGULATORY_S_VER_1 */
+
+/**
+ * struct iwm_nvm_get_info_rsp - response to get NVM data
+ * @general: general NVM data
+ * @mac_sku: data relating to MAC sku
+ * @phy_sku: data relating to PHY sku
+ * @regulatory: regulatory data
+ */
+struct iwm_nvm_get_info_rsp {
+	struct iwm_nvm_get_info_general general;
+	struct iwm_nvm_get_info_sku mac_sku;
+	struct iwm_nvm_get_info_phy phy_sku;
+	struct iwm_nvm_get_info_regulatory regulatory;
+} __packed; /* GRP_REGULATORY_NVM_GET_INFO_CMD_RSP_S_VER_1 */
+
+/**
+ * struct iwm_nvm_access_complete_cmd - NVM_ACCESS commands are completed
+ * @reserved: reserved
+ */
+struct iwm_nvm_access_complete_cmd {
+	uint32_t reserved;
+} __packed; /* NVM_ACCESS_COMPLETE_CMD_API_S_VER_1 */
 
 #define IWM_NUM_OF_FW_PAGING_BLOCKS 33 /* 32 for data and 1 block for CSS */
 
@@ -2050,22 +2226,6 @@ enum iwm_fw_item_id {
 struct iwm_fw_get_item_cmd {
 	uint32_t item_id;
 } __packed; /* IWM_FW_GET_ITEM_CMD_API_S_VER_1 */
-
-/**
- * struct iwm_nvm_access_resp_ver2 - response to IWM_NVM_ACCESS_CMD
- * @offset: offset in bytes into the section
- * @length: in bytes, either how much was written or read
- * @type: IWM_NVM_SECTION_TYPE_*
- * @status: 0 for success, fail otherwise
- * @data: if read operation, the data returned. Empty on write.
- */
-struct iwm_nvm_access_resp {
-	uint16_t offset;
-	uint16_t length;
-	uint16_t type;
-	uint16_t status;
-	uint8_t data[];
-} __packed; /* IWM_NVM_ACCESS_CMD_RESP_API_S_VER_2 */
 
 /* IWM_MVM_ALIVE 0x1 */
 
