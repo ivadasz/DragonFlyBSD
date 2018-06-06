@@ -1285,7 +1285,7 @@ do_spin:
 				cpu_mmw_pause_int(&gd->gd_reqflags, reqflags,
 						  cpu_mwait_cx_hint(stat), 0);
 				if (skipped) {
-					hardclock_unskip();
+					hardclock_unskip(skipped);
 				}
 				if (pscpu->trampoline.tr_pcb_spec_ctrl[0] &
 				    SPEC_CTRL_DUMMY_ENABLE) {

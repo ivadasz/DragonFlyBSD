@@ -711,23 +711,11 @@ hardclock_ntp_update(int cnt, sysclock_t now)
 static sysclock_t skipsleep_next_clock;
 static volatile int tick_skipsleep_state = 0;
 
-/* Return 1, when hardclock gets skipped. */
-/* To be called in a critical section only. */
-int
-hardclock_maybe_skip(void)
+static int
+try_hardclock_skip(struct globaldata *gd)
 {
-	struct globaldata *gd = mycpu;
 	systimer_t info;
 	int cnt;
-
-	if (in_powersave_mode == 0)
-		return 0;
-
-	if (clocks_running == 0)
-		return 0;
-
-	if (gd->gd_hardclock.gd == NULL)
-		return 0;
 
 	if (gd->gd_cpuid == 0) {
 		sysclock_t now;
@@ -755,14 +743,44 @@ hardclock_maybe_skip(void)
 		systimer_skip_periodic(info, cnt);
 	}
 
+	return 1;
+}
+
+/* Return 1, when hardclock gets skipped. */
+/* To be called in a critical section only. */
+int
+hardclock_maybe_skip(void)
+{
+	struct globaldata *gd = mycpu;
+	int cnt, mask = 0;
+
+	if (in_powersave_mode == 0)
+		return 0;
+
+	if (clocks_running == 0)
+		return 0;
+
+	if (gd->gd_hardclock.gd == NULL)
+		return 0;
+
+	/*
+	 * XXX Avoid reloading the systimer for each individual
+	 *     systimer_skip_periodic() call.
+	 */
+
+	if (try_hardclock_skip(gd))
+		mask |= 0x1;
+
 	cnt = usched_is_idle();
 	if (cnt > 0) {
 		systimer_skip_periodic(&gd->gd_schedclock, cnt);
+		mask |= 0x2;
 	}
 
 	systimer_skip_periodic(&gd->gd_statclock, imin(63, 4 * stathz - 1));
+	mask |= 0x4;
 
-	return 1;
+	return mask;
 }
 
 static void
@@ -923,7 +941,7 @@ hardclock_time_handle(struct globaldata *gd, systimer_t info)
 
 /* To be called in critical section only. */
 void
-hardclock_unskip(void)
+hardclock_unskip(int mask)
 {
 	struct globaldata *gd = mycpu;
 	int cnt;
@@ -933,80 +951,86 @@ hardclock_unskip(void)
 		need_ipiq();
 	}
 
-	if (gd->gd_cpuid == 0) {
-		int ni;
+	if (mask & 1) {
+		if (gd->gd_cpuid == 0) {
+			int ni;
 
-		/*
-		 * This waits until there is no longer an ongoing update on
-		 * another cpu core.
-		 */
-		while (atomic_cmpset_acq_int(&tick_skipsleep_state, 1, 0) == 0)
-			cpu_pause();
+			/*
+			 * This waits until there is no longer an ongoing update on
+			 * another cpu core.
+			 */
+			while (atomic_cmpset_acq_int(&tick_skipsleep_state, 1, 0) == 0)
+				cpu_pause();
 
-		/* Make sure we have recent data. */
-		ni = basetime_index;
-		cpu_lfence();
-		gd->gd_time_seconds = hardtime[ni].time_second;
-		gd->gd_cpuclock_base = hardtime[ni].cpuclock_base;
+			/* Make sure we have recent data. */
+			ni = basetime_index;
+			cpu_lfence();
+			gd->gd_time_seconds = hardtime[ni].time_second;
+			gd->gd_cpuclock_base = hardtime[ni].cpuclock_base;
+		}
+		cnt = systimer_skip_periodic(&gd->gd_hardclock, 0);
+		if (cnt > 0) {
+			hardclock_time_handle(gd, NULL);
+
+			lwkt_schedulerclock(curthread);
+			hardclock_softtick(gd, cnt);
+
+			vmstats_rollup_cpu(gd);
+			vfscache_rollup_cpu(gd);
+			mycpu->gd_vmstats = vmstats;
+
+			/* No itimer handling yet. XXX Move it into a thread. */
+		}
 	}
-	cnt = systimer_skip_periodic(&gd->gd_hardclock, 0);
-	if (cnt > 0) {
-		hardclock_time_handle(gd, NULL);
 
-		lwkt_schedulerclock(curthread);
-		hardclock_softtick(gd, cnt);
+	if (mask & 2) {
+		cnt = systimer_skip_periodic(&gd->gd_schedclock, 0);
+		if (cnt > 0) {
+			sysclock_t t, now;
 
-		vmstats_rollup_cpu(gd);
-		vfscache_rollup_cpu(gd);
-		mycpu->gd_vmstats = vmstats;
-
-		/* No itimer handling yet. XXX Move it into a thread. */
-	}
-
-	cnt = systimer_skip_periodic(&gd->gd_schedclock, 0);
-	if (cnt > 0) {
-		sysclock_t t, now;
-
-		/* Increment the global sched_ticks */
-		t = schedticks_next_clock;
-		now = sys_cputimer->count();
-		for (;;) {
-			if ((int)(now - t) >= 0) {
-				if (atomic_cmpset_int(&schedticks_next_clock, t,
-				    t + gd->gd_schedclock.periodic)) {
-					atomic_add_int(&sched_ticks, 1);
-					t += gd->gd_schedclock.periodic;
+			/* Increment the global sched_ticks */
+			t = schedticks_next_clock;
+			now = sys_cputimer->count();
+			for (;;) {
+				if ((int)(now - t) >= 0) {
+					if (atomic_cmpset_int(&schedticks_next_clock, t,
+					    t + gd->gd_schedclock.periodic)) {
+						atomic_add_int(&sched_ticks, 1);
+						t += gd->gd_schedclock.periodic;
+					} else {
+						break;
+					}
 				} else {
 					break;
 				}
-			} else {
-				break;
 			}
 		}
 	}
 
-	cnt = systimer_skip_periodic(&gd->gd_statclock, 0);
-	if (cnt > 0) {
-		thread_t td;
-		int bump;
+	if (mask & 4) {
+		cnt = systimer_skip_periodic(&gd->gd_statclock, 0);
+		if (cnt > 0) {
+			thread_t td;
+			int bump;
 
-		gd->statint.gd_statcv += cnt * gd->gd_statclock.periodic;
-		bump = (sys_cputimer->freq64_usec * (cnt * gd->gd_statclock.periodic)) >> 32;
-		if (bump < 0)
-			bump = 0;
-		if (bump > 1000000)
-			bump = 1000000;
-		td = curthread;
-		td->td_sticks += bump;
-		/*
-		 * We want to count token contention as
-		 * system time.  When token contention occurs
-		 * the cpu may only be outside its critical
-		 * section while switching through the idle
-		 * thread.  In this situation, various flags
-		 * will be set in gd_reqflags.
-		 */
-		cpu_time.cp_idle += bump;
+			gd->statint.gd_statcv += cnt * gd->gd_statclock.periodic;
+			bump = (sys_cputimer->freq64_usec * (cnt * gd->gd_statclock.periodic)) >> 32;
+			if (bump < 0)
+				bump = 0;
+			if (bump > 1000000)
+				bump = 1000000;
+			td = curthread;
+			td->td_sticks += bump;
+			/*
+			 * We want to count token contention as
+			 * system time.  When token contention occurs
+			 * the cpu may only be outside its critical
+			 * section while switching through the idle
+			 * thread.  In this situation, various flags
+			 * will be set in gd_reqflags.
+			 */
+			cpu_time.cp_idle += bump;
+		}
 	}
 }
 
