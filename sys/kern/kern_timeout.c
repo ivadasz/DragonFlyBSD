@@ -115,6 +115,7 @@ struct periodic_info {
 	struct periodic_call_tailq calls;
 	struct periodic_call_tailq calls_slow;
 	struct periodic_call_tailq calls_fast;
+	int running;
 };
 
 static struct periodic_info periodic_percpu[MAXCPU];
@@ -1013,18 +1014,23 @@ periodic_runq(struct periodic_call_tailq *q)
 }
 
 static void
-schedule_periodic_callout(struct periodic_info *info)
+schedule_periodic_callout(struct periodic_info *info, int step)
 {
 	int val, t = ticks;
 
-	while (info->next_fast_tick <= t) {
-		info->next_fast_tick += hz/5;
-	}
-	while (info->next_slow_tick <= t) {
-		info->next_slow_tick += hz/2;
-	}
-	while (info->next_hztick <= t) {
-		info->next_hztick += hz;
+	if (info->running)
+		return;
+
+	if (step) {
+		while (info->next_fast_tick <= t) {
+			info->next_fast_tick += hz/5;
+		}
+		while (info->next_slow_tick <= t) {
+			info->next_slow_tick += hz/2;
+		}
+		while (info->next_hztick <= t) {
+			info->next_hztick += hz;
+		}
 	}
 
 	val = imax(info->next_hztick,
@@ -1053,6 +1059,7 @@ handle_periodic_callout(void *arg)
 		return;
 	}
 
+	info->running = 1;
 	t = ticks;
 	if (info->next_hztick <= t) {
 		anyto = 1;
@@ -1066,8 +1073,9 @@ handle_periodic_callout(void *arg)
 		anyto = 1;
 		periodic_runq(&info->calls_fast);
 	}
+	info->running = 0;
 
-	schedule_periodic_callout(info);
+	schedule_periodic_callout(info, 1);
 	crit_exit();
 }
 
@@ -1106,13 +1114,14 @@ callout_start_periodic(struct periodic_call *c, int to_ticks,
 		info->next_fast_tick = t + hz/5;
 	}
 	TAILQ_INSERT_HEAD(q, c, tqe);
-	schedule_periodic_callout(info);
+	schedule_periodic_callout(info, 1);
 	crit_exit();
 }
 
 static void
 _callout_stop_periodic(struct periodic_call *c)
 {
+	struct periodic_info *info;
 	struct periodic_call_tailq *q;
 	int cpu;
 
@@ -1134,6 +1143,9 @@ _callout_stop_periodic(struct periodic_call *c)
 	c->c_arg = NULL;
 	c->c_func = NULL;
 	c->timo = 0;
+	info = &periodic_percpu[mycpuid];
+	schedule_periodic_callout(info, 0);
+
 	crit_exit();
 }
 
