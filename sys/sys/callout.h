@@ -227,6 +227,18 @@ void	callout_start_periodic (struct periodic_call *, int,
 	    void (*)(void *), void *);
 void	callout_stop_periodic (struct periodic_call *);
 
+struct coarse_callout {
+	struct periodic_call periodic;
+	void *arg;
+	void (*func) (void *);	/* function to call */
+	int timo;
+};
+
+void	callout_init_coarse (struct coarse_callout *);
+void	callout_start_coarse (struct coarse_callout *, int,
+	    void (*)(void *), void *);
+void	callout_stop_coarse (struct coarse_callout *);
+
 #endif
 
 #endif /* _SYS_CALLOUT_H_ */
