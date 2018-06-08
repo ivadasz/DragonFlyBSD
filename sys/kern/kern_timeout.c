@@ -1165,6 +1165,8 @@ callout_stop_periodic(struct periodic_call *c)
 		lwkt_migratecpu(target);
 		_callout_stop_periodic(c);
 		lwkt_migratecpu(cpu);
+	} else {
+		crit_exit();
 	}
 }
 
@@ -1189,12 +1191,20 @@ handle_coarse_callout(void *arg)
 			void *a = c->arg;
 			void (*ftn)(void *) = c->func;
 
+			c->running = 1;
 			callout_stop_periodic(&c->periodic);
 			c->func = NULL;
 			c->arg = NULL;
 			crit_exit();
 			ftn(a);
+			crit_enter();
+			c->running = 0;
+			if (c->waiting) {
+				wakeup(c);
+				c->waiting = 0;
+			}
 		}
+		crit_exit();
 	} else {
 		callout_stop_periodic(&c->periodic);
 		c->func = NULL;
@@ -1223,5 +1233,17 @@ callout_stop_coarse(struct coarse_callout *c)
 	c->timo = 0;
 	c->func = NULL;
 	c->arg = NULL;
+	crit_exit();
+}
+
+void
+callout_stop_coarse_sync(struct coarse_callout *c)
+{
+	crit_enter();
+	callout_stop_coarse(c);
+	while (c->running) {
+		c->waiting = 1;
+		tsleep(c, 0, "coarsech", hz);
+	}
 	crit_exit();
 }

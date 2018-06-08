@@ -232,12 +232,15 @@ struct coarse_callout {
 	void *arg;
 	void (*func) (void *);	/* function to call */
 	int timo;
+	int running;
+	int waiting;
 };
 
 void	callout_init_coarse (struct coarse_callout *);
 void	callout_start_coarse (struct coarse_callout *, int,
 	    void (*)(void *), void *);
 void	callout_stop_coarse (struct coarse_callout *);
+void	callout_stop_coarse_sync (struct coarse_callout *);
 
 #endif
 
