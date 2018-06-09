@@ -1344,7 +1344,18 @@ sysctl_hdac_pindump(SYSCTL_HANDLER_ARGS)
 
 	/* XXX: Temporary. For debugging. */
 	if (val == 100) {
-		hdac_suspend(dev);
+		bus_generic_suspend(dev);
+		hdac_lock(sc);
+		HDA_BOOTHVERBOSE(
+			device_printf(dev, "Reset controller...\n");
+		);
+		callout_stop(&sc->poll_callout);
+		hdac_unlock(sc);
+		callout_drain(&sc->poll_callout);
+		taskqueue_drain(taskqueue_thread[mycpuid], &sc->unsolq_task);
+		HDA_BOOTHVERBOSE(
+			device_printf(dev, "Suspend done\n");
+		);
 		return (0);
 	} else if (val == 101) {
 		hdac_resume(dev);
