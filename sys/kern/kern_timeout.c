@@ -308,7 +308,7 @@ softclock_handler(void *arg)
 	softclock_pcpu_t sc;
 	struct callout *c;
 	struct callout_tailq *bucket;
-	struct callout slotimer;
+	struct coarse_callout slotimer;
 	int mpsafe = 1;
 	int flags;
 
@@ -316,8 +316,8 @@ softclock_handler(void *arg)
 	 * Setup pcpu slow clocks which we want to run from the callout
 	 * thread.
 	 */
-	callout_init_mp(&slotimer);
-	callout_reset(&slotimer, hz * 10, slotimer_callback, &slotimer);
+	callout_init_coarse(&slotimer);
+	callout_start_coarse(&slotimer, 10, slotimer_callback, &slotimer);
 
 	/*
 	 * Run the callout thread at the same priority as other kernel
@@ -478,10 +478,10 @@ loop:
 void
 slotimer_callback(void *arg)
 {
-	struct callout *c = arg;
+	struct coarse_callout *c = arg;
 
 	slab_cleanup();
-	callout_reset(c, hz * 10, slotimer_callback, c);
+	callout_start_coarse(c, 10, slotimer_callback, c);
 }
 
 /*
