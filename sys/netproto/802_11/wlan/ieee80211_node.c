@@ -115,11 +115,11 @@ ieee80211_node_attach(struct ieee80211com *ic)
 	ieee80211_node_table_init(ic, &ic->ic_sta, "station",
 		IEEE80211_INACT_INIT, ic->ic_max_keyix);
 #if defined(__DragonFly__)
-	callout_init_mp(&ic->ic_inact);
+	callout_init_coarse(&ic->ic_inact);
 #else
 	callout_init(&ic->ic_inact, 1);
 #endif
-	callout_reset(&ic->ic_inact, IEEE80211_INACT_WAIT*hz,
+	callout_start_coarse(&ic->ic_inact, IEEE80211_INACT_WAIT,
 		ieee80211_node_timeout, ic);
 
 	ic->ic_node_alloc = node_alloc;
@@ -142,7 +142,7 @@ void
 ieee80211_node_detach(struct ieee80211com *ic)
 {
 
-	callout_drain(&ic->ic_inact);
+	callout_stop_coarse_sync(&ic->ic_inact);
 	ieee80211_node_table_cleanup(&ic->ic_sta);
 	ieee80211_ageq_cleanup(&ic->ic_stageq);
 }
@@ -2259,7 +2259,7 @@ ieee80211_node_timeout(void *arg)
 		ieee80211_ht_timeout(ic);
 		IEEE80211_UNLOCK(ic);
 	}
-	callout_reset(&ic->ic_inact, IEEE80211_INACT_WAIT*hz,
+	callout_start_coarse(&ic->ic_inact, IEEE80211_INACT_WAIT,
 		ieee80211_node_timeout, ic);
 }
 
