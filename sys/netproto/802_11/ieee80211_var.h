@@ -128,7 +128,11 @@ struct ieee80211com {
 	int			ic_headroom;	/* driver tx headroom needs */
 	enum ieee80211_phytype	ic_phytype;	/* XXX wrong for multi-mode */
 	enum ieee80211_opmode	ic_opmode;	/* operation mode */
+#ifdef __DragonFly__
+	struct coarse_callout	ic_inact;	/* inactivity processing */
+#else
 	struct callout		ic_inact;	/* inactivity processing */
+#endif
 	struct taskqueue	*ic_tq;		/* deferred state thread */
 	struct task		ic_parent_task;	/* deferred parent processing */
 	struct task		ic_promisc_task;/* deferred promisc update */
