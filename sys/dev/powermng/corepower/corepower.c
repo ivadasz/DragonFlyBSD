@@ -72,6 +72,8 @@ struct corepower_softc {
 	struct corepower_sensor	sc_pp0_sens;
 	struct corepower_sensor	sc_pp1_sens;
 
+	uint64_t		sc_last_tsc;
+
 	struct ksensordev	sc_sensordev;
 	struct sensor_task	*sc_senstask;
 };
@@ -89,7 +91,8 @@ static void	corepower_refresh(void *arg);
 static void	corepower_sens_init(struct corepower_sensor *sens,
 				    char *desc, u_int msr, int cpu);
 static void	corepower_sens_update(struct corepower_softc *sc,
-				      struct corepower_sensor *sens);
+				      struct corepower_sensor *sens,
+				      uint64_t d);
 static int	corepower_try(u_int msr, char *name);
 
 static device_method_t corepower_methods[] = {
@@ -274,6 +277,8 @@ corepower_attach(device_t dev)
 	sc->sc_joule_unit = (1 << energy_units);
 	sc->sc_second_unit = (1 << time_units);
 
+	sc->sc_last_tsc = rdtsc();
+
 	/*
 	 * Add hw.sensors.cpu_nodeN MIB.
 	 */
@@ -354,15 +359,19 @@ static void
 corepower_refresh(void *arg)
 {
 	struct corepower_softc *sc = (struct corepower_softc *)arg;
+	uint64_t val = rdtsc();
+	uint64_t d = val - sc->sc_last_tsc;
 
 	if (sc->sc_have_sens & 1)
-		corepower_sens_update(sc, &sc->sc_pkg_sens);
+		corepower_sens_update(sc, &sc->sc_pkg_sens, d);
 	if (sc->sc_have_sens & 2)
-		corepower_sens_update(sc, &sc->sc_dram_sens);
+		corepower_sens_update(sc, &sc->sc_dram_sens, d);
 	if (sc->sc_have_sens & 4)
-		corepower_sens_update(sc, &sc->sc_pp0_sens);
+		corepower_sens_update(sc, &sc->sc_pp0_sens, d);
 	if (sc->sc_have_sens & 8)
-		corepower_sens_update(sc, &sc->sc_pp1_sens);
+		corepower_sens_update(sc, &sc->sc_pp1_sens, d);
+
+	sc->sc_last_tsc = val;
 }
 
 static void
@@ -378,7 +387,7 @@ corepower_sens_init(struct corepower_sensor *sens, char *desc, u_int msr,
 
 static void
 corepower_sens_update(struct corepower_softc *sc,
-    struct corepower_sensor *sens)
+    struct corepower_sensor *sens, uint64_t d)
 {
 	uint64_t a, res;
 
@@ -388,6 +397,7 @@ corepower_sens_update(struct corepower_softc *sc,
 	} else {
 		res = a - sens->energy;
 	}
+	res = (res * tsc_frequency) / d;
 	sens->energy = a;
 	sens->sensor.value = corepower_energy_to_uwatts(sc, res, 1);
 }
