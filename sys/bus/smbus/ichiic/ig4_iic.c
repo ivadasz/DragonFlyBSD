@@ -218,9 +218,8 @@ wait_status(ig4iic_softc_t *sc, uint32_t status)
 			    atomic_cmpset_int(&sc->intr_await, 0, 1)) {
 				if (CPUMASK_TESTBIT(smp_idleinvl_mask,
 				    sc->intr_cpu)) {
-					lwkt_send_ipiq(
-					    globaldata_find(sc->intr_cpu),
-					    cxio_wait, sc);
+					lwkt_send_ipiq(sc->intr_gd, cxio_wait,
+					    sc);
 				} else {
 					cpu_mwait_cx_io_wait(sc->intr_cpu);
 				}
@@ -230,8 +229,8 @@ wait_status(ig4iic_softc_t *sc, uint32_t status)
 			    atomic_cmpset_int(&sc->intr_await, 1, 0)) {
 				if (CPUMASK_TESTBIT(smp_idleinvl_mask,
 				    sc->intr_cpu)) {
-					lwkt_send_ipiq(globaldata_find(
-					    sc->intr_cpu), cxio_done, sc);
+					lwkt_send_ipiq(sc->intr_gd, cxio_done,
+					    sc);
 				} else {
 					cpu_mwait_cx_io_done(sc->intr_cpu);
 				}
@@ -594,7 +593,7 @@ ig4iic_attach(ig4iic_softc_t *sc)
 	}
 #if 1
 	v = reg_read(sc, IG4_REG_SS_SCL_HCNT);
-	kprintf("SS_SCL_HCNT=%08x", v);
+	kprintf(" SS_SCL_HCNT=%08x", v);
 	v = reg_read(sc, IG4_REG_SS_SCL_LCNT);
 	kprintf(" LCNT=%08x", v);
 	v = reg_read(sc, IG4_REG_FS_SCL_HCNT);
@@ -638,6 +637,7 @@ ig4iic_attach(ig4iic_softc_t *sc)
 	 * When ig4 is attached via ACPI, (child) devices should access the
 	 * smbus via I2cSerialBus ACPI resources instead.
 	 */
+#if 0
 	if (strcmp("acpi", device_get_name(device_get_parent(sc->dev))) != 0) {
 		sc->smb = device_add_child(sc->dev, "smbus", -1);
 		if (sc->smb == NULL) {
@@ -646,6 +646,7 @@ ig4iic_attach(ig4iic_softc_t *sc)
 			goto done;
 		}
 	}
+#endif
 
 	sc->acpismb = device_add_child(sc->dev, "smbacpi", -1);
 	if (sc->acpismb == NULL) {
@@ -677,6 +678,7 @@ ig4iic_attach(ig4iic_softc_t *sc)
 		goto done;
 	}
 	sc->intr_cpu = rman_get_cpuid(sc->intr_res);
+	sc->intr_gd = globaldata_find(sc->intr_cpu),
 
 	/* Attach us to the smbus */
 	lockmgr(&sc->lk, LK_RELEASE);
@@ -734,6 +736,7 @@ ig4iic_detach(ig4iic_softc_t *sc)
 	error = 0;
 done:
 	lockmgr(&sc->lk, LK_RELEASE);
+	tsleep(&error, 0, "ig4wait", hz);
 	return error;
 }
 
