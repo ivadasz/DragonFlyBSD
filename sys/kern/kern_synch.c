@@ -789,6 +789,295 @@ resume:
 	return (error);
 }
 
+int
+tsleep_coarse(const volatile void *ident, int flags, const char *wmesg,
+	      int timo)
+{
+	struct thread *td = curthread;
+	struct lwp *lp = td->td_lwp;
+	struct proc *p = td->td_proc;		/* may be NULL */
+	globaldata_t gd;
+	int sig;
+	int catch;
+	int error;
+	int oldpri;
+	struct coarse_callout thandle;
+
+	/*
+	 * Currently a severe hack.  Make sure any delayed wakeups
+	 * are flushed before we sleep or we might deadlock on whatever
+	 * event we are sleeping on.
+	 */
+	if (td->td_flags & TDF_DELAYED_WAKEUP)
+		wakeup_end_delayed();
+
+	/*
+	 * NOTE: removed KTRPOINT, it could cause races due to blocking
+	 * even in stable.  Just scrap it for now.
+	 */
+	if (!tsleep_crypto_dump && (tsleep_now_works == 0 || panicstr)) {
+		/*
+		 * After a panic, or before we actually have an operational
+		 * softclock, just give interrupts a chance, then just return;
+		 *
+		 * don't run any other procs or panic below,
+		 * in case this is the idle process and already asleep.
+		 */
+		splz();
+		oldpri = td->td_pri;
+		lwkt_setpri_self(safepri);
+		lwkt_switch();
+		lwkt_setpri_self(oldpri);
+		return (0);
+	}
+	logtsleep2(tsleep_beg, ident);
+	gd = td->td_gd;
+	KKASSERT(td != &gd->gd_idlethread);	/* you must be kidding! */
+	td->td_wakefromcpu = -1;		/* overwritten by _wakeup */
+
+	/*
+	 * NOTE: all of this occurs on the current cpu, including any
+	 * callout-based wakeups, so a critical section is a sufficient
+	 * interlock.
+	 *
+	 * The entire sequence through to where we actually sleep must
+	 * run without breaking the critical section.
+	 */
+	catch = flags & PCATCH;
+	error = 0;
+	sig = 0;
+
+	crit_enter_quick(td);
+
+	KASSERT(ident != NULL, ("tsleep: no ident"));
+	KASSERT(lp == NULL ||
+		lp->lwp_stat == LSRUN ||	/* Obvious */
+		lp->lwp_stat == LSSTOP,		/* Set in tstop */
+		("tsleep %p %s %d",
+			ident, wmesg, lp->lwp_stat));
+
+	/*
+	 * We interlock the sleep queue if the caller has not already done
+	 * it for us.  This must be done before we potentially acquire any
+	 * tokens or we can loose the wakeup.
+	 */
+	if ((flags & PINTERLOCKED) == 0) {
+		_tsleep_interlock(gd, ident, flags);
+	}
+
+	/*
+	 * Setup for the current process (if this is a process).  We must
+	 * interlock with lwp_token to avoid remote wakeup races via
+	 * setrunnable()
+	 */
+	if (lp) {
+		lwkt_gettoken(&lp->lwp_token);
+
+		/*
+		 * If the umbrella process is in the SCORE state then
+		 * make sure that the thread is flagged going into a
+		 * normal sleep to allow the core dump to proceed, otherwise
+		 * the coredump can end up waiting forever.  If the normal
+		 * sleep is woken up, the thread will enter a stopped state
+		 * upon return to userland.
+		 *
+		 * We do not want to interrupt or cause a thread exist at
+		 * this juncture because that will mess-up the state the
+		 * coredump is trying to save.
+		 */
+		if (p->p_stat == SCORE &&
+		    (lp->lwp_mpflags & LWP_MP_WSTOP) == 0) {
+			atomic_set_int(&lp->lwp_mpflags, LWP_MP_WSTOP);
+			++p->p_nstopped;
+		}
+
+		/*
+		 * PCATCH requested.
+		 */
+		if (catch) {
+			/*
+			 * Early termination if PCATCH was set and a
+			 * signal is pending, interlocked with the
+			 * critical section.
+			 *
+			 * Early termination only occurs when tsleep() is
+			 * entered while in a normal LSRUN state.
+			 */
+			if ((sig = CURSIG(lp)) != 0)
+				goto resume;
+
+			/*
+			 * Causes ksignal to wake us up if a signal is
+			 * received (interlocked with lp->lwp_token).
+			 */
+			lp->lwp_flags |= LWP_SINTR;
+		}
+	} else {
+		KKASSERT(p == NULL);
+	}
+
+	/*
+	 * Make sure the current process has been untangled from
+	 * the userland scheduler and initialize slptime to start
+	 * counting.
+	 *
+	 * NOTE: td->td_wakefromcpu is pre-set by the release function
+	 *	 for the dfly scheduler, and then adjusted by _wakeup()
+	 */
+	if (lp) {
+		p->p_usched->release_curproc(lp);
+		lp->lwp_slptime = 0;
+	}
+
+	/*
+	 * For PINTERLOCKED operation, TDF_TSLEEPQ might not be set if
+	 * a wakeup() was processed before the thread could go to sleep.
+	 *
+	 * If TDF_TSLEEPQ is set, make sure the ident matches the recorded
+	 * ident.  If it does not then the thread slept inbetween the
+	 * caller's initial tsleep_interlock() call and the caller's tsleep()
+	 * call.
+	 *
+	 * Extreme loads can cause the sending of an IPI (e.g. wakeup()'s)
+	 * to process incoming IPIs, thus draining incoming wakeups.
+	 */
+	if ((td->td_flags & TDF_TSLEEPQ) == 0) {
+		logtsleep2(ilockfail, ident);
+		goto resume;
+	} else if (td->td_wchan != ident ||
+		   td->td_wdomain != (flags & PDOMAIN_MASK)) {
+		logtsleep2(ilockfail, ident);
+		goto resume;
+	}
+
+	/*
+	 * scheduling is blocked while in a critical section.  Coincide
+	 * the descheduled-by-tsleep flag with the descheduling of the
+	 * lwkt.
+	 *
+	 * The timer callout is localized on our cpu and interlocked by
+	 * our critical section.
+	 */
+	lwkt_deschedule_self(td);
+	td->td_flags |= TDF_TSLEEP_DESCHEDULED;
+	td->td_wmesg = wmesg;
+
+	/*
+	 * Setup the timeout, if any.  The timeout is only operable while
+	 * the thread is flagged descheduled.
+	 */
+	KKASSERT((td->td_flags & TDF_TIMEOUT) == 0);
+	if (timo) {
+		callout_init_coarse(&thandle);
+		callout_start_coarse(&thandle, timo, endtsleep, td);
+	}
+
+	/*
+	 * Beddy bye bye.
+	 */
+	if (lp) {
+		/*
+		 * Ok, we are sleeping.  Place us in the SSLEEP state.
+		 */
+		KKASSERT((lp->lwp_mpflags & LWP_MP_ONRUNQ) == 0);
+
+		/*
+		 * tstop() sets LSSTOP, so don't fiddle with that.
+		 */
+		if (lp->lwp_stat != LSSTOP)
+			lp->lwp_stat = LSSLEEP;
+		lp->lwp_ru.ru_nvcsw++;
+		p->p_usched->uload_update(lp);
+		lwkt_switch();
+
+		/*
+		 * And when we are woken up, put us back in LSRUN.  If we
+		 * slept for over a second, recalculate our estcpu.
+		 */
+		lp->lwp_stat = LSRUN;
+		if (lp->lwp_slptime) {
+			p->p_usched->uload_update(lp);
+			p->p_usched->recalculate(lp);
+		}
+		lp->lwp_slptime = 0;
+	} else {
+		lwkt_switch();
+	}
+
+	/* 
+	 * Make sure we haven't switched cpus while we were asleep.  It's
+	 * not supposed to happen.  Cleanup our temporary flags.
+	 */
+	KKASSERT(gd == td->td_gd);
+
+	/*
+	 * Cleanup the timeout.  If the timeout has already occured thandle
+	 * has already been stopped, otherwise stop thandle.  If the timeout
+	 * is running (the callout thread must be blocked trying to get
+	 * lwp_token) then wait for us to get scheduled.
+	 */
+	if (timo) {
+		while (td->td_flags & TDF_TIMEOUT_RUNNING) {
+			/* else we won't get rescheduled! */
+			if (lp->lwp_stat != LSSTOP)
+				lp->lwp_stat = LSSLEEP;
+			lwkt_deschedule_self(td);
+			td->td_wmesg = "tsrace";
+			lwkt_switch();
+			kprintf("td %p %s: timeout race\n", td, td->td_comm);
+		}
+		if (td->td_flags & TDF_TIMEOUT) {
+			td->td_flags &= ~TDF_TIMEOUT;
+			error = EWOULDBLOCK;
+		} else {
+			/* does not block when on same cpu */
+			callout_stop_coarse(&thandle);
+		}
+	}
+	td->td_flags &= ~TDF_TSLEEP_DESCHEDULED;
+
+	/*
+	 * Make sure we have been removed from the sleepq.  In most
+	 * cases this will have been done for us already but it is
+	 * possible for a scheduling IPI to be in-flight from a
+	 * previous tsleep/tsleep_interlock() or due to a straight-out
+	 * call to lwkt_schedule() (in the case of an interrupt thread),
+	 * causing a spurious wakeup.
+	 */
+	_tsleep_remove(td);
+	td->td_wmesg = NULL;
+
+	/*
+	 * Figure out the correct error return.  If interrupted by a
+	 * signal we want to return EINTR or ERESTART.  
+	 */
+resume:
+	if (lp) {
+		if (catch && error == 0) {
+			if (sig != 0 || (sig = CURSIG(lp))) {
+				if (SIGISMEMBER(p->p_sigacts->ps_sigintr, sig))
+					error = EINTR;
+				else
+					error = ERESTART;
+			}
+		}
+
+		lp->lwp_flags &= ~LWP_SINTR;
+
+		/*
+		 * Unconditionally set us to LSRUN on resume.  lwp_stat could
+		 * be in a weird state due to the goto resume, particularly
+		 * when tsleep() is called from tstop().
+		 */
+		lp->lwp_stat = LSRUN;
+		lwkt_reltoken(&lp->lwp_token);
+	}
+	logtsleep1(tsleep_end);
+	crit_exit_quick(td);
+
+	return (error);
+}
+
 /*
  * Interlocked spinlock sleep.  An exclusively held spinlock must
  * be passed to ssleep().  The function will atomically release the
@@ -824,6 +1113,21 @@ lksleep(const volatile void *ident, struct lock *lock, int flags,
 	_tsleep_interlock(gd, ident, flags);
 	lockmgr(lock, LK_RELEASE);
 	error = tsleep(ident, flags | PINTERLOCKED, wmesg, timo);
+	lockmgr(lock, LK_EXCLUSIVE);
+
+	return (error);
+}
+
+int
+lksleep_coarse(const volatile void *ident, struct lock *lock, int flags,
+	       const char *wmesg, int timo)
+{
+	globaldata_t gd = mycpu;
+	int error;
+
+	_tsleep_interlock(gd, ident, flags);
+	lockmgr(lock, LK_RELEASE);
+	error = tsleep_coarse(ident, flags | PINTERLOCKED, wmesg, timo);
 	lockmgr(lock, LK_EXCLUSIVE);
 
 	return (error);

@@ -360,9 +360,12 @@ extern struct globaldata	*panic_cpu_gd;
  * less often.
  */
 int	tsleep(const volatile void *, int, const char *, int);
+int	tsleep_coarse(const volatile void *, int, const char *, int);
 int	ssleep(const volatile void *, struct spinlock *, int, const char *, int)
 	    __nonnull(1);
 int	lksleep(const volatile void *, struct lock *, int, const char *, int)
+	    __nonnull(1);
+int	lksleep_coarse(const volatile void *, struct lock *, int, const char *, int)
 	    __nonnull(1);
 int	mtxsleep(const volatile void *, struct mtx *, int, const char *, int)
 	    __nonnull(1);
