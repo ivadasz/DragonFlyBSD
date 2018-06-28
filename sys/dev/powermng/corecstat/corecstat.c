@@ -226,6 +226,8 @@ corecstat_probe(device_t dev)
 		/* Skylake */
 		case 0x4e:
 		case 0x5e:
+		/* Kabylake/Coffeelake */
+		case 0x8e:
 			break;
 		default:
 			return (ENXIO);
@@ -308,6 +310,7 @@ corecstat_attach(device_t dev)
 			break;
 		case 0x45:	/* Haswell low-power CPUs */
 		case 0x3d:	/* Broadwell low-power CPUs */
+		case 0x8e:	/* Kabylake/Coffeelake CPUs */
 			/* PKG_C2, PKG_C3, PKG_C6, PKG_C7, PKG_C8, PKG_C9, PKG_C10 */
 			/* CORE_C3, CORE_C6, CORE_C7 */
 			sc->sc_version = 2;
