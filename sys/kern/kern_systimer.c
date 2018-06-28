@@ -401,17 +401,20 @@ systimer_skip_periodic(systimer_t info, int cnt)
 	if (cnt == 0) {
 		crit_enter();
 		if (info->skipping > 0) {
-			sysclock_t now;
+			sysclock_t now, a;
 			int i;
 
 			KKASSERT(info->skipping <= 99);
 			now = sys_cputimer->count();
 			ret = 0;
+			a = now + info->periodic;
 			/* XXX Compute directly instead of looping. */
 			for (i = 0; i < info->skipping; i++) {
-				if ((int)(now + (i + 1) * info->periodic - info->time) >= 0) {
+				if ((int)(a - info->time) >= 0) {
 					ret = info->skipping - i;
+					break;
 				}
+				a += info->periodic;
 			}
 			if (ret < info->skipping) {
 				systimer_del(info);
