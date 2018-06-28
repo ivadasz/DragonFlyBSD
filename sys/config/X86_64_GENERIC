@@ -31,7 +31,7 @@ options 	MSDOSFS			#MSDOS Filesystem
 options 	CD9660			#ISO 9660 Filesystem
 options 	PROCFS			#Process filesystem
 options 	SCSI_DELAY=5000		#Delay (in ms) before probing SCSI
-options		IFPOLL_ENABLE		# Support mixed interrupt-polling
+#options		IFPOLL_ENABLE		# Support mixed interrupt-polling
 					# handling of network device drivers
 options 	UCONSOLE		#Allow users to grab the console
 options 	KTRACE			#ktrace(1) support
@@ -137,10 +137,10 @@ device		mfip		# LSI MegaRAID SAS passthrough, requires CAM
 device		twe		# 3ware Escalade 7000/8000's
 
 # VirtIO support
-device		virtio		# VirtIO core
-device		virtio_blk	# VirtIO disk driver
-device		virtio_scsi	# VirtIO SCSI driver
-device		vtnet		# VirtIO network driver
+#device		virtio		# VirtIO core
+#device		virtio_blk	# VirtIO disk driver
+#device		virtio_scsi	# VirtIO SCSI driver
+#device		vtnet		# VirtIO network driver
 
 # VMware support
 device		vmx		# VMware VMXNET3 Ethernet
@@ -315,8 +315,8 @@ device		kue		# Kawasaki LSI USB ethernet
 # HID input support
 device		hidbus		# HID bus driver
 device		hidkbd		# Keyboard
-device		hidms		# Mouse
-device		uhid		# Userspace access
+#device		hidms		# Mouse
+#device		uhid		# Userspace access
 
 # FireWire support
 device		firewire	# FireWire bus code
@@ -334,8 +334,8 @@ device		aesni		# hardware crypto/RNG for AES-NI
 device		padlock		# hardware crypto/RNG for VIA C3/C7/Eden
 device		rdrand		# hardware RNG for RdRand
 
-device		gpio_acpi
-device		gpio_intel	# GPIO support for Intel SoCs
+#device		gpio_acpi
+#device		gpio_intel	# GPIO support for Intel SoCs
 #device		ichiic
 device		smbus		# Bus support, required for smb below.
-device		smbacpi
+#device		smbacpi
