@@ -78,6 +78,10 @@ SYSINIT(sched_setup, SI_SUB_KICK_SCHEDULER, SI_ORDER_FIRST, sched_setup, NULL);
 static void sched_dyninit (void *dummy);
 SYSINIT(sched_dyninit, SI_BOOT1_DYNALLOC, SI_ORDER_FIRST, sched_dyninit, NULL);
 
+extern int in_powersave_mode;
+
+static struct coarse_callout *coarse_ch;
+
 int	lbolt;
 void	*lbolt_syncer;
 int	ncpus;
@@ -1718,9 +1722,16 @@ loadav(void *arg)
 	 * random variation to avoid synchronisation with processes that
 	 * run at regular intervals.
 	 */
-	callout_reset(&gd->gd_loadav_callout,
-		      hz * 4 + (int)(krandom() % (hz * 2 + 1)),
-		      loadav, NULL);
+	/* XXX Make a hybrid callout variant, that can switch to coarse mode. */
+	if (in_powersave_mode) {
+		callout_start_coarse(&coarse_ch[mycpuid],
+		    (hz * 4 + (int)(krandom() % (hz * 2 + 1) + hz - 1) / hz),
+		    loadav, NULL);
+	} else {
+		callout_reset(&gd->gd_loadav_callout,
+			      hz * 4 + (int)(krandom() % (hz * 2 + 1)),
+			      loadav, NULL);
+	}
 }
 
 static int
@@ -1765,6 +1776,9 @@ sched_setup(void *dummy __unused)
 	kcollect_register(KCOLLECT_LOAD, "load", collect_load_callback,
 			  KCOLLECT_SCALE(KCOLLECT_LOAD_FORMAT, 0));
 
+	coarse_ch = kmalloc(ncpus * sizeof(struct coarse_callout), M_DEVBUF,
+	    M_WAITOK | M_ZERO);
+
 	/*
 	 * Kick off timeout driven events by calling first time.  We
 	 * split the work across available cpus to help scale it,
@@ -1775,6 +1789,7 @@ sched_setup(void *dummy __unused)
 		gd = globaldata_find(n);
 		lwkt_setcpu_self(gd);
 		callout_init_mp(&gd->gd_loadav_callout);
+		callout_init_coarse(&coarse_ch[n]);
 		callout_init_periodic(&gd->gd_schedcpu_callout);
 		callout_start_periodic(&gd->gd_schedcpu_callout, hz, schedcpu,
 		    NULL);
