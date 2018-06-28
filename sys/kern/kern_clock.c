@@ -132,7 +132,7 @@ static int sniff_target = -1;
 SYSCTL_INT(_kern, OID_AUTO, sniff_enable, CTLFLAG_RW, &sniff_enable, 0 , "");
 SYSCTL_INT(_kern, OID_AUTO, sniff_target, CTLFLAG_RW, &sniff_target, 0 , "");
 
-static int in_powersave_mode = 1;
+int in_powersave_mode = 1;
 SYSCTL_INT(_kern, OID_AUTO, powersave_mode, CTLFLAG_RW, &in_powersave_mode, 0 ,
     "Save power by reducing effective HZ clock on some cores.");
 
