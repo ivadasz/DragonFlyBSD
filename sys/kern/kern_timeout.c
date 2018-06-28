@@ -1115,6 +1115,7 @@ callout_start_periodic(struct periodic_call *c, int to_ticks,
 	    TAILQ_EMPTY(&info->calls_fast)) {
 		int t = ticks;
 
+		t = rounddown(t, hz);
 		info->next_hztick = t + hz;
 		info->next_slow_tick = t + hz/2;
 		info->next_fast_tick = t + hz/5;
