@@ -530,7 +530,7 @@ vnlru_proc(void)
 		ncachedandinactive = countcachedandinactivevnodes();
 		if (numvnodes <= maxvnodes * 9 / 10 ||
 		    ncachedandinactive <= maxvnodes * 5 / 10) {
-			tsleep(vnlruthread, 0, "vlruwt", hz);
+			tsleep_coarse(vnlruthread, 0, "vlruwt", 1);
 			continue;
 		}
 	}

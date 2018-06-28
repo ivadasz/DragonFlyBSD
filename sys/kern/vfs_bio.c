@@ -484,7 +484,7 @@ bd_wait(long totalspace)
 		atomic_add_int(&bd_wake_ary[mi], 1);
 		j = atomic_fetchadd_int(&bd_wake_index, 0);
 		if ((int)(i - j) >= 0)
-			tsleep(&bd_wake_ary[mi], PINTERLOCKED, "flstik", hz);
+			tsleep_coarse(&bd_wake_ary[mi], PINTERLOCKED, "flstik", 1);
 
 		totalspace = runningbufspace + dirtykvaspace - hidirtybufspace;
 	}
@@ -2287,7 +2287,7 @@ buf_daemon1(struct thread *td, int queue, int (*buf_limit_fn)(long),
 		 */
 		tsleep_interlock(bd_req, 0);
 		if (atomic_swap_int(bd_req, 0) == 0)
-			tsleep(bd_req, PINTERLOCKED, "psleep", hz);
+			tsleep_coarse(bd_req, PINTERLOCKED, "psleep", 1);
 	}
 	/* NOT REACHED */
 	/*kfree(marker, M_BIOBUF);*/

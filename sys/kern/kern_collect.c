@@ -166,7 +166,7 @@ kcollect_thread(void *dummy)
 		cpu_sfence();
 		++kcollect_index;
 		lockmgr(&kcollect_lock, LK_RELEASE);
-		tsleep(&dummy, 0, "sleep", hz * KCOLLECT_INTERVAL);
+		tsleep_coarse(&dummy, 0, "sleep", KCOLLECT_INTERVAL);
 	}
 }
 

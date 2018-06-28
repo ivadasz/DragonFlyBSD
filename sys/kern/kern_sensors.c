@@ -312,8 +312,9 @@ sensor_task_thread(void *xthr)
 
 		while ((nst = TAILQ_FIRST(&thr->list))->nextrun >
 		    (now = time_uptime)) {
-			lksleep(&thr->list, &thr->lock, 0,
-			    "timeout", (nst->nextrun - now) * hz);
+			/* XXX Use normal lksleep, unless in powersave mode. */
+			lksleep_coarse(&thr->list, &thr->lock, 0,
+			    "timeout", nst->nextrun - now);
 		}
 
 		while ((st = nst) != NULL) {
