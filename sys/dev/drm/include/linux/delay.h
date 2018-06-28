@@ -30,22 +30,28 @@
 #include <linux/jiffies.h>
 #include <sys/systm.h>
 #include <sys/systimer.h>
+#include <sys/thread2.h>
 
 static void
 msleep_wakeup(systimer_t info, int in_ipi, struct intrframe *frame)
 {
-	wakeup(info);
+	lwkt_schedule(info->data);
 }
 
 static inline void msleep(unsigned int msecs)
 {
 	static int dummy;
+
 	if (msecs < (1000+hz-1)/hz) {
+		thread_t td = curthread;
 		struct systimer info;
 
-		tsleep_interlock(&info, 0);
-		systimer_init_oneshot(&info, msleep_wakeup, &info, msecs*1000);
-		tsleep(&info, PINTERLOCKED, "mslp", 0);
+		crit_enter_quick(td);
+		systimer_init_oneshot(&info, msleep_wakeup, td, msecs*1000);
+		lwkt_deschedule_self(td);
+		crit_exit_quick(td);
+		lwkt_switch();
+		systimer_del(&info);
 	} else {
 		int delay = MAX(msecs*hz/1000, 1);
 
@@ -69,10 +75,27 @@ static inline void ndelay(unsigned long x)
 static __inline void
 usleep_range(unsigned long min, unsigned long max)
 {
-	if (max > min)
-		DELAY((max + min) / 2);
-	else
-		DELAY(min);
+	if (min < 20) {
+		if (max > min)
+			DELAY((max + min) / 2);
+		else
+			DELAY(min);
+	} else {
+		thread_t td = curthread;
+		struct systimer info;
+		unsigned long t = max > min ? ((max + min)/2) : min;
+
+		if (t <= 100)
+			cpu_mwait_cx_io_wait(mycpuid);
+		crit_enter_quick(td);
+		systimer_init_oneshot(&info, msleep_wakeup, td, t);
+		lwkt_deschedule_self(td);
+		crit_exit_quick(td);
+		lwkt_switch();
+		systimer_del(&info);
+		if (t <= 100)
+			cpu_mwait_cx_io_done(mycpuid);
+	}
 }
 
 #endif	/* _LINUX_DELAY_H_ */
