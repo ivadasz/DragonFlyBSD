@@ -172,7 +172,7 @@ static void	arp_reply_msghandler(netmsg_t);
 
 struct arp_pcpu_data {
 	LIST_HEAD(, llinfo_arp) llinfo_list;
-	struct callout		timer_ch;
+	struct coarse_callout	timer_ch;
 	struct netmsg_base	timer_nmsg;
 };
 
@@ -198,7 +198,8 @@ arptimer_dispatch(netmsg_t nmsg)
 		if (la->la_rt->rt_expire && la->la_rt->rt_expire <= time_uptime)
 			arptfree(la);
 	}
-	callout_reset(&ad->timer_ch, arpt_prune * hz, arptimer, &ad->timer_nmsg);
+	callout_start_coarse(&ad->timer_ch, arpt_prune, arptimer,
+	    &ad->timer_nmsg);
 }
 
 static void
@@ -1371,14 +1372,14 @@ arp_init_dispatch(netmsg_t nm)
 	ad = kmalloc(sizeof(*ad), M_ARP, M_WAITOK | M_ZERO);
 
 	LIST_INIT(&ad->llinfo_list);
-	callout_init_mp(&ad->timer_ch);
+	callout_init_coarse(&ad->timer_ch);
 	netmsg_init(&ad->timer_nmsg, NULL, &netisr_adone_rport,
 	    MSGF_PRIORITY, arptimer_dispatch);
 	ad->timer_nmsg.lmsg.u.ms_resultp = ad;
 
 	arp_data[mycpuid] = ad;
 
-	callout_reset(&ad->timer_ch, hz, arptimer, &ad->timer_nmsg);
+	callout_start_coarse(&ad->timer_ch, 1, arptimer, &ad->timer_nmsg);
 
 	netisr_forwardmsg(&nm->base, mycpuid + 1);
 }
