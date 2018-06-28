@@ -127,6 +127,7 @@ struct usched_dfly_pcpu {
 	int		cpuid;
 	cpumask_t	cpumask;
 	cpu_node_t	*cpunode;
+	sysclock_t	last_rebalance;
 } __cachealign;
 
 /*
@@ -900,14 +901,16 @@ dfly_schedulerclock(struct lwp *lp, sysclock_t period, sysclock_t cpstamp)
 	 * if applicable, migrate to where these threads are.
 	 */
 	if ((usched_dfly_features & 0x04) &&
-	    ((u_int)sched_ticks & 7) == 0 &&
-	    (u_int)sched_ticks / 8 % ncpus == gd->gd_cpuid) {
+	    ((((u_int)sched_ticks & 7) == 0 &&
+	      (u_int)sched_ticks / 8 % ncpus == gd->gd_cpuid) ||
+	     (int)(sched_ticks - dd->last_rebalance) > 8 * ncpus)) {
 		/*
 		 * Our cpu is up.
 		 */
 		struct lwp *nlp;
 		dfly_pcpu_t rdd;
 
+		dd->last_rebalance = sched_ticks;
 		rdd = dfly_choose_worst_queue(dd);
 		if (rdd) {
 			spin_lock(&dd->spin);
@@ -1290,7 +1293,7 @@ int
 dfly_schedisidle(void)
 {
 	globaldata_t gd = mycpu;
-	int cnt = 31;
+	int cnt = 63;
 
 	if (usched_dfly_features & 0x04) {
 		int curticks = sched_ticks;

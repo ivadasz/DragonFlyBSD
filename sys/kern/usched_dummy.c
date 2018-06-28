@@ -350,7 +350,7 @@ static
 int
 dummy_schedisidle(void)
 {
-	return 31;
+	return 63;
 }
 
 /*

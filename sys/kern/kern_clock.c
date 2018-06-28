@@ -726,7 +726,7 @@ try_hardclock_skip(struct globaldata *gd)
 		if ((int)(info->time - now - (info->periodic / 5)) < 0)
 			return 0;
 
-		cnt = callout_can_skip(gd, 63);
+		cnt = callout_can_skip(gd, 99);
 		if (cnt == 0)
 			return 0;
 
@@ -735,7 +735,7 @@ try_hardclock_skip(struct globaldata *gd)
 
 		systimer_skip_periodic(info, cnt);
 	} else {
-		cnt = callout_can_skip(gd, 63);
+		cnt = callout_can_skip(gd, 99);
 		if (cnt == 0)
 			return 0;
 
