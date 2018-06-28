@@ -455,7 +455,7 @@ syncer_thread(void *_ctx)
 		 * filesystem activity.
 		 */
 		if (time_uptime == starttime)
-			tsleep(ctx, 0, "syncer", hz);
+			tsleep_coarse(ctx, 0, "syncer", 1);
 	}
 
 	/*
