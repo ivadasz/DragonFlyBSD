@@ -39,6 +39,10 @@
 #include <linux/vga_switcheroo.h>
 #include <drm/drm_crtc_helper.h>
 
+int wait_for_spin_tries = 50;
+SYSCTL_INT(_hw_drm, OID_AUTO, spin_tries, CTLFLAG_RW, &wait_for_spin_tries, 0,
+    "wait_for spinning attempts");
+
 static struct drm_driver driver;
 
 #define GEN_DEFAULT_PIPEOFFSETS \

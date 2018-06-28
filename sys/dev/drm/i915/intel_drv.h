@@ -38,6 +38,8 @@
 #include <drm/drm_rect.h>
 #include <drm/drm_atomic.h>
 
+extern int wait_for_spin_tries;
+
 /**
  * _wait_for - magic (register) wait macro
  *
@@ -53,17 +55,34 @@
 #define _wait_for(COND, US, W) ({ \
 	unsigned long timeout__ = jiffies + usecs_to_jiffies(US) + 1;	\
 	int ret__ = 0;							\
+	int cnt__ = 0;							\
 	while (!(COND)) {						\
 		if (time_after(jiffies, timeout__)) {			\
 			if (!(COND))					\
 				ret__ = -ETIMEDOUT;			\
 			break;						\
 		}							\
-		if ((W) && drm_can_sleep()) {				\
-			usleep_range((W), (W)*2);			\
+		if ((W) > 100) {					\
+			if (cnt__ > wait_for_spin_tries + 30) {		\
+				usleep_range(200, 200);			\
+			} else if (cnt__ > wait_for_spin_tries + 25) {	\
+				usleep_range(100, 100);			\
+			} else if (cnt__ > wait_for_spin_tries + 20) {	\
+				usleep_range(30, 30);			\
+			} else if (cnt__ > wait_for_spin_tries + 10) {	\
+				lwkt_yield();				\
+			} else if (cnt__ > wait_for_spin_tries) {	\
+				DELAY(1);				\
+			} else {					\
+				cpu_pause();				\
+			}						\
 		} else {						\
-			cpu_pause();					\
+			if (cnt__ > wait_for_spin_tries)		\
+				DELAY(1);				\
+			else						\
+				cpu_pause();				\
 		}							\
+		cnt__++;						\
 	}								\
 	ret__;								\
 })
