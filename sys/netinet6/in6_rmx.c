@@ -106,7 +106,7 @@
 #include <netinet/tcp_var.h>
 
 struct in6_rttimo_ctx {
-	struct callout		timo_ch;
+	struct coarse_callout	timo_ch;
 	struct netmsg_base	timo_nmsg;
 	struct radix_node_head	*timo_rnh;
 } __cachealign;
@@ -414,7 +414,7 @@ in6_rtqtimo_dispatch(netmsg_t nmsg)
 		atv.tv_sec = rtq_timeout;
 		arg.nextstop = time_uptime + atv.tv_sec;
 	}
-	callout_reset(&ctx->timo_ch, tvtohz_high(&atv), in6_rtqtimo, NULL);
+	callout_start_coarse(&ctx->timo_ch, atv.tv_sec, in6_rtqtimo, NULL);
 }
 
 /*
@@ -490,7 +490,7 @@ in6_mtutimo_dispatch(netmsg_t nmsg)
 		atv.tv_sec = rtq_timeout;
 		arg.nextstop = time_uptime + atv.tv_sec;
 	}
-	callout_reset(&ctx->timo_ch, tvtohz_high(&atv), in6_mtutimo, NULL);
+	callout_start_coarse(&ctx->timo_ch, atv.tv_sec, in6_mtutimo, NULL);
 }
 
 #if 0
@@ -533,13 +533,13 @@ in6_inithead(void **head, int off)
 
 	ctx = &in6_rtqtimo_ctx[cpuid];
 	ctx->timo_rnh = rnh;
-	callout_init_mp(&ctx->timo_ch);
+	callout_init_coarse(&ctx->timo_ch);
 	netmsg_init(&ctx->timo_nmsg, NULL, &netisr_adone_rport, MSGF_PRIORITY,
 	    in6_rtqtimo_dispatch);
 
 	ctx = &in6_mtutimo_ctx[cpuid];
 	ctx->timo_rnh = rnh;
-	callout_init_mp(&ctx->timo_ch);
+	callout_init_coarse(&ctx->timo_ch);
 	netmsg_init(&ctx->timo_nmsg, NULL, &netisr_adone_rport, MSGF_PRIORITY,
 	    in6_mtutimo_dispatch);
 
