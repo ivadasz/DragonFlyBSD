@@ -51,7 +51,6 @@ struct work_struct {
 struct delayed_work {
 	struct work_struct	work;
 	struct callout		timer;
-	struct coarse_callout	coarse_timer;
 };
 
 static inline struct delayed_work *
@@ -84,7 +83,6 @@ do {									\
 do {									\
 	INIT_WORK(&(_work)->work, func);				\
 	callout_init_mp(&(_work)->timer);				\
-	callout_init_coarse(&(_work)->coarse_timer);			\
 } while (0)
 
 #define	INIT_DEFERRABLE_WORK	INIT_DELAYED_WORK
@@ -122,13 +120,7 @@ queue_delayed_work(struct workqueue_struct *wq, struct delayed_work *work,
 	pending = work->work.work_task.ta_pending;
 	work->work.taskqueue = wq->taskqueue;
 	if (delay != 0) {
-		if (delay >= hz) {
-			callout_start_coarse(&work->coarse_timer,
-			    (delay + hz - 1) / hz, _delayed_work_fn, work);
-		} else {
-			callout_reset(&work->timer, delay, _delayed_work_fn,
-			    work);
-		}
+		callout_reset(&work->timer, delay, _delayed_work_fn, work);
 	} else {
 		_delayed_work_fn((void *)work);
 	}
@@ -196,7 +188,6 @@ cancel_delayed_work(struct delayed_work *work)
 {
 
 	callout_stop(&work->timer);
-	callout_stop_coarse(&work->coarse_timer);
 	if (work->work.taskqueue)
 		return (taskqueue_cancel(work->work.taskqueue,
 		    &work->work.work_task, NULL) == 0);
@@ -208,7 +199,6 @@ cancel_delayed_work_sync(struct delayed_work *work)
 {
 
 	callout_drain(&work->timer);
-	callout_stop_coarse_sync(&work->coarse_timer);
 	if (work->work.taskqueue &&
 	    taskqueue_cancel(work->work.taskqueue, &work->work.work_task, NULL))
 		taskqueue_drain(work->work.taskqueue, &work->work.work_task);
