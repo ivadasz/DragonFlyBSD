@@ -47,6 +47,7 @@ SYSCTL_INT(_debug, OID_AUTO, rdrand, CTLFLAG_RW, &rdrand_debug, 0,
 
 struct rdrand_softc {
 	struct callout	sc_rng_co;
+	struct coarse_callout sc_rng_coarse;
 	int32_t		sc_rng_ticks;
 };
 
@@ -60,6 +61,7 @@ static void rdrand_restart_callout(void *arg);
 static void rdrand_rng_harvest(void *);
 int rdrand_rng(uint8_t *out, long limit);
 
+extern int in_powersave_mode;
 
 static void
 rdrand_identify(driver_t *drv, device_t parent)
@@ -101,6 +103,7 @@ rdrand_attach(device_t dev)
 	register_random_background(rdrand_restart_callout, sc);
 
 	callout_init_mp(&sc->sc_rng_co);
+	callout_init_coarse(&sc->sc_rng_coarse);
 	callout_reset(&sc->sc_rng_co, sc->sc_rng_ticks,
 		      rdrand_rng_harvest, sc);
 
@@ -121,6 +124,7 @@ rdrand_detach(device_t dev)
 
 	register_random_background(NULL, NULL);
 	callout_stop_sync(&sc->sc_rng_co);
+	callout_stop_coarse_sync(&sc->sc_rng_coarse);
 
 	return (0);
 }
@@ -129,10 +133,17 @@ static void
 rdrand_restart_callout(void *arg)
 {
 	struct rdrand_softc *sc = arg;
+	int timo;
 
-	callout_reset(&sc->sc_rng_co, sc->sc_rng_ticks <= 0 ? 1 :
-		      (sc->sc_rng_ticks > hz ? hz : sc->sc_rng_ticks),
-		      rdrand_rng_harvest, sc);
+	timo = sc->sc_rng_ticks <= 0 ?  1 :
+	    (sc->sc_rng_ticks > hz ?  hz : sc->sc_rng_ticks);
+
+	if (timo == hz && in_powersave_mode) {
+		callout_start_coarse(&sc->sc_rng_coarse, 1, rdrand_rng_harvest,
+		    sc);
+	} else {
+		callout_reset(&sc->sc_rng_co, timo, rdrand_rng_harvest, sc);
+	}
 }
 
 static void
@@ -141,7 +152,7 @@ rdrand_rng_harvest(void *arg)
 	struct rdrand_softc *sc = arg;
 	uint8_t randomness[RDRAND_SIZE + 32];
 	uint8_t *arandomness; /* randomness aligned */
-	int cnt;
+	int cnt, timo;
 
 	iter++;
 
@@ -167,9 +178,15 @@ rdrand_rng_harvest(void *arg)
 	}
 	atomic_store_rel_int(&random_read_requests, 0);
 
-	callout_reset(&sc->sc_rng_co, sc->sc_rng_ticks <= 0 ? 1 :
-		      (sc->sc_rng_ticks > hz ? hz : sc->sc_rng_ticks),
-		      rdrand_rng_harvest, sc);
+	timo = sc->sc_rng_ticks <= 0 ? 1 :
+	    (sc->sc_rng_ticks > hz ?  hz : sc->sc_rng_ticks);
+
+	if (timo == hz && in_powersave_mode) {
+		callout_start_coarse(&sc->sc_rng_coarse, 1, rdrand_rng_harvest,
+		    sc);
+	} else  {
+		callout_reset(&sc->sc_rng_co, timo, rdrand_rng_harvest, sc);
+	}
 }
 
 
