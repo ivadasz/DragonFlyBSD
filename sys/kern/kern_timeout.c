@@ -208,16 +208,22 @@ hardclock_softtick(globaldata_t gd)
 	++sc->curticks;
 	if (sc->isrunning)
 		return;
-	if (sc->softticks == sc->curticks) {
+	if (sc->softticks + cnt == sc->curticks + 1) {
+		int i;
+
 		/*
 		 * In sync, only wakeup the thread if there is something to
 		 * do.
 		 */
-		if (TAILQ_FIRST(&sc->callwheel[sc->softticks & cwheelmask])) {
-			sc->isrunning = 1;
-			lwkt_schedule(&sc->thread);
-		} else {
-			++sc->softticks;
+		for (i = 0; i < cnt; i++) {
+			if (TAILQ_FIRST(
+			    &sc->callwheel[sc->softticks & cwheelmask])) {
+				sc->isrunning = 1;
+				lwkt_schedule(&sc->thread);
+				break;
+			} else {
+				sc->softticks++;
+			}
 		}
 	} else {
 		/*
