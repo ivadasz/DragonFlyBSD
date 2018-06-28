@@ -396,7 +396,7 @@ systimer_skip_periodic(systimer_t info, int cnt)
 	int ret = 0;
 
 	/* For now only allow skipping a single interrupt. */
-	KKASSERT(cnt >= 0 && cnt <= 63);
+	KKASSERT(cnt >= 0 && cnt <= 99);
 
 	if (cnt == 0) {
 		crit_enter();
@@ -404,9 +404,10 @@ systimer_skip_periodic(systimer_t info, int cnt)
 			sysclock_t now;
 			int i;
 
-			KKASSERT(info->skipping <= 63);
+			KKASSERT(info->skipping <= 99);
 			now = sys_cputimer->count();
 			ret = 0;
+			/* XXX Compute directly instead of looping. */
 			for (i = 0; i < info->skipping; i++) {
 				if ((int)(now + (i + 1) * info->periodic - info->time) >= 0) {
 					ret = info->skipping - i;
