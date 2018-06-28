@@ -576,13 +576,6 @@ register_random_background(void (*fn)(void *arg), void *arg)
 	random_background_arg = arg;
 	random_background_start = fn;
 }
-void random_background_paused(void);
-
-void
-random_background_paused(void)
-{
-	rand_bkgd_paused = 1;
-}
 
 /*
  * Heavy weight random number generator.  May return less then the
