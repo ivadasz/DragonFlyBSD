@@ -48,7 +48,7 @@ static void common_hrtimer_enqueue(struct shared_hrtimer *common,
     struct hrtimer *timer);
 static int common_hrtimer_dequeue(struct shared_hrtimer *common,
     struct hrtimer *timer);
-static int __hrtimer_function(void *arg);
+static void __hrtimer_function(void *arg);
 
 TAILQ_HEAD(hrtimer_timeouts, hrtimer);
 
@@ -108,16 +108,11 @@ common_hrtimer_function(void *context, int prio __unused)
 	TAILQ_FOREACH_MUTABLE(t, &data->hrtimer_activeq, entries, temp) {
 		TAILQ_REMOVE(&data->hrtimer_activeq, t, entries);
 		if (t->function) {
-			int val;
-
 			lockmgr(&data->timer_lock, LK_RELEASE);
-			val = __hrtimer_function(t);
+			__hrtimer_function(t);
 			lockmgr(&data->timer_lock, LK_EXCLUSIVE);
-			if (val)
-				t->active = false;
 		} else {
-			if (__hrtimer_function(t))
-				t->active = false;
+			__hrtimer_function(t);
 		}
 	}
 	data->timer->data = NULL;
@@ -134,16 +129,11 @@ common_hrtimer_function(void *context, int prio __unused)
 				didwork = true;
 				TAILQ_REMOVE(&data->hrtimer_nextq, t, entries);
 				if (t->function) {
-					int val;
-
 					lockmgr(&data->timer_lock, LK_RELEASE);
-					val = __hrtimer_function(t);
+					__hrtimer_function(t);
 					lockmgr(&data->timer_lock, LK_EXCLUSIVE);
-					if (val)
-						t->active = false;
 				} else {
-					if (__hrtimer_function(t))
-						t->active = false;
+					__hrtimer_function(t);
 				}
 				microuptime(&now);
 			}
@@ -234,7 +224,6 @@ static void
 common_hrtimer_enqueue(struct shared_hrtimer *common, struct hrtimer *timer)
 {
 	lockmgr(&common->timer_lock, LK_EXCLUSIVE);
-	timer->active = true;
 	if (common->timer != NULL && common->timer->data != NULL) {
 		if (!common->infunction &&
 		    timevalcmp(&timer->expire, &common->target, <)) {
@@ -299,7 +288,7 @@ common_hrtimer_dequeue(struct shared_hrtimer *common, struct hrtimer *timer)
 	return ret;
 }
 
-static int
+static void
 __hrtimer_function(void *arg)
 {
 	struct hrtimer *timer = arg;
@@ -314,9 +303,8 @@ __hrtimer_function(void *arg)
 		 * XXX Not implemented yet, we would need to store the
 		 *     expiration period, to do the callout_reset here.
 		 */
-		return 0;
 	} else {
-		return 1;
+		timer->active = false;
 	}
 }
 
@@ -329,6 +317,8 @@ hrtimer_init(struct hrtimer *timer, clockid_t clock_id,
 	memset(timer, 0, sizeof(struct hrtimer));
 	timer->clock_id = clock_id;
 	timer->ht_mode = mode;
+
+	lwkt_token_init(&timer->timer_token, "timer token");
 }
 
 /* XXX Make sure that timeouts >1s are forbidden. */
@@ -350,33 +340,30 @@ hrtimer_start_range_ns(struct hrtimer *timer, ktime_t tim,
 	timer->expire = target;
 	timer->slackus = (range_ns + 999) / 1000;
 
+	lwkt_gettoken(&timer->timer_token);
+
+	timer->active = true;
 	common_hrtimer_enqueue(&common_hrtimer, timer);
+
+	lwkt_reltoken(&timer->timer_token);
 }
 
 int
 hrtimer_cancel(struct hrtimer *timer)
 {
-	int ret = 0;
-
-	lockmgr(&common_hrtimer.timer_lock, LK_EXCLUSIVE);
 	if (timer->active) {
-		if (common_hrtimer_dequeue(&common_hrtimer, timer)) {
-			timer->active = false;
-			ret = 1;
+		if (common_hrtimer_dequeue(&common_hrtimer, timer))  {
+			timer->active = 0;
+			return 1;
 		}
 	}
-	lockmgr(&common_hrtimer.timer_lock, LK_RELEASE);
-	return ret;
+	return 0;
 }
 
 /* Returns non-zero if the timer is already on the queue */
 bool
 hrtimer_active(const struct hrtimer *timer)
 {
-	int active;
 
-	lockmgr(&common_hrtimer.timer_lock, LK_EXCLUSIVE);
-	active = timer->active;
-	lockmgr(&common_hrtimer.timer_lock, LK_RELEASE);
-	return active;
+	return timer->active;
 }
