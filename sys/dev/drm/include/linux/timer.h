@@ -79,7 +79,7 @@ do {									\
 
 #define	add_timer(timer)						\
 	callout_reset(&(timer)->timer_callout,				\
-	    (timer)->expires - jiffies, _timer_fn, (timer));
+	    (timer)->expires - jiffies, _timer_fn, (timer));		\
 
 static inline void
 del_timer(struct timer_list *timer)

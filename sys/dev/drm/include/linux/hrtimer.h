@@ -52,6 +52,7 @@ struct hrtimer {
 	struct timeval		expire;
 	uint64_t		slackus;
 	enum hrtimer_restart	(*function)(struct hrtimer *);
+	struct lwkt_token	timer_token;
 	TAILQ_ENTRY(hrtimer)	entries;
 };
 
