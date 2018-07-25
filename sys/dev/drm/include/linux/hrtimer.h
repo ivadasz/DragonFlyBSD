@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2017 François Tigeot
- * Copyright (c) 2017 Imre Vadász
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,8 +31,6 @@
 #include <linux/wait.h>
 #include <linux/timer.h>
 
-#include <sys/queue.h>
-
 enum hrtimer_mode {
 	HRTIMER_MODE_ABS = 0x0,
 	HRTIMER_MODE_REL = 0x1,
@@ -45,15 +42,12 @@ enum hrtimer_restart {
 };
 
 struct hrtimer {
+	struct callout timer_callout;
 	clockid_t 		clock_id;
 	enum hrtimer_mode	ht_mode;
 	bool active;
-	struct timeval		now_inserted;
-	struct timeval		expire;
-	uint64_t		slackus;
 	enum hrtimer_restart	(*function)(struct hrtimer *);
-	struct lwkt_token	timer_token;
-	TAILQ_ENTRY(hrtimer)	entries;
+	struct lwkt_token timer_token;
 };
 
 extern void hrtimer_init(struct hrtimer *timer, clockid_t which_clock,
