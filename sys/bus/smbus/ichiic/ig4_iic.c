@@ -382,7 +382,7 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 	 * Issue START or RESTART with next data byte, clear any previous
 	 * abort condition that may have been holding the txfifo in reset.
 	 */
-	last = IG4_DATA_RESTART;
+	last = 0;
 	reg_read(sc, IG4_REG_CLR_TX_ABORT);
 	if (actualp)
 		*actualp = 0;
@@ -457,7 +457,7 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 	 * at the end of the read.
 	 */
 	if (rcount) {
-		last = IG4_DATA_RESTART | IG4_DATA_COMMAND_RD;
+		last = IG4_DATA_COMMAND_RD;
 		if (rcount == 1 &&
 		    (op & (SMB_TRANS_NOSTOP | SMB_TRANS_NOCNT)) ==
 		    SMB_TRANS_NOCNT) {
