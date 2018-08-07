@@ -512,6 +512,7 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 			}
 			goto done;
 		}
+again:
 		last = data_read(sc);
 
 		if (op & SMB_TRANS_NOCNT) {
@@ -520,6 +521,14 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 			--rcount;
 			if (actualp)
 				++*actualp;
+			while (sc->rpos != sc->rnext && rcount > 0) {
+				last = data_read(sc);
+				*rbuf = (u_char)last;
+				++rbuf;
+				--rcount;
+				if (actualp)
+					++*actualp;
+			}
 		} else {
 			/*
 			 * Handle count field (smbus), which is not part of
@@ -536,6 +545,9 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 			}
 			op |= SMB_TRANS_NOCNT;
 		}
+		v = reg_read(sc, IG4_REG_I2C_STA);
+		if ((v & IG4_STATUS_RX_NOTEMPTY) && rcount > 0)
+			goto again;
 	}
 	error = 0;
 done:
