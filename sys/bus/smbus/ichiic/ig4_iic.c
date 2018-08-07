@@ -257,6 +257,8 @@ data_read(ig4iic_softc_t *sc)
 
 	if (sc->rpos == sc->rnext) {
 		c = (uint8_t)reg_read(sc, IG4_REG_DATA_CMD);
+		if (sc->rqueued > 0)
+			sc->rqueued--;
 	} else {
 		c = sc->rbuf[sc->rpos & IG4_RBUFMASK];
 		++sc->rpos;
@@ -458,6 +460,7 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 	 * at the end of the read.
 	 */
 	if (rcount) {
+		reg_write(sc, IG4_REG_RX_TL, 0);
 		last = IG4_DATA_COMMAND_RD;
 		if (rcount == 1 &&
 		    (op & (SMB_TRANS_NOSTOP | SMB_TRANS_NOCNT)) ==
@@ -466,6 +469,7 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 		}
 		reg_write(sc, IG4_REG_DATA_CMD, last);
 		last = IG4_DATA_COMMAND_RD;
+		sc->rqueued = 1;
 	}
 	rrem = rcount - 1;
 
@@ -486,6 +490,7 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 						reg_write(sc, IG4_REG_DATA_CMD, IG4_DATA_COMMAND_RD);
 					}
 					rrem--;
+					sc->rqueued++;
 				} else {
 					break;
 				}
@@ -500,7 +505,21 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 				if (v & IG4_STATUS_TX_NOTFULL) {
 					reg_write(sc, IG4_REG_DATA_CMD, IG4_DATA_COMMAND_RD);
 					rrem--;
+					sc->rqueued++;
 				}
+			}
+		}
+		if (op & SMB_TRANS_NOCNT) {
+			if (sc->rqueued > 8) {
+				reg_write(sc, IG4_REG_RX_TL, sc->rqueued / 2);
+			} else if (sc->rqueued > 3) {
+				reg_write(sc, IG4_REG_RX_TL, 3);
+			} else if (sc->rqueued > 2) {
+				reg_write(sc, IG4_REG_RX_TL, 2);
+			} else if (sc->rqueued > 1) {
+				reg_write(sc, IG4_REG_RX_TL, 1);
+			} else {
+				reg_write(sc, IG4_REG_RX_TL, 0);
 			}
 		}
 		error = wait_status(sc, IG4_STATUS_RX_NOTEMPTY);
@@ -661,7 +680,7 @@ ig4iic_attach(ig4iic_softc_t *sc)
 	 * allowing us to use lksleep() in our poll code.  Not perfect
 	 * but this is better than using DELAY() for receiving data.
 	 */
-	reg_write(sc, IG4_REG_RX_TL, 1);
+	reg_write(sc, IG4_REG_RX_TL, 0);
 
 	reg_write(sc, IG4_REG_CTL,
 		  IG4_CTL_MASTER |
