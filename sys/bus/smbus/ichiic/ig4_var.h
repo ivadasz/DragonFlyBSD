@@ -73,7 +73,6 @@ struct ig4iic_softc {
 	int		rnext;
 	int		rpos;
 	char		rbuf[IG4_RBUFSIZE];
-	int		rqueued;
 	int		error;
 	uint8_t		last_slave;
 	int		pci_attached : 1;
@@ -83,6 +82,11 @@ struct ig4iic_softc {
 	int		read_started : 1;
 	int		write_started : 1;
 	struct lock	lk;
+
+	/* Store some state */
+	int		rqueued;
+	int		rx_tl;
+	uint32_t	intr_mask;
 };
 
 typedef struct ig4iic_softc ig4iic_softc_t;
