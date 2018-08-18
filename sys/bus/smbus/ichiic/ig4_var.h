@@ -87,9 +87,6 @@ struct ig4iic_softc {
 	int		rqueued;
 	int		rx_tl;
 	uint32_t	intr_mask;
-
-	/* Worker thread */
-	struct thread	*td;
 };
 
 typedef struct ig4iic_softc ig4iic_softc_t;
