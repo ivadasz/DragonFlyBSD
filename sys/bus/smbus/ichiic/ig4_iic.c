@@ -688,11 +688,6 @@ ig4iic_attach(ig4iic_softc_t *sc)
 	v = reg_read(sc, IG4_REG_SS_SCL_LCNT);
 	reg_write(sc, IG4_REG_FS_SCL_LCNT, v);
 #endif
-
-	reg_read(sc, IG4_REG_CLR_INTR);
-	reg_write(sc, IG4_REG_INTR_MASK, 0);
-	sc->intr_mask = 0;
-
 	/*
 	 * Program based on a 25000 Hz clock.  This is a bit of a
 	 * hack (obviously).  The defaults are 400 and 470 for standard
