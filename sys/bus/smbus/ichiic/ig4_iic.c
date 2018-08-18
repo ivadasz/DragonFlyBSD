@@ -99,16 +99,6 @@ reg_read(ig4iic_softc_t *sc, uint32_t reg)
 	return value;
 }
 
-static
-void
-set_intr_mask(ig4iic_softc_t *sc, uint32_t val)
-{
-	if (sc->intr_mask != val) {
-		reg_write(sc, IG4_REG_INTR_MASK, val);
-		sc->intr_mask = val;
-	}
-}
-
 /*
  * Enable or disable the controller and wait for the controller to acknowledge
  * the state change.
@@ -121,9 +111,12 @@ set_controller(ig4iic_softc_t *sc, uint32_t ctl)
 	int error;
 	uint32_t v;
 
-	set_intr_mask(sc, 0);
 	if (ctl & IG4_I2C_ENABLE) {
+		reg_write(sc, IG4_REG_INTR_MASK, IG4_INTR_STOP_DET |
+						 IG4_INTR_RX_FULL);
 		reg_read(sc, IG4_REG_CLR_INTR);
+	} else {
+		reg_write(sc, IG4_REG_INTR_MASK, 0);
 	}
 	reg_write(sc, IG4_REG_I2C_EN, ctl);
 	error = SMB_ETIMEOUT;
@@ -137,16 +130,6 @@ set_controller(ig4iic_softc_t *sc, uint32_t ctl)
 		tsleep(sc, 0, "i2cslv", 1);
 	}
 	return error;
-}
-
-static
-void
-set_rx_tl(ig4iic_softc_t *sc, uint32_t level)
-{
-	if (sc->rx_tl != level) {
-		reg_write(sc, IG4_REG_RX_TL, level);
-		sc->rx_tl = level;
-	}
 }
 
 static
@@ -241,9 +224,7 @@ wait_status(ig4iic_softc_t *sc, uint32_t status)
 					cpu_mwait_cx_io_wait_mp(sc->intr_cpu);
 				}
 			}
-			set_intr_mask(sc, IG4_INTR_RX_FULL);
 			lksleep(sc, &sc->lk, 0, "i2cwait", (hz + 99) / 100);
-			set_intr_mask(sc, 0);
 			if (sc->intr_cpu != mycpuid &&
 			    atomic_cmpset_int(&sc->intr_await, 1, 0)) {
 				if (CPUMASK_TESTBIT(smp_idleinvl_mask,
@@ -479,7 +460,7 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 	 * at the end of the read.
 	 */
 	if (rcount) {
-		set_rx_tl(sc, 0xff);
+		reg_write(sc, IG4_REG_RX_TL, 0);
 		last = IG4_DATA_COMMAND_RD;
 		if (rcount == 1 &&
 		    (op & (SMB_TRANS_NOSTOP | SMB_TRANS_NOCNT)) ==
@@ -500,8 +481,7 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 
 		/* Assumes that Rx and Tx fifos have the same size. */
 		if (op & SMB_TRANS_NOCNT) {
-			/* We should be aware of the fifo size here. */
-			while (rrem && sc->rqueued < 60) {
+			while (rrem) {
 				v = reg_read(sc, IG4_REG_I2C_STA);
 				if (v & IG4_STATUS_TX_NOTFULL) {
 					if (rrem == 1) {
@@ -530,12 +510,17 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 			}
 		}
 		if (op & SMB_TRANS_NOCNT) {
-			if (sc->rqueued > 30)
-				set_rx_tl(sc, 30);
-			else if (sc->rqueued > 0)
-				set_rx_tl(sc, sc->rqueued - 1);
-			else
-				set_rx_tl(sc, 0);
+			if (sc->rqueued > 8) {
+				reg_write(sc, IG4_REG_RX_TL, sc->rqueued / 2);
+			} else if (sc->rqueued > 3) {
+				reg_write(sc, IG4_REG_RX_TL, 3);
+			} else if (sc->rqueued > 2) {
+				reg_write(sc, IG4_REG_RX_TL, 2);
+			} else if (sc->rqueued > 1) {
+				reg_write(sc, IG4_REG_RX_TL, 1);
+			} else {
+				reg_write(sc, IG4_REG_RX_TL, 0);
+			}
 		}
 		error = wait_status(sc, IG4_STATUS_RX_NOTEMPTY);
 		if (error) {
@@ -585,8 +570,6 @@ again:
 	}
 	error = 0;
 done:
-	set_intr_mask(sc, 0);
-	set_rx_tl(sc, 0);
 	/* XXX wait for xmit buffer to become empty */
 	last = reg_read(sc, IG4_REG_TX_ABRT_SOURCE);
 
@@ -697,7 +680,6 @@ ig4iic_attach(ig4iic_softc_t *sc)
 	 * allowing us to use lksleep() in our poll code.  Not perfect
 	 * but this is better than using DELAY() for receiving data.
 	 */
-	sc->rx_tl = 0;
 	reg_write(sc, IG4_REG_RX_TL, 0);
 
 	reg_write(sc, IG4_REG_CTL,
@@ -781,7 +763,6 @@ ig4iic_detach(ig4iic_softc_t *sc)
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
 
 	reg_write(sc, IG4_REG_INTR_MASK, 0);
-	sc->intr_mask = 0;
 	set_controller(sc, 0);
 
 	if (sc->generic_attached) {
@@ -1096,13 +1077,12 @@ ig4iic_intr(void *cookie)
 	uint32_t status;
 
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
-	set_intr_mask(sc, 0);
+/*	reg_write(sc, IG4_REG_INTR_MASK, IG4_INTR_STOP_DET);*/
 	reg_read(sc, IG4_REG_CLR_INTR);
 	status = reg_read(sc, IG4_REG_I2C_STA);
 	while (status & IG4_STATUS_RX_NOTEMPTY) {
 		sc->rbuf[sc->rnext & IG4_RBUFMASK] =
 		    (uint8_t)reg_read(sc, IG4_REG_DATA_CMD);
-		sc->rqueued--;
 		++sc->rnext;
 		status = reg_read(sc, IG4_REG_I2C_STA);
 	}
