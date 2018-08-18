@@ -75,6 +75,10 @@ static int ig4_dump;
 SYSCTL_INT(_debug, OID_AUTO, ig4_dump, CTLTYPE_INT | CTLFLAG_RW,
 	   &ig4_dump, 0, "");
 
+static int ig4_verbose;
+SYSCTL_INT(_debug, OID_AUTO, ig4_verbose, CTLTYPE_INT | CTLFLAG_RW,
+	   &ig4_verbose, 0, "");
+
 /*
  * Low-level inline support functions
  */
@@ -1094,16 +1098,32 @@ ig4iic_intr(void *cookie)
 {
 	ig4iic_softc_t *sc = cookie;
 	uint32_t status;
+	uint32_t rxflr = 0, txflr = 0;
+	int cnt = 0;
+	int old_rqueued;
+	uint32_t stat = 0;
 
+	old_rqueued = sc->rqueued;
 	set_intr_mask(sc, 0);
+	if (ig4_verbose)
+		stat = reg_read(sc, IG4_REG_RAW_INTR_STAT);
 	reg_read(sc, IG4_REG_CLR_INTR);
 	status = reg_read(sc, IG4_REG_I2C_STA);
+	if (ig4_verbose) {
+		rxflr = reg_read(sc, IG4_REG_RXFLR);
+		txflr = reg_read(sc, IG4_REG_TXFLR);
+	}
 	while (status & IG4_STATUS_RX_NOTEMPTY) {
 		sc->rbuf[sc->rnext & IG4_RBUFMASK] =
 		    (uint8_t)reg_read(sc, IG4_REG_DATA_CMD);
 		sc->rqueued--;
 		++sc->rnext;
 		status = reg_read(sc, IG4_REG_I2C_STA);
+		cnt++;
+	}
+	if (ig4_verbose) {
+		device_printf(sc->dev, "status=0x%x cnt=%d rx_tl=%d rxflr=%u txflr=%u rqueued=%d stat=0x%x\n",
+		    status, cnt, sc->rx_tl, rxflr, txflr, old_rqueued, stat);
 	}
 	if (atomic_cmpset_int(&sc->intr_await, 1, 0)) {
 		cpu_mwait_cx_io_done_mp(sc->intr_cpu);
