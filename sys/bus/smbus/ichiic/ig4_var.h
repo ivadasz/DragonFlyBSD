@@ -83,6 +83,9 @@ struct ig4iic_softc {
 	int		read_started : 1;
 	int		write_started : 1;
 	struct lwkt_serialize slz;
+
+	/* Worker thread */
+	struct thread	*td;
 };
 
 typedef struct ig4iic_softc ig4iic_softc_t;
