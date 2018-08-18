@@ -185,17 +185,19 @@ wait_status(ig4iic_softc_t *sc, uint32_t status)
 	sysclock_t limit;
 
 	error = SMB_ETIMEOUT;
+	count = sys_cputimer->count();
 	limit = sys_cputimer->freq / 40;
 
-	/*
-	 * Check requested status
-	 */
-	v = reg_read(sc, IG4_REG_I2C_STA);
-	if (v & status)
-		return 0;
-
-	count = sys_cputimer->count();
 	for (;;) {
+		/*
+		 * Check requested status
+		 */
+		v = reg_read(sc, IG4_REG_I2C_STA);
+		if (v & status) {
+			error = 0;
+			break;
+		}
+
 		/*
 		 * When waiting for receive data break-out if the interrupt
 		 * loaded data into the FIFO.
@@ -259,15 +261,6 @@ wait_status(ig4iic_softc_t *sc, uint32_t status)
 			cpu_mwait_cx_io_done(mycpuid);
 		} else {
 			DELAY(25);
-		}
-
-		/*
-		 * Check requested status
-		 */
-		v = reg_read(sc, IG4_REG_I2C_STA);
-		if (v & status) {
-			error = 0;
-			break;
 		}
 	}
 
