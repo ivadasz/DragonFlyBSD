@@ -42,7 +42,7 @@
 #include <sys/kernel.h>
 #include <sys/module.h>
 #include <sys/errno.h>
-#include <sys/lock.h>
+#include <sys/serialize.h>
 #include <sys/syslog.h>
 #include <sys/bus.h>
 #include <sys/sysctl.h>
@@ -209,7 +209,7 @@ wait_status(ig4iic_softc_t *sc, uint32_t status)
 
 		/*
 		 * When waiting for receive data let the interrupt do its
-		 * work, otherwise poll with the lock held.
+		 * work, otherwise poll with the serializer held.
 		 */
 		if (status & IG4_STATUS_RX_NOTEMPTY) {
 			cpu_mwait_cx_io_wait(mycpuid);
@@ -224,7 +224,7 @@ wait_status(ig4iic_softc_t *sc, uint32_t status)
 					cpu_mwait_cx_io_wait_mp(sc->intr_cpu);
 				}
 			}
-			lksleep(sc, &sc->lk, 0, "i2cwait", (hz + 99) / 100);
+			zsleep(sc, &sc->slz, 0, "i2cwait", (hz + 99) / 100);
 			if (sc->intr_cpu != mycpuid &&
 			    atomic_cmpset_int(&sc->intr_await, 1, 0)) {
 				if (CPUMASK_TESTBIT(smp_idleinvl_mask,
@@ -534,8 +534,6 @@ ig4iic_attach(ig4iic_softc_t *sc)
 	int error;
 	uint32_t v;
 
-	lockmgr(&sc->lk, LK_EXCLUSIVE);
-
 	if (sc->version == IG4_ATOM) {
 		v = reg_read(sc, IG4_REG_COMP_TYPE);
 		kprintf("type %08x", v);
@@ -670,8 +668,10 @@ ig4iic_attach(ig4iic_softc_t *sc)
 		error = ENXIO;
 		goto done;
 	}
+
+	lwkt_serialize_enter(&sc->slz);
 	error = bus_setup_intr(sc->dev, sc->intr_res, INTR_MPSAFE,
-			       ig4iic_intr, sc, &sc->intr_handle, NULL);
+			       ig4iic_intr, sc, &sc->intr_handle, &sc->slz);
 	if (error) {
 		device_printf(sc->dev,
 			      "Unable to setup irq: error %d\n", error);
@@ -681,22 +681,23 @@ ig4iic_attach(ig4iic_softc_t *sc)
 	sc->intr_gd = globaldata_find(sc->intr_cpu),
 
 	/* Attach us to the smbus */
-	lockmgr(&sc->lk, LK_RELEASE);
+	lwkt_serialize_exit(&sc->slz);
 	error = bus_generic_attach(sc->dev);
-	lockmgr(&sc->lk, LK_EXCLUSIVE);
 	if (error) {
 		device_printf(sc->dev,
 			      "failed to attach child: error %d\n", error);
 		goto done;
 	}
+	lwkt_serialize_enter(&sc->slz);
 	sc->generic_attached = 1;
 
 	h = acpi_get_handle(sc->dev);
 	if (h != NULL)
 		acpi_register_bus_provider(h, sc->dev, NEW_RES_IIC);
 
+	lwkt_serialize_exit(&sc->slz);
+
 done:
-	lockmgr(&sc->lk, LK_RELEASE);
 	return error;
 }
 
@@ -706,7 +707,7 @@ ig4iic_detach(ig4iic_softc_t *sc)
 	ACPI_HANDLE h;
 	int error;
 
-	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	lwkt_serialize_enter(&sc->slz);
 
 	reg_write(sc, IG4_REG_INTR_MASK, 0);
 	set_controller(sc, 0);
@@ -729,14 +730,14 @@ ig4iic_detach(ig4iic_softc_t *sc)
 		sc->acpismb = NULL;
 	}
 	if (sc->intr_handle) {
+		lwkt_serialize_handler_disable(&sc->slz);
 		bus_teardown_intr(sc->dev, sc->intr_res, sc->intr_handle);
 		sc->intr_handle = NULL;
 	}
 
 	error = 0;
 done:
-	lockmgr(&sc->lk, LK_RELEASE);
-	tsleep(&error, 0, "ig4wait", hz);
+	lwkt_serialize_exit(&sc->slz);
 	return error;
 }
 
@@ -746,7 +747,7 @@ ig4iic_smb_callback(device_t dev, int index, void *data)
 	ig4iic_softc_t *sc = device_get_softc(dev);
 	int error;
 
-	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	lwkt_serialize_enter(&sc->slz);
 
 	switch (index) {
 	case SMB_REQUEST_BUS:
@@ -760,8 +761,7 @@ ig4iic_smb_callback(device_t dev, int index, void *data)
 		break;
 	}
 
-	lockmgr(&sc->lk, LK_RELEASE);
-
+	lwkt_serialize_exit(&sc->slz);
 	return error;
 }
 
@@ -776,7 +776,7 @@ ig4iic_smb_quick(device_t dev, u_char slave, int how)
 	ig4iic_softc_t *sc = device_get_softc(dev);
 	int error;
 
-	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	lwkt_serialize_enter(&sc->slz);
 
 	switch (how) {
 	case SMB_QREAD:
@@ -789,8 +789,8 @@ ig4iic_smb_quick(device_t dev, u_char slave, int how)
 		error = SMB_ENOTSUPP;
 		break;
 	}
-	lockmgr(&sc->lk, LK_RELEASE);
 
+	lwkt_serialize_exit(&sc->slz);
 	return error;
 }
 
@@ -808,7 +808,7 @@ ig4iic_smb_sendb(device_t dev, u_char slave, char byte)
 	uint32_t cmd;
 	int error;
 
-	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	lwkt_serialize_enter(&sc->slz);
 
 	set_slave_addr(sc, slave, 0);
 	cmd = byte;
@@ -819,7 +819,7 @@ ig4iic_smb_sendb(device_t dev, u_char slave, char byte)
 		error = SMB_ETIMEOUT;
 	}
 
-	lockmgr(&sc->lk, LK_RELEASE);
+	lwkt_serialize_exit(&sc->slz);
 	return error;
 }
 
@@ -834,7 +834,7 @@ ig4iic_smb_recvb(device_t dev, u_char slave, char *byte)
 	ig4iic_softc_t *sc = device_get_softc(dev);
 	int error;
 
-	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	lwkt_serialize_enter(&sc->slz);
 
 	set_slave_addr(sc, slave, 0);
 	reg_write(sc, IG4_REG_DATA_CMD, IG4_DATA_COMMAND_RD);
@@ -846,7 +846,7 @@ ig4iic_smb_recvb(device_t dev, u_char slave, char *byte)
 		error = SMB_ETIMEOUT;
 	}
 
-	lockmgr(&sc->lk, LK_RELEASE);
+	lwkt_serialize_exit(&sc->slz);
 	return error;
 }
 
@@ -859,13 +859,13 @@ ig4iic_smb_writeb(device_t dev, u_char slave, char cmd, char byte)
 	ig4iic_softc_t *sc = device_get_softc(dev);
 	int error;
 
-	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	lwkt_serialize_enter(&sc->slz);
 
 	set_slave_addr(sc, slave, 0);
 	error = smb_transaction(sc, cmd, SMB_TRANS_NOCNT,
 				&byte, 1, NULL, 0, NULL);
 
-	lockmgr(&sc->lk, LK_RELEASE);
+	lwkt_serialize_exit(&sc->slz);
 	return error;
 }
 
@@ -879,7 +879,7 @@ ig4iic_smb_writew(device_t dev, u_char slave, char cmd, short word)
 	char buf[2];
 	int error;
 
-	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	lwkt_serialize_enter(&sc->slz);
 
 	set_slave_addr(sc, slave, 0);
 	buf[0] = word & 0xFF;
@@ -887,7 +887,7 @@ ig4iic_smb_writew(device_t dev, u_char slave, char cmd, short word)
 	error = smb_transaction(sc, cmd, SMB_TRANS_NOCNT,
 				buf, 2, NULL, 0, NULL);
 
-	lockmgr(&sc->lk, LK_RELEASE);
+	lwkt_serialize_exit(&sc->slz);
 	return error;
 }
 
@@ -900,13 +900,13 @@ ig4iic_smb_readb(device_t dev, u_char slave, char cmd, char *byte)
 	ig4iic_softc_t *sc = device_get_softc(dev);
 	int error;
 
-	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	lwkt_serialize_enter(&sc->slz);
 
 	set_slave_addr(sc, slave, 0);
 	error = smb_transaction(sc, cmd, SMB_TRANS_NOCNT,
 				NULL, 0, byte, 1, NULL);
 
-	lockmgr(&sc->lk, LK_RELEASE);
+	lwkt_serialize_exit(&sc->slz);
 	return error;
 }
 
@@ -920,7 +920,7 @@ ig4iic_smb_readw(device_t dev, u_char slave, char cmd, short *word)
 	char buf[2];
 	int error;
 
-	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	lwkt_serialize_enter(&sc->slz);
 
 	set_slave_addr(sc, slave, 0);
 	if ((error = smb_transaction(sc, cmd, SMB_TRANS_NOCNT,
@@ -928,7 +928,7 @@ ig4iic_smb_readw(device_t dev, u_char slave, char cmd, short *word)
 		*word = (u_char)buf[0] | ((u_char)buf[1] << 8);
 	}
 
-	lockmgr(&sc->lk, LK_RELEASE);
+	lwkt_serialize_exit(&sc->slz);
 	return error;
 }
 
@@ -944,7 +944,7 @@ ig4iic_smb_pcall(device_t dev, u_char slave, char cmd,
 	char wbuf[2];
 	int error;
 
-	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	lwkt_serialize_enter(&sc->slz);
 
 	set_slave_addr(sc, slave, 0);
 	wbuf[0] = sdata & 0xFF;
@@ -954,7 +954,7 @@ ig4iic_smb_pcall(device_t dev, u_char slave, char cmd,
 		*rdata = (u_char)rbuf[0] | ((u_char)rbuf[1] << 8);
 	}
 
-	lockmgr(&sc->lk, LK_RELEASE);
+	lwkt_serialize_exit(&sc->slz);
 	return error;
 }
 
@@ -965,13 +965,13 @@ ig4iic_smb_bwrite(device_t dev, u_char slave, char cmd,
 	ig4iic_softc_t *sc = device_get_softc(dev);
 	int error;
 
-	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	lwkt_serialize_enter(&sc->slz);
 
 	set_slave_addr(sc, slave, 0);
 	error = smb_transaction(sc, cmd, 0,
 				buf, wcount, NULL, 0, NULL);
 
-	lockmgr(&sc->lk, LK_RELEASE);
+	lwkt_serialize_exit(&sc->slz);
 	return error;
 }
 
@@ -983,14 +983,14 @@ ig4iic_smb_bread(device_t dev, u_char slave, char cmd,
 	int rcount = *countp_char;
 	int error;
 
-	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	lwkt_serialize_enter(&sc->slz);
 
 	set_slave_addr(sc, slave, 0);
 	error = smb_transaction(sc, cmd, 0,
 				NULL, 0, buf, rcount, &rcount);
 	*countp_char = rcount;
 
-	lockmgr(&sc->lk, LK_RELEASE);
+	lwkt_serialize_exit(&sc->slz);
 	return error;
 }
 
@@ -1002,13 +1002,13 @@ ig4iic_smb_trans(device_t dev, int slave, char cmd, int op,
 	ig4iic_softc_t *sc = device_get_softc(dev);
 	int error;
 
-	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	lwkt_serialize_enter(&sc->slz);
 
 	set_slave_addr(sc, slave, op);
 	error = smb_transaction(sc, cmd, op,
 				wbuf, wcount, rbuf, rcount, actualp);
 
-	lockmgr(&sc->lk, LK_RELEASE);
+	lwkt_serialize_exit(&sc->slz);
 	return error;
 }
 
@@ -1022,8 +1022,6 @@ ig4iic_intr(void *cookie)
 	ig4iic_softc_t *sc = cookie;
 	uint32_t status;
 
-	lockmgr(&sc->lk, LK_EXCLUSIVE);
-/*	reg_write(sc, IG4_REG_INTR_MASK, IG4_INTR_STOP_DET);*/
 	reg_read(sc, IG4_REG_CLR_INTR);
 	status = reg_read(sc, IG4_REG_I2C_STA);
 	while (status & IG4_STATUS_RX_NOTEMPTY) {
@@ -1036,7 +1034,6 @@ ig4iic_intr(void *cookie)
 		cpu_mwait_cx_io_done_mp(sc->intr_cpu);
 	}
 	wakeup(sc);
-	lockmgr(&sc->lk, LK_RELEASE);
 }
 
 #define REGDUMP(sc, reg)	\
