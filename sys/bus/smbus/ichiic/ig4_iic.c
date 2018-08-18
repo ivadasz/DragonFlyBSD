@@ -504,11 +504,6 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 	}
 	rrem = rcount - 1;
 
-/*
-	TODO(ivadasz): Factor out functions for issueing read commands, and for
-	               reading data from the Rx fifo. Then it should become
-	               easier to handle the queueing.
-*/
 	/*
 	 * Bulk read (i2c) and count field handling (smbus)
 	 */
@@ -633,12 +628,9 @@ ig4iic_attach(ig4iic_softc_t *sc)
 {
 	ACPI_HANDLE h;
 	int error;
-#if 0
-	int retry;
-#endif
 	uint32_t v;
 
-#if 0
+#if 1
 	/*
 	 * Don't do this, it blows up the PCI config
 	 */
@@ -729,13 +721,12 @@ ig4iic_attach(ig4iic_softc_t *sc)
 	reg_write(sc, IG4_REG_SDA_HOLD, 1);
 
 	/*
-	 * Use a threshold of 0 so we get interrupted on each character,
-	 * allowing us to use zsleep() in our poll code.  Not perfect
+	 * Use a threshold of 1 so we get interrupted on each character,
+	 * allowing us to use lksleep() in our poll code.  Not perfect
 	 * but this is better than using DELAY() for receiving data.
 	 */
 	sc->rx_tl = 0;
-	reg_write(sc, IG4_REG_RX_TL, sc->rx_tl);
-//	reg_write(sc, IG4_REG_TX_TL, 0);
+	reg_write(sc, IG4_REG_RX_TL, 0);
 
 	reg_write(sc, IG4_REG_CTL,
 		  IG4_CTL_MASTER |
@@ -746,6 +737,7 @@ ig4iic_attach(ig4iic_softc_t *sc)
 	 * When ig4 is attached via ACPI, (child) devices should access the
 	 * smbus via I2cSerialBus ACPI resources instead.
 	 */
+#if 0
 	if (strcmp("acpi", device_get_name(device_get_parent(sc->dev))) != 0) {
 		sc->smb = device_add_child(sc->dev, "smbus", -1);
 		if (sc->smb == NULL) {
@@ -754,6 +746,7 @@ ig4iic_attach(ig4iic_softc_t *sc)
 			goto done;
 		}
 	}
+#endif
 
 	sc->acpismb = device_add_child(sc->dev, "smbacpi", -1);
 	if (sc->acpismb == NULL) {
