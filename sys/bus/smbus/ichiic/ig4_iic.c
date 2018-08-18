@@ -671,7 +671,7 @@ ig4iic_attach(ig4iic_softc_t *sc)
 #endif
 
 	/*
-	 * Interrupt on STOP detect or receive character ready
+	 * Make sure that the I2C controller is at least somewhat functional.
 	 */
 	if (set_controller(sc, 0)) {
 		device_printf(sc->dev, "controller error during attach-1\n");
@@ -680,6 +680,11 @@ ig4iic_attach(ig4iic_softc_t *sc)
 	}
 	if (set_controller(sc, IG4_I2C_ENABLE)) {
 		device_printf(sc->dev, "controller error during attach-2\n");
+		error = ENXIO;
+		goto done;
+	}
+	if (set_controller(sc, 0)) {
+		device_printf(sc->dev, "controller error during attach-3\n");
 		error = ENXIO;
 		goto done;
 	}
