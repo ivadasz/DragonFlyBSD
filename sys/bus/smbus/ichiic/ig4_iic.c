@@ -637,7 +637,6 @@ ig4iic_attach(ig4iic_softc_t *sc)
 	 * When ig4 is attached via ACPI, (child) devices should access the
 	 * smbus via I2cSerialBus ACPI resources instead.
 	 */
-#if 0
 	if (strcmp("acpi", device_get_name(device_get_parent(sc->dev))) != 0) {
 		sc->smb = device_add_child(sc->dev, "smbus", -1);
 		if (sc->smb == NULL) {
@@ -646,7 +645,6 @@ ig4iic_attach(ig4iic_softc_t *sc)
 			goto done;
 		}
 	}
-#endif
 
 	sc->acpismb = device_add_child(sc->dev, "smbacpi", -1);
 	if (sc->acpismb == NULL) {
