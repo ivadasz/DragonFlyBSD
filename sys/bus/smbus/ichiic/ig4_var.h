@@ -81,7 +81,7 @@ struct ig4iic_softc {
 	int		slave_valid : 1;
 	int		read_started : 1;
 	int		write_started : 1;
-	struct lwkt_serialize slz;
+	struct lock	lk;
 
 	/* Store some state */
 	int		rqueued;
