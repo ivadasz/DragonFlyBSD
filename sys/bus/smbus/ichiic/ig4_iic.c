@@ -46,6 +46,7 @@
 #include <sys/syslog.h>
 #include <sys/bus.h>
 #include <sys/sysctl.h>
+#include <sys/kthread.h>
 
 #include <sys/rman.h>
 
@@ -604,6 +605,19 @@ done:
 	return error;
 }
 
+static void
+ig4iic_thread(void *arg)
+{
+	ig4iic_softc_t *sc = arg;
+
+	(void)sc;
+#if 0
+	for (;;) {
+		//XXX
+	}
+#endif
+}
+
 /*
  *				SMBUS API FUNCTIONS
  *
@@ -757,6 +771,17 @@ ig4iic_attach(ig4iic_softc_t *sc)
 		goto done;
 	}
 
+	sc->intr_cpu = rman_get_cpuid(sc->intr_res);
+	sc->intr_gd = globaldata_find(sc->intr_cpu),
+
+	error = kthread_create_cpu(ig4iic_thread, sc, &sc->td, sc->intr_cpu,
+	    "ig4%d_worker", device_get_unit(sc->dev));
+	if (error) {
+		device_printf(sc->dev,
+		    "Unable to create worker thread: error %d\n", error);
+		goto done;
+	}
+
 	lwkt_serialize_enter(&sc->slz);
 	error = bus_setup_intr(sc->dev, sc->intr_res, INTR_MPSAFE,
 			       ig4iic_intr, sc, &sc->intr_handle, &sc->slz);
@@ -765,8 +790,6 @@ ig4iic_attach(ig4iic_softc_t *sc)
 			      "Unable to setup irq: error %d\n", error);
 		goto done;
 	}
-	sc->intr_cpu = rman_get_cpuid(sc->intr_res);
-	sc->intr_gd = globaldata_find(sc->intr_cpu),
 
 	/* Attach us to the smbus */
 	lwkt_serialize_exit(&sc->slz);
@@ -795,12 +818,17 @@ ig4iic_detach(ig4iic_softc_t *sc)
 	ACPI_HANDLE h;
 	int error;
 
+	/* XXX Stop the worker thread */
+
 	lwkt_serialize_enter(&sc->slz);
+
+	/* XXX Discard remaining work for the worker thread. */
 
 	reg_write(sc, IG4_REG_INTR_MASK, 0);
 	sc->intr_mask = 0;
 	set_controller(sc, 0);
 
+	/* XXX Detaching children should be the very first thing of detaching */
 	if (sc->generic_attached) {
 		error = bus_generic_detach(sc->dev);
 		if (error)
