@@ -366,7 +366,6 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 	int error;
 	int unit;
 	uint32_t last;
-	int rrem;
 
 	/*
 	 * Debugging - dump registers
@@ -467,41 +466,22 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 		reg_write(sc, IG4_REG_DATA_CMD, last);
 		last = IG4_DATA_COMMAND_RD;
 	}
-	rrem = rcount - 1;
 
 	/*
 	 * Bulk read (i2c) and count field handling (smbus)
 	 */
 	while (rcount) {
-		uint32_t v;
-
-		/* Assumes that Rx and Tx fifos have the same size. */
-		if (op & SMB_TRANS_NOCNT) {
-			while (rrem) {
-				v = reg_read(sc, IG4_REG_I2C_STA);
-				if (v & IG4_STATUS_TX_NOTFULL) {
-					if (rrem == 1) {
-						reg_write(sc, IG4_REG_DATA_CMD, IG4_DATA_COMMAND_RD | IG4_DATA_STOP);
-					} else {
-						reg_write(sc, IG4_REG_DATA_CMD, IG4_DATA_COMMAND_RD);
-					}
-					rrem--;
-				} else {
-					break;
-				}
-			}
-		} else {
-			/*
-			 * Maintain a pipeline by queueing the allowance for the next
-			 * read before waiting for the current read.
-			 */
-			if (rrem > 0) {
-				v = reg_read(sc, IG4_REG_I2C_STA);
-				if (v & IG4_STATUS_TX_NOTFULL) {
-					reg_write(sc, IG4_REG_DATA_CMD, IG4_DATA_COMMAND_RD);
-					rrem--;
-				}
-			}
+		/*
+		 * Maintain a pipeline by queueing the allowance for the next
+		 * read before waiting for the current read.
+		 */
+		if (rcount > 1) {
+			if (op & SMB_TRANS_NOCNT)
+				last = (rcount == 2) ? IG4_DATA_STOP : 0;
+			else
+				last = 0;
+			reg_write(sc, IG4_REG_DATA_CMD, IG4_DATA_COMMAND_RD |
+							last);
 		}
 		error = wait_status(sc, IG4_STATUS_RX_NOTEMPTY);
 		if (error) {
@@ -529,11 +509,8 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 			 * XXX if rcount is loaded as 0 how do I generate a
 			 *     STOP now without issuing another RD or WR?
 			 */
-			if (rcount > (u_char)last) {
+			if (rcount > (u_char)last)
 				rcount = (u_char)last;
-				/* One read was already pipelined. */
-				rrem = rcount - 1;
-			}
 			op |= SMB_TRANS_NOCNT;
 		}
 	}
