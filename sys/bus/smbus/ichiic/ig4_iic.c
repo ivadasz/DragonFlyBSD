@@ -536,19 +536,6 @@ ig4iic_attach(ig4iic_softc_t *sc)
 
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
 
-#if 1
-	/*
-	 * Don't do this, it blows up the PCI config
-	 */
-	if (sc->version == IG4_HASWELL || sc->version == IG4_ATOM) {
-		reg_write(sc, IG4_REG_RESETS_HSW, IG4_RESETS_ASSERT_HSW);
-		reg_write(sc, IG4_REG_RESETS_HSW, IG4_RESETS_DEASSERT_HSW);
-	} else if (sc->version == IG4_SKYLAKE) {
-		reg_write(sc, IG4_REG_RESETS_SKL, IG4_RESETS_ASSERT_SKL);
-		reg_write(sc, IG4_REG_RESETS_SKL, IG4_RESETS_DEASSERT_SKL);
-	}
-#endif
-
 	if (sc->version == IG4_ATOM) {
 		v = reg_read(sc, IG4_REG_COMP_TYPE);
 		kprintf("type %08x", v);
@@ -656,6 +643,19 @@ ig4iic_attach(ig4iic_softc_t *sc)
 			goto done;
 		}
 	}
+
+#if 0
+	/*
+	 * Don't do this, it blows up the PCI config
+	 */
+	if (sc->version == IG4_HASWELL || sc->version == IG4_ATOM) {
+		reg_write(sc, IG4_REG_RESETS_HSW, IG4_RESETS_ASSERT_HSW);
+		reg_write(sc, IG4_REG_RESETS_HSW, IG4_RESETS_DEASSERT_HSW);
+	} else if (sc->version == IG4_SKYLAKE) {
+		reg_write(sc, IG4_REG_RESETS_SKL, IG4_RESETS_ASSERT_SKL);
+		reg_write(sc, IG4_REG_RESETS_SKL, IG4_RESETS_DEASSERT_SKL);
+	}
+#endif
 
 	/*
 	 * Interrupt on STOP detect or receive character ready
