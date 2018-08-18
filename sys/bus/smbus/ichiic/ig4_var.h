@@ -73,7 +73,6 @@ struct ig4iic_softc {
 	int		rnext;
 	int		rpos;
 	char		rbuf[IG4_RBUFSIZE];
-	int		rqueued;
 	int		error;
 	uint8_t		last_slave;
 	int		pci_attached : 1;
