@@ -469,8 +469,8 @@ struct tcp_state_count {
 
 struct sockopt;
 
-extern struct tcp_stats		tcpstats_percpu[MAXCPU];
-extern struct tcp_state_count	tcpstate_count[MAXCPU];
+extern struct tcp_stats		*tcpstats_percpu;
+extern struct tcp_state_count	*tcpstate_count;
 
 static const int tcprexmtthresh = 3;
 #endif
