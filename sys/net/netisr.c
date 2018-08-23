@@ -105,13 +105,13 @@ struct netisr_data {
 	TAILQ_HEAD(, netisr_rollup) netrulist;
 };
 
-static struct netisr_data	*netisr_data[MAXCPU];
+static struct netisr_data	**netisr_data;
 
 static struct netisr netisrs[NETISR_MAX];
 static TAILQ_HEAD(,netmsg_port_registration) netreglist;
 
 /* Per-CPU thread to handle any protocol.  */
-struct thread *netisr_threads[MAXCPU];
+struct thread **netisr_threads;
 
 lwkt_port netisr_afree_rport;
 lwkt_port netisr_afree_free_so_rport;
@@ -211,6 +211,11 @@ netisr_init(void)
 		netisr_ncpus = NETISR_CPUMAX;
 
 	TAILQ_INIT(&netreglist);
+
+	netisr_threads = kmalloc(ncpus * sizeof(struct thread *), M_DEVBUF,
+	    M_ZERO | M_WAITOK);
+	netisr_data = kmalloc(ncpus * sizeof(struct netisr_data *), M_DEVBUF,
+	    M_ZERO | M_WAITOK);
 
 	/*
 	 * Create default per-cpu threads for generic protocol handling.
