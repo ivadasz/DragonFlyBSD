@@ -252,9 +252,9 @@ static int	sysctl_compat_npoll_stfrac(SYSCTL_HANDLER_ARGS);
 static int	sysctl_compat_npoll_cpuid(SYSCTL_HANDLER_ARGS);
 
 static struct stpoll_ctx	stpoll_context;
-static struct poll_comm		*poll_common[MAXCPU];
-static struct iopoll_ctx	*rxpoll_context[MAXCPU];
-static struct iopoll_ctx	*txpoll_context[MAXCPU];
+static struct poll_comm		**poll_common;
+static struct iopoll_ctx	**rxpoll_context;
+static struct iopoll_ctx	**txpoll_context;
 
 SYSCTL_NODE(_net, OID_AUTO, ifpoll, CTLFLAG_RW, 0,
 	    "Network device polling parameters");
@@ -368,6 +368,13 @@ static void
 ifpoll_sysinit(void *dummy __unused)
 {
 	struct netmsg_base msg;
+
+	poll_common = kmalloc(ncpus * sizeof(struct poll_comm *),
+	    M_DEVBUF, M_ZERO | M_WAITOK);
+	rxpoll_context = kmalloc(ncpus * sizeof(struct iopoll_ctx *),
+	    M_DEVBUF, M_ZERO | M_WAITOK);
+	txpoll_context = kmalloc(ncpus * sizeof(struct iopoll_ctx *),
+	    M_DEVBUF, M_ZERO | M_WAITOK);
 
 	netmsg_init(&msg, NULL, &curthread->td_msgport, 0, ifpoll_init_handler);
 	netisr_domsg_global(&msg);
