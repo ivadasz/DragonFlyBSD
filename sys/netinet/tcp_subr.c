@@ -289,8 +289,8 @@ static struct malloc_pipe tcptemp_mpipe;
 static void tcp_willblock(void);
 static void tcp_notify (struct inpcb *, int);
 
-struct tcp_stats tcpstats_percpu[MAXCPU] __cachealign;
-struct tcp_state_count tcpstate_count[MAXCPU] __cachealign;
+struct tcp_stats *tcpstats_percpu;
+struct tcp_state_count *tcpstate_count;
 
 static void	tcp_drain_dispatch(netmsg_t nmsg);
 
@@ -393,6 +393,10 @@ tcp_init(void)
 
 	portinfo = kmalloc(sizeof(*portinfo) * netisr_ncpus, M_PCB,
 			   M_WAITOK | M_CACHEALIGN);
+	tcpstats_percpu = kmalloc(sizeof(*tcpstats_percpu) * netisr_ncpus,
+				  M_DEVBUF, M_ZERO | M_WAITOK | M_CACHEALIGN);
+	tcpstate_count = kmalloc(sizeof(*tcpstate_count) * netisr_ncpus,
+				 M_DEVBUF, M_ZERO | M_WAITOK | M_CACHEALIGN);
 
 	for (cpu = 0; cpu < netisr_ncpus; cpu++) {
 		ticb = &tcbinfo[cpu];
