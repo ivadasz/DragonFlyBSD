@@ -237,9 +237,9 @@ struct mbtypes_stat {
 	u_long	stats[MT_NTYPES];
 } __cachealign;
 
-static struct mbtypes_stat	mbtypes[SMP_MAXCPU];
+static struct mbtypes_stat	*mbtypes;
 
-static struct mbstat mbstat[SMP_MAXCPU] __cachealign;
+static struct mbstat *mbstat;
 int	max_linkhdr;
 int	max_protohdr;
 int	max_hdr;
@@ -774,6 +774,11 @@ static void
 mbinit(void *dummy __unused)
 {
 	int limit, mb_limit, cl_limit, ncl_limit, jcl_limit, i;
+
+	mbtypes = kmalloc(ncpus * sizeof(*mbtypes), M_DEVBUF,
+	    M_ZERO | M_WAITOK);
+	mbstat = kmalloc(ncpus * sizeof(*mbstat), M_DEVBUF,
+	    M_ZERO | M_WAITOK | M_CACHEALIGN);
 
 	/*
 	 * Initialize statistics
