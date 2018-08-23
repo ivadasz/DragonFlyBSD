@@ -75,7 +75,7 @@
 #include <sys/thread.h>
 #include <net/netisr.h>
 
-extern struct thread *netisr_threads[MAXCPU];
+extern struct thread **netisr_threads;
 
 /*
  * Return the message port for the general protocol message servicing
