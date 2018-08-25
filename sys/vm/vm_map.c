@@ -95,6 +95,8 @@
 #include <sys/thread2.h>
 #include <sys/spinlock2.h>
 
+extern int naps;
+
 /*
  * Virtual memory maps provide for the mapping, protection, and sharing
  * of virtual memory objects.  In addition, this module provides for an
@@ -142,7 +144,7 @@ __read_mostly static vm_zone_t mapentzone;
 
 static struct vm_map_entry map_entry_init[MAX_MAPENT];
 static struct vm_map_entry cpu_map_entry_init_bsp[MAPENTRYBSP_CACHE];
-static struct vm_map_entry cpu_map_entry_init_ap[MAXCPU][MAPENTRYAP_CACHE];
+static struct vm_map_entry *cpu_map_entry_init_ap;
 
 __read_mostly static int randomize_mmap;
 SYSCTL_INT(_vm, OID_AUTO, randomize_mmap, CTLFLAG_RW, &randomize_mmap, 0,
@@ -856,6 +858,17 @@ vm_map_entry_allocate_object(vm_map_entry_t entry)
 	vm_map_backing_attach(entry, &entry->ba);
 }
 
+static void
+allocate_cpu_map_entries(void *dummy __unused)
+{
+	cpu_map_entry_init_ap = kmalloc(
+	    (naps + 1) * MAPENTRYAP_CACHE * sizeof(*cpu_map_entry_init_ap),
+	    M_DEVBUF, M_ZERO | M_WAITOK);
+}
+
+SYSINIT(alloc_map_entries, SI_BOOT2_CPU_TOPOLOGY, SI_ORDER_ANY,
+    allocate_cpu_map_entries, NULL);
+
 /*
  * Set an initial negative count so the first attempt to reserve
  * space preloads a bunch of vm_map_entry's for this cpu.  Also
@@ -884,7 +897,7 @@ vm_map_entry_reserve_cpu_init(globaldata_t gd)
 		entry = &cpu_map_entry_init_bsp[0];
 		count = MAPENTRYBSP_CACHE;
 	} else {
-		entry = &cpu_map_entry_init_ap[gd->gd_cpuid][0];
+		entry = &cpu_map_entry_init_ap[gd->gd_cpuid * MAPENTRYAP_CACHE];
 		count = MAPENTRYAP_CACHE;
 	}
 	for (i = 0; i < count; ++i, ++entry) {
