@@ -97,11 +97,12 @@ extern int nfs_diskless_valid;	/* NFS diskless params were obtained */
 extern vm_paddr_t Maxmem;	/* Highest physical memory address in system */
 
 #ifdef	INVARIANTS		/* The option is always available */
+void panic_kkassert(const char *expr, const char *func, const char *file,
+		    u_int line) __dead2;
 #define	KASSERT(exp,msg)	do { if (__predict_false(!(exp)))	\
 					panic msg; } while (0)
-#define KKASSERT(exp)		do { if (__predict_false(!(exp)))	  \
-					panic("assertion \"%s\" failed "  \
-					"in %s at %s:%u", #exp, __func__, \
+#define KKASSERT(exp)		do { if (__predict_false(!(exp)))	\
+					panic_kkassert(#exp, __func__,	\
 					__FILE__, __LINE__); } while (0)
 #define __debugvar
 #else
