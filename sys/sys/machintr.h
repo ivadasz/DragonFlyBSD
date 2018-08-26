@@ -90,6 +90,7 @@ struct machintr_abi {
     void	(*setdefault)(void);		/* set default vectors */
     void	(*stabilize)(void);		/* stable before ints enabled */
     void	(*initmap)(void);		/* init irq mapping */
+    void	(*initsmp)(int cpus);		/* add more cpus to mapping */
     void	(*rman_setup)(struct rman *rm);	/* setup rman */
 };
 
