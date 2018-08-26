@@ -885,6 +885,14 @@ panic(const char *fmt, ...)
 	boot(bootopt);
 }
 
+#ifdef INVARIANTS
+void
+panic_kkassert(const char *expr, const char *func, const char *file, u_int line)
+{
+        panic("assertion \"%s\" failed in %s at %s:%u", expr, func, file, line);
+}
+#endif
+
 /*
  * Support for poweroff delay.
  */
