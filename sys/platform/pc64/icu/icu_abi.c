@@ -60,6 +60,8 @@
 #include <machine_base/icu/icu_ipl.h>
 #include <machine_base/apic/ioapic.h>
 
+extern int naps;
+
 extern inthand_t
 	IDTVEC(icu_intr0),	IDTVEC(icu_intr1),
 	IDTVEC(icu_intr2),	IDTVEC(icu_intr3),
@@ -81,12 +83,16 @@ static inthand_t *icu_intr[ICU_HWI_VECTORS] = {
 	&IDTVEC(icu_intr14),	&IDTVEC(icu_intr15)
 };
 
-static struct icu_irqmap {
+struct icu_irqmap {
 	int			im_type;	/* ICU_IMT_ */
 	enum intr_trigger	im_trig;
 	int			im_msi_base;
 	uint32_t		im_flags;	/* ICU_IMF_ */
-} icu_irqmaps[MAXCPU][IDT_HWI_VECTORS];
+};
+
+static struct icu_irqmap icu_irqmaps_static[IDT_HWI_VECTORS];
+static struct icu_irqmap *icu_irqmaps_static_ptr = &icu_irqmaps_static[0];
+static struct icu_irqmap **icu_irqmaps = &icu_irqmaps_static_ptr;;
 
 static struct lwkt_token icu_irqmap_tok =
 	LWKT_TOKEN_INITIALIZER(icu_irqmap_token);
@@ -137,6 +143,7 @@ static void	icu_abi_cleanup(void);
 static void	icu_abi_setdefault(void);
 static void	icu_abi_stabilize(void);
 static void	icu_abi_initmap(void);
+static void	icu_abi_initsmp(int count);
 static void	icu_abi_rman_setup(struct rman *);
 
 struct machintr_abi MachIntrABI_ICU = {
@@ -162,6 +169,7 @@ struct machintr_abi MachIntrABI_ICU = {
 	.setdefault	= icu_abi_setdefault,
 	.stabilize	= icu_abi_stabilize,
 	.initmap	= icu_abi_initmap,
+	.initsmp	= icu_abi_initsmp,
 	.rman_setup	= icu_abi_rman_setup
 };
 
@@ -319,47 +327,69 @@ icu_abi_setdefault(void)
 static void
 icu_abi_initmap(void)
 {
-	int cpu;
+	struct icu_irqmap *map = icu_irqmaps[0];
+	int i;
 
 	kgetenv_int("hw.icu.msi_start", &icu_abi_msi_start);
 	icu_abi_msi_start &= ~0x1f;	/* MUST be 32 aligned */
 
 	/*
-	 * NOTE: ncpus is not ready yet
+	 * NOTE: ncpus is not ready yet, hence only initialize for cpu0.
 	 */
-	for (cpu = 0; cpu < MAXCPU; ++cpu) {
+	for (i = 0; i < ICU_HWI_VECTORS; ++i)
+		map[i].im_type = ICU_IMT_LEGACY;
+	map[ICU_IRQ_SLAVE].im_type = ICU_IMT_RESERVED;
+
+	if (elcr_found) {
+		for (i = 0; i < ICU_HWI_VECTORS; ++i)
+			map[i].im_trig = elcr_read_trigger(i);
+	} else {
+		/*
+		 * NOTE: Trigger mode does not matter at all
+		 */
+		for (i = 0; i < ICU_HWI_VECTORS; ++i)
+			map[i].im_trig = INTR_TRIGGER_EDGE;
+	}
+
+	for (i = 0; i < IDT_HWI_VECTORS; ++i)
+		map[i].im_msi_base = -1;
+
+	map[IDT_OFFSET_SYSCALL - IDT_OFFSET].im_type = ICU_IMT_SYSCALL;
+}
+
+static void
+icu_abi_initsmp(int count)
+{
+	struct icu_irqmap **newmap;
+	struct icu_irqmap *newalloc;
+	int cpu;
+
+	newmap = kmalloc((naps + 1) * sizeof(*newmap), M_DEVBUF,
+	    M_ZERO | M_WAITOK);
+
+	newmap[0] = icu_irqmaps_static_ptr;
+	icu_irqmaps = newmap;
+
+	newalloc = kmalloc(naps * ICU_HWI_VECTORS * sizeof(*newalloc),
+	    M_DEVBUF, M_ZERO | M_WAITOK);
+
+	/*
+	 * NOTE: ncpus is not ready yet, but naps is ready.
+	 */
+	for (cpu = 1; cpu < naps + 1; ++cpu) {
+		struct icu_irqmap *map;
 		int i;
 
-		if (cpu != 0) {
-			for (i = 0; i < ICU_HWI_VECTORS; ++i)
-				icu_irqmaps[cpu][i].im_type = ICU_IMT_RESERVED;
-		} else {
-			for (i = 0; i < ICU_HWI_VECTORS; ++i)
-				icu_irqmaps[cpu][i].im_type = ICU_IMT_LEGACY;
-			icu_irqmaps[cpu][ICU_IRQ_SLAVE].im_type =
-			    ICU_IMT_RESERVED;
+		icu_irqmaps[cpu] = &newalloc[(cpu - 1) * ICU_HWI_VECTORS];
+		map = icu_irqmaps[cpu];
 
-			if (elcr_found) {
-				for (i = 0; i < ICU_HWI_VECTORS; ++i) {
-					icu_irqmaps[cpu][i].im_trig =
-					    elcr_read_trigger(i);
-				}
-			} else {
-				/*
-				 * NOTE: Trigger mode does not matter at all
-				 */
-				for (i = 0; i < ICU_HWI_VECTORS; ++i) {
-					icu_irqmaps[cpu][i].im_trig =
-					    INTR_TRIGGER_EDGE;
-				}
-			}
-		}
+		for (i = 0; i < ICU_HWI_VECTORS; ++i)
+			map[i].im_type = ICU_IMT_RESERVED;
 
 		for (i = 0; i < IDT_HWI_VECTORS; ++i)
-			icu_irqmaps[cpu][i].im_msi_base = -1;
+			map[i].im_msi_base = -1;
 
-		icu_irqmaps[cpu][IDT_OFFSET_SYSCALL - IDT_OFFSET].im_type =
-		    ICU_IMT_SYSCALL;
+		map[IDT_OFFSET_SYSCALL - IDT_OFFSET].im_type = ICU_IMT_SYSCALL;
 	}
 }
 
@@ -408,7 +438,7 @@ icu_abi_rman_setup(struct rman *rm)
 {
 	int start, end, i;
 
-	KASSERT(rm->rm_cpuid >= 0 && rm->rm_cpuid < MAXCPU,
+	KASSERT(rm->rm_cpuid >= 0 && rm->rm_cpuid < ncpus,
 	    ("invalid rman cpuid %d", rm->rm_cpuid));
 
 	start = end = -1;
