@@ -45,6 +45,8 @@
 #include <sys/interrupt.h>
 #include <sys/bus.h>
 #include <sys/rman.h>
+#include <sys/types.h>
+#include <sys/malloc.h>
 
 #include <machine/smp.h>
 #include <machine/segments.h>
@@ -62,6 +64,8 @@
 #include <machine_base/apic/apicreg.h>
 
 #include <dev/acpica/acpi_sci_var.h>
+
+extern int naps;
 
 #define IOAPIC_HWI_VECTORS	IDT_HWI_VECTORS
 
@@ -459,14 +463,18 @@ static inthand_t *ioapic_intr[IOAPIC_HWI_VECTORS] = {
 /*
  * NOTE: Initialized before VM so cannot use kmalloc() for this array.
  */
-static struct ioapic_irqmap {
+struct ioapic_irqmap {
 	int			im_type;	/* IOAPIC_IMT_ */
 	enum intr_trigger	im_trig;
 	enum intr_polarity	im_pola;
 	int			im_gsi;
 	int			im_msi_base;
 	uint32_t		im_flags;	/* IOAPIC_IMF_ */
-} ioapic_irqmaps[MAXCPU][IOAPIC_HWI_VECTORS];
+};
+static struct ioapic_irqmap ioapic_irqmaps_static[IOAPIC_HWI_VECTORS];
+static struct ioapic_irqmap *ioapic_irqmaps_static_ptr =
+    &ioapic_irqmaps_static[0];
+static struct ioapic_irqmap **ioapic_irqmaps = &ioapic_irqmaps_static_ptr;
 
 static struct lwkt_token ioapic_irqmap_tok =
 	LWKT_TOKEN_INITIALIZER(ioapic_irqmap_token);
@@ -517,6 +525,7 @@ static void	ioapic_abi_cleanup(void);
 static void	ioapic_abi_setdefault(void);
 static void	ioapic_abi_stabilize(void);
 static void	ioapic_abi_initmap(void);
+static void	ioapic_abi_initsmp(int count);
 static void	ioapic_abi_rman_setup(struct rman *);
 
 static int	ioapic_abi_gsi_cpuid(int, int);
@@ -546,6 +555,7 @@ struct machintr_abi MachIntrABI_IOAPIC = {
 	.setdefault	= ioapic_abi_setdefault,
 	.stabilize	= ioapic_abi_stabilize,
 	.initmap	= ioapic_abi_initmap,
+	.initsmp	= ioapic_abi_initsmp,
 	.rman_setup	= ioapic_abi_rman_setup
 };
 
@@ -746,7 +756,7 @@ ioapic_abi_setdefault(void)
 static void
 ioapic_abi_initmap(void)
 {
-	int cpu;
+	int i;
 
 	kgetenv_int("hw.ioapic.gsi.balance", &ioapic_abi_gsi_balance);
 
@@ -756,15 +766,45 @@ ioapic_abi_initmap(void)
 	/*
 	 * NOTE: ncpus is not ready yet
 	 */
-	for (cpu = 0; cpu < MAXCPU; ++cpu) {
+	for (i = 0; i < IOAPIC_HWI_VECTORS; ++i) {
+		ioapic_irqmaps[0][i].im_gsi = -1;
+		ioapic_irqmaps[0][i].im_msi_base = -1;
+	}
+	ioapic_irqmaps[0][IOAPIC_HWI_SYSCALL].im_type =
+	    IOAPIC_IMT_SYSCALL;
+}
+
+static void
+ioapic_abi_initsmp(int count)
+{
+        struct ioapic_irqmap **newmap;
+        struct ioapic_irqmap *newalloc;
+	int cpu;
+
+        newmap = kmalloc((naps + 1) * sizeof(*newmap), M_DEVBUF,
+            M_ZERO | M_WAITOK);
+
+        newmap[0] = ioapic_irqmaps_static_ptr;
+        ioapic_irqmaps = newmap;
+
+        newalloc = kmalloc(naps * IOAPIC_HWI_VECTORS * sizeof(*newalloc),
+            M_DEVBUF, M_ZERO | M_WAITOK);
+
+        /*
+         * NOTE: ncpus is not ready yet, but naps is ready.
+         */
+	for (cpu = 1; cpu < naps + 1; ++cpu) {
+		struct ioapic_irqmap *map;
 		int i;
 
+                ioapic_irqmaps[cpu] = &newalloc[(cpu - 1) * IOAPIC_HWI_VECTORS];
+                map = ioapic_irqmaps[cpu];
+
 		for (i = 0; i < IOAPIC_HWI_VECTORS; ++i) {
-			ioapic_irqmaps[cpu][i].im_gsi = -1;
-			ioapic_irqmaps[cpu][i].im_msi_base = -1;
+			map[i].im_gsi = -1;
+			map[i].im_msi_base = -1;
 		}
-		ioapic_irqmaps[cpu][IOAPIC_HWI_SYSCALL].im_type =
-		    IOAPIC_IMT_SYSCALL;
+		map[IOAPIC_HWI_SYSCALL].im_type = IOAPIC_IMT_SYSCALL;
 	}
 }
 
@@ -1202,7 +1242,7 @@ ioapic_abi_rman_setup(struct rman *rm)
 {
 	int start, end, i;
 
-	KASSERT(rm->rm_cpuid >= 0 && rm->rm_cpuid < MAXCPU,
+	KASSERT(rm->rm_cpuid >= 0 && rm->rm_cpuid < ncpus,
 	    ("invalid rman cpuid %d", rm->rm_cpuid));
 
 	start = end = -1;
