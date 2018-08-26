@@ -44,6 +44,7 @@
 #include <machine_base/apic/ioapic_abi.h>
 #include <machine_base/apic/apicvar.h>
 #include <machine_base/icu/icu_var.h>
+#include <machine_base/icu/icu_abi.h>
 #include <machine/segments.h>
 #include <sys/thread2.h>
 #include <sys/spinlock2.h>
@@ -1174,6 +1175,11 @@ lapic_config(void)
 			"available APs\n",
 			ap_max, naps);
 		naps = ap_max;
+	}
+
+	if (naps > 0) {
+		MachIntrABI_ICU.initsmp(naps + 1);
+		MachIntrABI_IOAPIC.initsmp(naps + 1);
 	}
 
 	return 0;
