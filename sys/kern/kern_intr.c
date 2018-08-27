@@ -75,11 +75,14 @@ struct intr_info {
 	int		i_intr;
 };
 
+typedef struct intr_info intr_info_pcpu[MAX_INTS];
+
 struct intr_info_block {
-	struct intr_info ary[MAXCPU][MAX_INTS];
+	intr_info_pcpu *ary;
 };
 
-static struct intr_info_block *intr_block;
+static struct intr_info_block intr_block_s;
+static struct intr_info_block *intr_block = &intr_block_s;
 static struct intr_info *swi_info_ary[MAX_SOFTINTS];
 
 static int max_installed_hard_intr[MAXCPU];
@@ -1178,8 +1181,8 @@ intr_init(void *dummy __unused)
 
 	kprintf("Initialize MI interrupts\n");
 
-	intr_block = kmalloc(sizeof(*intr_block), M_INTRMNG,
-			     M_INTWAIT | M_ZERO);
+	intr_block->ary = kmalloc(ncpus * sizeof(intr_info_pcpu), M_INTRMNG,
+	    M_INTWAIT | M_ZERO);
 
 	for (cpuid = 0; cpuid < ncpus; ++cpuid) {
 		int intr;
