@@ -748,7 +748,7 @@ ioapic_abi_setdefault(void)
 		if (intr == IOAPIC_HWI_SYSCALL)
 			continue;
 		setidt_global(IDT_OFFSET + intr, ioapic_intr[intr],
-		    SDT_SYSIGT, SEL_KPL, 0);
+		    SDT_SYSIGT, SEL_KPL, 0, 0, ncpus);
 	}
 }
 

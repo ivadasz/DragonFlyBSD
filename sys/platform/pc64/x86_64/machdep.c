@@ -1620,7 +1620,10 @@ SYSCTL_PROC(_machdep, OID_AUTO, efi_map, CTLTYPE_OPAQUE|CTLFLAG_RD, NULL, 0,
 
 int _default_ldt;
 struct user_segment_descriptor gdt[NGDT * MAXCPU];	/* global descriptor table */
-struct gate_descriptor idt_arr[MAXCPU][NIDT];
+typedef struct gate_descriptor pcpu_gate_desc[NIDT];
+static pcpu_gate_desc idt_arr_0;
+static struct gate_descriptor *idt_arr_st[MAXCPU] = {[0] = &idt_arr_0[0]};
+struct gate_descriptor **idt_arr = &idt_arr_st[0];
 #if 0 /* JG */
 union descriptor ldt[NLDT];		/* local descriptor table */
 #endif
@@ -1721,33 +1724,11 @@ struct soft_segment_descriptor gdt_segs[] = {
 	1			/* limit granularity (byte/page units)*/ },
 };
 
-void
-setidt_global(int idx, inthand_t *func, int typ, int dpl, int ist)
+static void
+setidt_hard(int idx, inthand_t *func, int typ, int dpl, int ist, int cpu)
 {
-	int cpu;
+	struct gate_descriptor *ip = &idt_arr[cpu][idx];
 
-	for (cpu = 0; cpu < MAXCPU; ++cpu) {
-		struct gate_descriptor *ip = &idt_arr[cpu][idx];
-
-		ip->gd_looffset = (uintptr_t)func;
-		ip->gd_selector = GSEL(GCODE_SEL, SEL_KPL);
-		ip->gd_ist = ist;
-		ip->gd_xx = 0;
-		ip->gd_type = typ;
-		ip->gd_dpl = dpl;
-		ip->gd_p = 1;
-		ip->gd_hioffset = ((uintptr_t)func)>>16 ;
-	}
-}
-
-void
-setidt(int idx, inthand_t *func, int typ, int dpl, int ist, int cpu)
-{
-	struct gate_descriptor *ip;
-
-	KASSERT(cpu >= 0 && cpu < ncpus, ("invalid cpu %d", cpu));
-
-	ip = &idt_arr[cpu][idx];
 	ip->gd_looffset = (uintptr_t)func;
 	ip->gd_selector = GSEL(GCODE_SEL, SEL_KPL);
 	ip->gd_ist = ist;
@@ -1756,6 +1737,24 @@ setidt(int idx, inthand_t *func, int typ, int dpl, int ist, int cpu)
 	ip->gd_dpl = dpl;
 	ip->gd_p = 1;
 	ip->gd_hioffset = ((uintptr_t)func)>>16 ;
+}
+
+void
+setidt_global(int idx, inthand_t *func, int typ, int dpl, int ist, int start,
+    int count)
+{
+	int cpu;
+
+	for (cpu = start; cpu < start + count; ++cpu)
+		setidt_hard(idx, func, typ, dpl, ist, cpu);
+}
+
+void
+setidt(int idx, inthand_t *func, int typ, int dpl, int ist, int cpu)
+{
+	KASSERT(cpu >= 0 && cpu < ncpus, ("invalid cpu %d", cpu));
+
+	setidt_hard(idx, func, typ, dpl, ist, cpu);
 }
 
 #define	IDTVEC(name)	__CONCAT(X,name)
@@ -1767,6 +1766,58 @@ extern inthand_t
 	IDTVEC(page), IDTVEC(mchk), IDTVEC(rsvd), IDTVEC(fpu), IDTVEC(align),
 	IDTVEC(xmm), IDTVEC(dblfault),
 	IDTVEC(fast_syscall), IDTVEC(fast_syscall32);
+
+void
+init_idts(int only_bsp)
+{
+	int start, count;
+	int cpu, x;
+
+	if (only_bsp == 0) {
+		struct gate_descriptor *new_idt_arr;
+
+		KKASSERT(naps > 0);
+		new_idt_arr = kmalloc(naps * NIDT * sizeof(*new_idt_arr),
+		    M_DEVBUF, M_WAITOK);
+		for (cpu = 0; cpu < naps; cpu++)
+			idt_arr[cpu + 1] = &new_idt_arr[cpu * NIDT];
+
+		start = 1;
+		count = naps;
+	} else {
+		start = 0;
+		count = 1;
+	}
+
+	for (x = 0; x < NIDT; x++) {
+		setidt_global(x, &IDTVEC(rsvd), SDT_SYSIGT, SEL_KPL, 0,
+		    start, count);
+	}
+	setidt_global(IDT_DE, &IDTVEC(div),  SDT_SYSIGT, SEL_KPL, 0, start, count);
+	setidt_global(IDT_DB, &IDTVEC(dbg),  SDT_SYSIGT, SEL_KPL, 2, start, count);
+	setidt_global(IDT_NMI, &IDTVEC(nmi),  SDT_SYSIGT, SEL_KPL, 1, start, count);
+	setidt_global(IDT_BP, &IDTVEC(bpt),  SDT_SYSIGT, SEL_UPL, 0, start, count);
+	setidt_global(IDT_OF, &IDTVEC(ofl),  SDT_SYSIGT, SEL_KPL, 0, start, count);
+	setidt_global(IDT_BR, &IDTVEC(bnd),  SDT_SYSIGT, SEL_KPL, 0, start, count);
+	setidt_global(IDT_UD, &IDTVEC(ill),  SDT_SYSIGT, SEL_KPL, 0, start, count);
+	setidt_global(IDT_NM, &IDTVEC(dna),  SDT_SYSIGT, SEL_KPL, 0, start, count);
+	setidt_global(IDT_DF, &IDTVEC(dblfault), SDT_SYSIGT, SEL_KPL, 1, start, count);
+	setidt_global(IDT_FPUGP, &IDTVEC(fpusegm),  SDT_SYSIGT, SEL_KPL, 0, start, count);
+	setidt_global(IDT_TS, &IDTVEC(tss),  SDT_SYSIGT, SEL_KPL, 0, start, count);
+	setidt_global(IDT_NP, &IDTVEC(missing),  SDT_SYSIGT, SEL_KPL, 0, start, count);
+	setidt_global(IDT_SS, &IDTVEC(stk),  SDT_SYSIGT, SEL_KPL, 0, start, count);
+	setidt_global(IDT_GP, &IDTVEC(prot),  SDT_SYSIGT, SEL_KPL, 0, start, count);
+	setidt_global(IDT_PF, &IDTVEC(page),  SDT_SYSIGT, SEL_KPL, 0, start, count);
+	setidt_global(IDT_MF, &IDTVEC(fpu),  SDT_SYSIGT, SEL_KPL, 0, start, count);
+	setidt_global(IDT_AC, &IDTVEC(align), SDT_SYSIGT, SEL_KPL, 0, start, count);
+	setidt_global(IDT_MC, &IDTVEC(mchk),  SDT_SYSIGT, SEL_KPL, 0, start, count);
+	setidt_global(IDT_XF, &IDTVEC(xmm), SDT_SYSIGT, SEL_KPL, 0, start, count);
+
+	for (cpu = start; cpu < start + count; ++cpu) {
+		r_idt_arr[cpu].rd_limit = sizeof(pcpu_gate_desc) - 1;
+		r_idt_arr[cpu].rd_base = (long) &idt_arr[cpu][0];
+	}
+}
 
 void
 sdtossd(struct user_segment_descriptor *sd, struct soft_segment_descriptor *ssd)
@@ -2468,7 +2519,7 @@ u_int64_t
 hammer_time(u_int64_t modulep, u_int64_t physfree)
 {
 	caddr_t kmdp;
-	int gsel_tss, x, cpu;
+	int gsel_tss, x;
 #if 0 /* JG */
 	int metadata_missing, off;
 #endif
@@ -2569,32 +2620,7 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	init_locks();
 
 	/* exceptions */
-	for (x = 0; x < NIDT; x++)
-		setidt_global(x, &IDTVEC(rsvd), SDT_SYSIGT, SEL_KPL, 0);
-	setidt_global(IDT_DE, &IDTVEC(div),  SDT_SYSIGT, SEL_KPL, 0);
-	setidt_global(IDT_DB, &IDTVEC(dbg),  SDT_SYSIGT, SEL_KPL, 2);
-	setidt_global(IDT_NMI, &IDTVEC(nmi),  SDT_SYSIGT, SEL_KPL, 1);
-	setidt_global(IDT_BP, &IDTVEC(bpt),  SDT_SYSIGT, SEL_UPL, 0);
-	setidt_global(IDT_OF, &IDTVEC(ofl),  SDT_SYSIGT, SEL_KPL, 0);
-	setidt_global(IDT_BR, &IDTVEC(bnd),  SDT_SYSIGT, SEL_KPL, 0);
-	setidt_global(IDT_UD, &IDTVEC(ill),  SDT_SYSIGT, SEL_KPL, 0);
-	setidt_global(IDT_NM, &IDTVEC(dna),  SDT_SYSIGT, SEL_KPL, 0);
-	setidt_global(IDT_DF, &IDTVEC(dblfault), SDT_SYSIGT, SEL_KPL, 1);
-	setidt_global(IDT_FPUGP, &IDTVEC(fpusegm),  SDT_SYSIGT, SEL_KPL, 0);
-	setidt_global(IDT_TS, &IDTVEC(tss),  SDT_SYSIGT, SEL_KPL, 0);
-	setidt_global(IDT_NP, &IDTVEC(missing),  SDT_SYSIGT, SEL_KPL, 0);
-	setidt_global(IDT_SS, &IDTVEC(stk),  SDT_SYSIGT, SEL_KPL, 0);
-	setidt_global(IDT_GP, &IDTVEC(prot),  SDT_SYSIGT, SEL_KPL, 0);
-	setidt_global(IDT_PF, &IDTVEC(page),  SDT_SYSIGT, SEL_KPL, 0);
-	setidt_global(IDT_MF, &IDTVEC(fpu),  SDT_SYSIGT, SEL_KPL, 0);
-	setidt_global(IDT_AC, &IDTVEC(align), SDT_SYSIGT, SEL_KPL, 0);
-	setidt_global(IDT_MC, &IDTVEC(mchk),  SDT_SYSIGT, SEL_KPL, 0);
-	setidt_global(IDT_XF, &IDTVEC(xmm), SDT_SYSIGT, SEL_KPL, 0);
-
-	for (cpu = 0; cpu < MAXCPU; ++cpu) {
-		r_idt_arr[cpu].rd_limit = sizeof(idt_arr[cpu]) - 1;
-		r_idt_arr[cpu].rd_base = (long) &idt_arr[cpu][0];
-	}
+	init_idts(1);
 
 	lidt(&r_idt_arr[0]);
 

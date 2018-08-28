@@ -311,6 +311,7 @@ icu_abi_intr_teardown(int intr)
 	write_rflags(ef);
 }
 
+/* As far as I can see, this is only ever used with a single cpu core. */
 static void
 icu_abi_setdefault(void)
 {
@@ -320,7 +321,7 @@ icu_abi_setdefault(void)
 		if (intr == ICU_IRQ_SLAVE)
 			continue;
 		setidt_global(IDT_OFFSET + intr, icu_intr[intr],
-		    SDT_SYSIGT, SEL_KPL, 0);
+		    SDT_SYSIGT, SEL_KPL, 0, 0, 1);
 	}
 }
 

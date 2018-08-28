@@ -235,7 +235,7 @@ struct region_descriptor {
 
 #ifdef _KERNEL
 extern struct soft_segment_descriptor gdt_segs[];
-extern struct gate_descriptor idt_arr[MAXCPU][NIDT];
+extern struct gate_descriptor **idt_arr;
 extern struct region_descriptor r_idt_arr[];
 extern struct region_descriptor r_gdt;
 extern struct user_segment_descriptor gdt[NGDT * MAXCPU];

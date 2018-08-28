@@ -237,27 +237,27 @@ lapic_init(boolean_t bsp)
 
 		/* Install a 'Spurious INTerrupt' vector */
 		setidt_global(XSPURIOUSINT_OFFSET, Xspuriousint,
-		    SDT_SYSIGT, SEL_KPL, 0);
+		    SDT_SYSIGT, SEL_KPL, 0, 0, naps + 1);
 
 		/* Install a timer vector */
 		setidt_global(XTIMER_OFFSET, Xtimer,
-		    SDT_SYSIGT, SEL_KPL, 0);
+		    SDT_SYSIGT, SEL_KPL, 0, 0, naps + 1);
 
 		/* Install an inter-CPU IPI for TLB invalidation */
 		setidt_global(XINVLTLB_OFFSET, Xinvltlb,
-		    SDT_SYSIGT, SEL_KPL, 0);
+		    SDT_SYSIGT, SEL_KPL, 0, 0, naps + 1);
 
 		/* Install an inter-CPU IPI for IPIQ messaging */
 		setidt_global(XIPIQ_OFFSET, Xipiq,
-		    SDT_SYSIGT, SEL_KPL, 0);
+		    SDT_SYSIGT, SEL_KPL, 0, 0, naps + 1);
 
 		/* Install an inter-CPU IPI for CPU stop/restart */
 		setidt_global(XCPUSTOP_OFFSET, Xcpustop,
-		    SDT_SYSIGT, SEL_KPL, 0);
+		    SDT_SYSIGT, SEL_KPL, 0, 0, naps + 1);
 
 		/* Install an inter-CPU IPI for TLB invalidation */
 		setidt_global(XSNIFF_OFFSET, Xsniff,
-		    SDT_SYSIGT, SEL_KPL, 0);
+		    SDT_SYSIGT, SEL_KPL, 0, 0, naps + 1);
 	}
 
 	/*
@@ -1178,6 +1178,7 @@ lapic_config(void)
 	}
 
 	if (naps > 0) {
+		init_idts(0);
 		MachIntrABI_ICU.initsmp(naps + 1);
 		MachIntrABI_IOAPIC.initsmp(naps + 1);
 	}
