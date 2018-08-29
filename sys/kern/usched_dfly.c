@@ -214,7 +214,7 @@ struct usched usched_dfly = {
 					/* currently running a user process */
 static cpumask_t dfly_curprocmask = CPUMASK_INITIALIZER_ALLONES;
 static cpumask_t dfly_rdyprocmask;	/* ready to accept a user process */
-static struct usched_dfly_pcpu dfly_pcpu[MAXCPU];
+static struct usched_dfly_pcpu *dfly_pcpu;
 static struct sysctl_ctx_list usched_dfly_sysctl_ctx;
 static struct sysctl_oid *usched_dfly_sysctl_tree;
 static struct lock usched_dfly_config_lk = LOCK_INITIALIZER("usdfs", 0, 0);
@@ -2403,6 +2403,9 @@ usched_dfly_cpu_init(void)
 
 	if (bootverbose)
 		kprintf("Start usched_dfly helpers on cpus:\n");
+
+	dfly_pcpu = kmalloc(ncpus * sizeof(*dfly_pcpu), M_DEVBUF,
+	    M_INTWAIT | M_ZERO);
 
 	sysctl_ctx_init(&usched_dfly_sysctl_ctx);
 	usched_dfly_sysctl_tree =
