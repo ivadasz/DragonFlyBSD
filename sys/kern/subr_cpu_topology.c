@@ -58,7 +58,11 @@ struct per_cpu_sysctl_info {
 };
 typedef struct per_cpu_sysctl_info per_cpu_sysctl_info_t;
 
-static cpu_node_t cpu_topology_nodes[MAXCPU];	/* Memory for topology */
+/*
+ * assumed_ncpus cpu_node_t objects, each with space for assumed_ncpus
+ * children.
+ */
+static cpu_node_t *cpu_topology_nodes;	/* Memory for topology */
 static cpu_node_t *cpu_root_node;		/* Root node pointer */
 
 static struct sysctl_ctx_list cpu_topology_sysctl_ctx;
@@ -112,7 +116,8 @@ build_topology_tree(int *children_no_per_level,
    int cur_level, 
    cpu_node_t *node,
    cpu_node_t **last_free_node,
-   int *apicid)
+   int *apicid,
+   int assumed_ncpus)
 {
 	int i;
 
@@ -132,7 +137,9 @@ build_topology_tree(int *children_no_per_level,
 	
 	for (i = 0; i < node->child_no; i++) {
 		node->child_node[i] = *last_free_node;
-		(*last_free_node)++;
+		(*last_free_node) = (void *)((char *)(*last_free_node) +
+		    sizeof(cpu_node_t) +
+		    assumed_ncpus * sizeof(struct cpu_node *));
 
 		node->child_node[i]->parent_node = node;
 
@@ -141,7 +148,8 @@ build_topology_tree(int *children_no_per_level,
 		    cur_level + 1,
 		    node->child_node[i],
 		    last_free_node,
-		    apicid);
+		    apicid,
+		    assumed_ncpus);
 
 		CPUMASK_ORMASK(node->members, node->child_node[i]->members);
 	}
@@ -175,8 +183,9 @@ build_cpu_topology(int assumed_ncpus)
 	int children_no_per_level[LEVEL_NO];
 	uint8_t level_types[LEVEL_NO];
 	int apicid = -1;
-	cpu_node_t *root = &cpu_topology_nodes[0];
-	cpu_node_t *last_free_node = root + 1;
+	cpu_node_t *root = (void *)cpu_topology_nodes;
+	cpu_node_t *last_free_node = (void *)((char *)root +
+	    sizeof(cpu_node_t) + assumed_ncpus * sizeof(struct cpu_node *));
 
 	detect_cpu_topology();
 
@@ -230,7 +239,8 @@ build_cpu_topology(int assumed_ncpus)
 		    0,
 		    root,
 		    &last_free_node,
-		    &apicid);
+		    &apicid,
+		    assumed_ncpus);
 
 		cpu_topology_levels_number = 4;
 
@@ -249,7 +259,8 @@ build_cpu_topology(int assumed_ncpus)
 		    0,
 		    root,
 		    &last_free_node,
-		    &apicid);
+		    &apicid,
+		    assumed_ncpus);
 
 		cpu_topology_levels_number = 3;
 
@@ -266,7 +277,8 @@ build_cpu_topology(int assumed_ncpus)
 		    0,
 		    root,
 		    &last_free_node,
-		    &apicid);
+		    &apicid,
+		    assumed_ncpus);
 
 		cpu_topology_levels_number = 2;
 
@@ -550,7 +562,7 @@ init_pcpu_topology_sysctl(int assumed_ncpus)
 	int i;
 	int phys_id;
 
-	pcpu_sysctl = kmalloc(sizeof(*pcpu_sysctl) * MAXCPU, M_PCPUSYS,
+	pcpu_sysctl = kmalloc(sizeof(*pcpu_sysctl) * assumed_ncpus, M_PCPUSYS,
 			      M_INTWAIT | M_ZERO);
 
 	for (i = 0; i < assumed_ncpus; i++) {
@@ -779,7 +791,7 @@ get_highest_node_memory(void)
                 cpu_node_t *cpup;
                 int i;
 
-                for (i = 0 ; i < MAXCPU && cpu_root_node->child_node[i]; ++i) {
+                for (i = 0 ; i < ncpus && cpu_root_node->child_node[i]; ++i) {
                         cpup = cpu_root_node->child_node[i];
                         if (highest < cpup->phys_mem)
                                 highest = cpup->phys_mem;
@@ -797,6 +809,10 @@ init_cpu_topology(void)
 	int assumed_ncpus;
 
 	assumed_ncpus = naps + 1;
+
+	cpu_topology_nodes = kmalloc(assumed_ncpus *
+	    (sizeof(cpu_node_t) + assumed_ncpus * sizeof(struct cpu_node *)),
+	    M_DEVBUF, M_INTWAIT | M_ZERO);
 
 	build_cpu_topology(assumed_ncpus);
 	init_pcpu_topology_sysctl(assumed_ncpus);

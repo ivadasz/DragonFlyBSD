@@ -8,7 +8,6 @@
 /* CPU TOPOLOGY DATA AND FUNCTIONS */
 struct cpu_node {
 	struct cpu_node * parent_node;
-	struct cpu_node * child_node[MAXCPU];
 	uint32_t child_no;
 	uint32_t unused01;
 	cpumask_t members;
@@ -17,6 +16,7 @@ struct cpu_node {
 	uint8_t unused02;
 	uint8_t unused03;
 	long	phys_mem;	/* supplied from vm_numa_organize() */
+	struct cpu_node * child_node[];
 };
 typedef struct cpu_node cpu_node_t;
 

@@ -546,6 +546,8 @@ vm_numa_organize(vm_paddr_t ran_beg, vm_paddr_t bytes, int physid)
 	crit_exit();
 }
 
+extern int naps;
+
 static
 void
 vm_numa_add_topology_mem(cpu_node_t *cpup, int physid, long bytes)
@@ -578,7 +580,8 @@ vm_numa_add_topology_mem(cpu_node_t *cpup, int physid, long bytes)
 		cpup->phys_mem = cpup->parent_node->phys_mem;
 		break;
 	}
-	for (i = 0; i < MAXCPU && cpup->child_node[i]; ++i)
+	/* The naps value is already available here. */
+	for (i = 0; i < naps + 1 && cpup->child_node[i]; ++i)
 		vm_numa_add_topology_mem(cpup->child_node[i], physid, bytes);
 }
 
