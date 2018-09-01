@@ -810,7 +810,7 @@ init_cpu_topology(void)
 
 	assumed_ncpus = naps + 1;
 
-	cpu_topology_nodes = kmalloc(assumed_ncpus *
+	cpu_topology_nodes = kmalloc((assumed_ncpus + 10) *
 	    (sizeof(cpu_node_t) + assumed_ncpus * sizeof(struct cpu_node *)),
 	    M_DEVBUF, M_INTWAIT | M_ZERO);
 
