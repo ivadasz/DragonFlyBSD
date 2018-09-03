@@ -336,6 +336,6 @@ device		rdrand		# hardware RNG for RdRand
 
 device		gpio_acpi
 device		gpio_intel	# GPIO support for Intel SoCs
-#device		ichiic
+device		ichiic
 device		smbus		# Bus support, required for smb below.
 device		smbacpi
