@@ -350,6 +350,12 @@ malloc_init(void *data)
 
     limsize = kmem_lim_size() * (1024 * 1024);
     type->ks_limit = limsize / 10;
+    if (ncpus > 1) {
+	type->ks_use = kmalloc(ncpus * sizeof(*type->ks_use), M_TEMP,
+	    M_WAITOK | M_ZERO);
+    } else {
+	type->ks_use = &type->ks_use_st;
+    }
 
     spin_lock(&kmemstat_spin);
     type->ks_next = kmemstatistics;
@@ -405,8 +411,38 @@ malloc_uninit(void *data)
     }
     type->ks_next = NULL;
     type->ks_limit = 0;
+    if (type->ks_use != &type->ks_use_st) {
+	kfree(type->ks_use, M_TEMP);
+	type->ks_use = NULL;
+    }
     spin_unlock(&kmemstat_spin);
 }
+
+extern int naps;
+
+static void
+fixup_mtypes(void *dummy __unused)
+{
+    struct malloc_type *t;
+
+    /* Still running on a single cpu here, so no locking needed. */
+    if (naps >= 1) {
+	for (t = kmemstatistics; t != NULL; t = t->ks_next) {
+	    if (t->ks_use == &t->ks_use_st) {
+		struct malloc_use *n;
+
+		n = kmalloc((naps + 1) * sizeof(struct malloc_use),
+		    M_TEMP, M_WAITOK | M_ZERO);
+		crit_enter();
+		n[0] = t->ks_use[0];
+		t->ks_use = n;
+		crit_exit();
+	    }
+	}
+    }
+}
+
+SYSINIT(mtype_fixup, SI_BOOT2_CPU_TOPOLOGY, SI_ORDER_ANY, fixup_mtypes, NULL);
 
 /*
  * Increase the kmalloc pool limit for the specified pool.  No changes

@@ -72,20 +72,22 @@ static struct nlist namelist[] = {
 	{ "_kmemstatistics",	0, 0, 0, 0 },
 #define	X_ZLIST		3
 	{ "_zlist",	0, 0, 0, 0 },
+#define	X_NCPUS		4
+	{ "_ncpus",	0, 0, 0, 0 },
 #ifdef notyet
-#define	X_DEFICIT	4
+#define	X_DEFICIT	5
 	{ "_deficit",	0, 0, 0, 0 },
-#define	X_FORKSTAT	5
+#define	X_FORKSTAT	6
 	{ "_forkstat",	0, 0, 0, 0 },
-#define X_REC		6
+#define X_REC		7
 	{ "_rectime",	0, 0, 0, 0 },
-#define X_PGIN		7
+#define X_PGIN		8
 	{ "_pgintime",	0, 0, 0, 0 },
-#define	X_XSTATS	8
+#define	X_XSTATS	9
 	{ "_xstats",	0, 0, 0, 0 },
-#define X_END		9
+#define X_END		10
 #else
-#define X_END		4
+#define X_END		5
 #endif
 	{ "", 0, 0, 0, 0 },
 };
@@ -928,7 +930,7 @@ dointr(void)
 enum ksuse { KSINUSE, KSMEMUSE, KSCALLS };
 
 static long
-cpuagg(struct malloc_type *ks, enum ksuse use)
+cpuagg(struct malloc_use *ksu, enum ksuse use, int numcpus)
 {
     int i;
     long ttl;
@@ -937,16 +939,16 @@ cpuagg(struct malloc_type *ks, enum ksuse use)
 
     switch(use) {
     case KSINUSE:
-	for (i = 0; i < SMP_MAXCPU; ++i)
-	    ttl += ks->ks_use[i].inuse;
+	for (i = 0; i < numcpus; ++i)
+	    ttl += ksu[i].inuse;
 	break;
     case KSMEMUSE:
-	for (i = 0; i < SMP_MAXCPU; ++i)
-	    ttl += ks->ks_use[i].memuse;
+	for (i = 0; i < numcpus; ++i)
+	    ttl += ksu[i].memuse;
 	break;
     case KSCALLS:
-	for (i = 0; i < SMP_MAXCPU; ++i)
-	    ttl += ks->ks_use[i].calls;
+	for (i = 0; i < numcpus; ++i)
+	    ttl += ksu[i].calls;
     	break;
     }
     return(ttl);
@@ -961,7 +963,9 @@ domem(void)
 	long totuse = 0, totreq = 0;
 	struct malloc_type kmemstats[MAX_KMSTATS], *kmsp;
 	char buf[1024];
+	int numcpus;
 
+	kread(X_NCPUS, &numcpus, sizeof(numcpus));
 	kread(X_KMEMSTATISTICS, &kmsp, sizeof(kmsp));
 	for (nkms = 0; nkms < MAX_KMSTATS && kmsp != NULL; nkms++) {
 		if (sizeof(kmemstats[0]) != kvm_read(kd, (u_long)kmsp,
@@ -982,16 +986,29 @@ domem(void)
 	    "\nMemory statistics by type\n");
 	printf("               Type   Count  MemUse   Limit Requests\n");
 	for (i = 0, ks = &kmemstats[0]; i < nkms; i++, ks++) {
+		struct malloc_use ksu[SMP_MAXCPU];
 		long ks_inuse;
 		long ks_memuse;
 		long ks_calls;
 
-		ks_calls = cpuagg(ks, KSCALLS);
+		if (numcpus > 1) {
+		    kvm_read(kd, (intptr_t)ks->ks_use, &ksu[0], numcpus * sizeof(ksu[0]));
+		}
+		if (numcpus == 1) {
+			ks_calls = cpuagg(&ks->ks_use_st, KSCALLS, numcpus);
+		} else {
+			ks_calls = cpuagg(ksu, KSCALLS, numcpus);
+		}
 		if (ks_calls == 0)
 			continue;
 
-		ks_inuse = cpuagg(ks, KSINUSE);
-		ks_memuse = cpuagg(ks, KSMEMUSE);
+		if (numcpus == 1) {
+			ks_inuse = cpuagg(&ks->ks_use_st, KSINUSE, numcpus);
+			ks_memuse = cpuagg(&ks->ks_use_st, KSMEMUSE, numcpus);
+		} else {
+			ks_inuse = cpuagg(ksu, KSINUSE, numcpus);
+			ks_memuse = cpuagg(ksu, KSMEMUSE, numcpus);
+		}
 
 		printf("%19s   %s   %s   %s    %s\n",
 			ks->ks_shortdesc,

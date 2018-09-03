@@ -115,7 +115,8 @@ struct malloc_type {
 	struct malloc_type *ks_next;	/* next in list */
 	size_t	ks_loosememuse;		/* (inaccurate) aggregate memuse */
 	size_t	ks_limit;	/* most that are allowed to exist */
-	struct malloc_use  ks_use[SMP_MAXCPU];
+	struct malloc_use  ks_use_st;
+	struct malloc_use  *ks_use;
 	__uint32_t ks_magic;	/* if it's not magic, don't touch it */
 	const char *ks_shortdesc;	/* short description */
 	long	ks_reserved[4];	/* future use (module compatibility) */
@@ -126,7 +127,7 @@ typedef struct malloc_type	*malloc_type_t;
 #if defined(_KERNEL) || defined(_KERNEL_STRUCTURES)
 #define	MALLOC_DEFINE(type, shortdesc, longdesc)			\
 	struct malloc_type type[1] = {					\
-	    { NULL, 0, 0, { { 0, 0, 0, 0 } }, M_MAGIC, shortdesc,	\
+	    { NULL, 0, 0, { 0, 0, 0, 0 }, NULL, M_MAGIC, shortdesc,	\
 		{ 0 } }							\
 	};								\
 	SYSINIT(type##_init, SI_BOOT1_KMALLOC, SI_ORDER_ANY,		\
