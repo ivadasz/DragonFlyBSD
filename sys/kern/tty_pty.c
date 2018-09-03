@@ -69,7 +69,6 @@ static void ptsstart (struct tty *tp);
 static void ptsstop (struct tty *tp, int rw);
 static void ptsunhold (struct tty *tp);
 static void ptcwakeup (struct tty *tp, int flag);
-static void ptyinit (int n);
 static int  filt_ptcread (struct knote *kn, long hint);
 static void filt_ptcrdetach (struct knote *kn);
 static int  filt_ptcwrite (struct knote *kn, long hint);
@@ -114,18 +113,6 @@ static struct dev_ops ptc98_ops = {
 	.d_revoke =	ttyrevoke
 };
 
-static struct dev_ops pts_ops = {
-	{ "pts", 0, D_TTY | D_MPSAFE },
-	.d_open =	ptsopen,
-	.d_close =	ptsclose,
-	.d_read =	ptsread,
-	.d_write =	ptswrite,
-	.d_ioctl =	ptyioctl,
-	.d_kqfilter =	ttykqfilter,
-	.d_revoke =	ttyrevoke
-};
-
-#define	CDEV_MAJOR_C	6
 static struct dev_ops ptc_ops = {
 	{ "ptc", 0, D_TTY | D_MASTER | D_MPSAFE },
 	.d_open =	ptcopen,
@@ -173,41 +160,6 @@ struct	pt_ioctl {
 #define	PF_MOPEN	0x0400
 #define PF_SCLOSED	0x0800
 #define PF_TERMINATED	0x8000
-
-/*
- * This function creates and initializes a pts/ptc pair
- *
- * pts == /dev/tty[pqrsPQRS][0123456789abcdefghijklmnopqrstuv]
- * ptc == /dev/pty[pqrsPQRS][0123456789abcdefghijklmnopqrstuv]
- *
- * XXX: define and add mapping of upper minor bits to allow more 
- *      than 256 ptys.
- */
-static void
-ptyinit(int n)
-{
-	cdev_t devs, devc;
-	char *names = "pqrsPQRS";
-	struct pt_ioctl *pt;
-
-	/* For now we only map the lower 8 bits of the minor */
-	if (n & ~0xff)
-		return;
-
-	pt = kmalloc(sizeof(*pt), M_PTY, M_WAITOK | M_ZERO);
-	pt->devs = devs = make_dev(&pts_ops, n,
-	    0, 0, 0666, "tty%c%c", names[n / 32], hex2ascii(n % 32));
-	pt->devc = devc = make_dev(&ptc_ops, n,
-	    0, 0, 0666, "pty%c%c", names[n / 32], hex2ascii(n % 32));
-
-	pt->pt_tty.t_dev = devs;
-	pt->pt_uminor = n;
-	devs->si_drv1 = devc->si_drv1 = pt;
-	devs->si_tty = devc->si_tty = &pt->pt_tty;
-	devs->si_flags |= SI_OVERRIDE;	/* uid, gid, perms from dev */
-	devc->si_flags |= SI_OVERRIDE;	/* uid, gid, perms from dev */
-	ttyregister(&pt->pt_tty);
-}
 
 static int
 ptyclone(struct dev_clone_args *ap)
@@ -1249,19 +1201,12 @@ SYSCTL_INT(_kern, OID_AUTO, pty_debug, CTLFLAG_RW, &pty_debug_level,
 static void
 ptc_drvinit(void *unused)
 {
-	int i;
-
 	/*
 	 * Unix98 pty stuff.
 	 * Create the clonable base device.
 	 */
 	make_autoclone_dev(&ptc_ops, &DEVFS_CLONE_BITMAP(pty), ptyclone,
 	    0, 0, 0666, "ptmx");
-
-	for (i = 0; i < 256; i++) {
-		ptyinit(i);
-	}
 }
 
-SYSINIT(ptcdev, SI_SUB_DRIVERS, SI_ORDER_MIDDLE + CDEV_MAJOR_C, ptc_drvinit,
-    NULL);
+SYSINIT(ptcdev, SI_SUB_DRIVERS, SI_ORDER_MIDDLE, ptc_drvinit, NULL);
