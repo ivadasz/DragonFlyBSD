@@ -120,7 +120,7 @@ SYSINIT(clocks, SI_BOOT2_CLOCKS, SI_ORDER_FIRST, initclocks, NULL);
  * Note that cpu_time counts in microseconds, but most userland programs
  * just compare relative times against the total by delta.
  */
-struct kinfo_cputime cputime_percpu[MAXCPU];
+struct kinfo_cputime *cputime_percpu;
 #ifdef DEBUG_PCTRACK
 struct kinfo_pcheader cputime_pcheader = { PCTRACK_SIZE, PCTRACK_ARYSIZE };
 struct kinfo_pctrack cputime_pctrack[MAXCPU][PCTRACK_SIZE];
@@ -311,6 +311,8 @@ struct spinlock ntp_spin;
 static void
 initclocks(void *dummy)
 {
+	cputime_percpu = kmalloc(ncpus * sizeof(*cputime_percpu), M_DEVBUF,
+	    M_WAITOK | M_ZERO);
 	/*psratio = profhz / stathz;*/
 	spin_init(&ntp_spin, "ntp");
 	initclocks_pcpu();

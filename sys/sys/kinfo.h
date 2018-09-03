@@ -240,7 +240,7 @@ void fill_kinfo_proc_kthread(struct thread *, struct kinfo_proc *);
 #endif
 
 #if defined(_KERNEL)
-extern struct kinfo_cputime cputime_percpu[MAXCPU];
+extern struct kinfo_cputime *cputime_percpu;
 #endif
 
 #endif /* !_SYS_KINFO_H_ */

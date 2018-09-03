@@ -217,7 +217,7 @@ acpi_cst_probe(device_t dev)
 
     if (acpi_cst_softc == NULL)
 	acpi_cst_softc = kmalloc(sizeof(struct acpi_cst_softc *) *
-	    SMP_MAXCPU, M_TEMP /* XXX */, M_INTWAIT | M_ZERO);
+	    ncpus, M_TEMP /* XXX */, M_INTWAIT | M_ZERO);
 
     /*
      * Check if we already probed this processor.  We scan the bus twice
