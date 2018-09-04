@@ -148,7 +148,7 @@ extern int64_t tsc_offsets[];
 char *bootSTK;
 static int bootAP;
 
-struct pcb stoppcbs[MAXCPU];
+struct pcb *stoppcbs;
 
 extern inthand_t IDTVEC(fast_syscall), IDTVEC(fast_syscall32);
 
@@ -395,6 +395,10 @@ start_all_aps(u_int boot_addr)
 	size_t ipiq_size;
 
 	POSTCODE(START_ALL_APS_POST);
+
+	/* Allocate memory for storing the pcb in the Xcpustop handler. */
+	stoppcbs = kmalloc((naps + 1) * sizeof(*stoppcbs), M_DEVBUF,
+	    M_WAITOK | M_ZERO);
 
 	/* install the AP 1st level boot code */
 	pmap_kenter(va, boot_address);
