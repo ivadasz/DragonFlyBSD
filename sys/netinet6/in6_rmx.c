@@ -111,10 +111,11 @@ struct in6_rttimo_ctx {
 	struct radix_node_head	*timo_rnh;
 } __cachealign;
 
-static struct in6_rttimo_ctx	in6_rtqtimo_ctx[MAXCPU];
-static struct in6_rttimo_ctx	in6_mtutimo_ctx[MAXCPU];
+static struct in6_rttimo_ctx	*in6_rtqtimo_ctx;
+static struct in6_rttimo_ctx	*in6_mtutimo_ctx;
 
 extern int	in6_inithead (void **head, int off);
+extern void	in6_rmxinit(void);
 
 #define RTPRF_OURS		RTF_PROTO3	/* set on routes we manage */
 
@@ -547,4 +548,13 @@ in6_inithead(void **head, int off)
 	in6_mtutimo(NULL);	/* kick off timeout first time */
 
 	return 1;
+}
+
+void
+in6_rmxinit(void)
+{
+	in6_rtqtimo_ctx = kmalloc(ncpus * sizeof(*in6_rtqtimo_ctx),
+	    M_DEVBUF, M_WAITOK | M_ZERO);
+	in6_mtutimo_ctx = kmalloc(ncpus * sizeof(*in6_mtutimo_ctx),
+	    M_DEVBUF, M_WAITOK | M_ZERO);
 }

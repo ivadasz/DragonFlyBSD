@@ -83,7 +83,7 @@ struct in_rtq_pcpu {
 
 static void	in_rtqtimo(void *);
 
-static struct in_rtq_pcpu in_rtq_pcpu[MAXCPU];
+static struct in_rtq_pcpu *in_rtq_pcpu;
 
 /*
  * Do what we need to do when inserting a route.
@@ -465,6 +465,13 @@ in_rtqdrain(void)
 
 	if (CPUMASK_TESTNZERO(mask))
 		lwkt_send_ipiq_mask(mask, in_rtqdrain_ipi, NULL);
+}
+
+void
+in_rmxinit(void)
+{
+	in_rtq_pcpu = kmalloc(netisr_ncpus * sizeof(*in_rtq_pcpu),
+	    M_DEVBUF, M_WAITOK | M_ZERO);
 }
 
 /*
