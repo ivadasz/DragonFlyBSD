@@ -99,7 +99,7 @@ extern	u_char	inetctlerrmap[];
  * Hash table for IP addresses.
  */
 extern	LIST_HEAD(in_ifaddrhashhead, in_ifaddr_container) *in_ifaddrhashtbls[];
-extern	TAILQ_HEAD(in_ifaddrhead, in_ifaddr_container) in_ifaddrheads[];
+extern	TAILQ_HEAD(in_ifaddrhead, in_ifaddr_container) *in_ifaddrheads;
 extern	u_long in_ifaddrhmask;			/* mask for hash table */
 
 #define INADDR_NHASH_LOG2       9

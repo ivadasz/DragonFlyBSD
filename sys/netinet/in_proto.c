@@ -331,6 +331,7 @@ static void
 inetdomain_init(void)
 {
 	in_pcbglobalinit();
+	in_rmxinit();
 }
 
 struct domain inetdomain = {

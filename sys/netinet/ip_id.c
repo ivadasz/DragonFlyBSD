@@ -59,9 +59,9 @@ typedef struct iprandinfo {
 	int	isidx;
 } *iprandinfo_t __cachealign;
 
-struct iprandinfo iprandcpu[MAXCPU];
+struct iprandinfo *iprandcpu;
 
-static u_int16_t ip_shuffle[65536];
+static u_int16_t *ip_shuffle;
 
 static void
 ip_idinit_handler(netmsg_t msg)
@@ -85,6 +85,10 @@ ip_idinit_shuffle(void *dummy __unused)
 {
 	struct netmsg_base msg;
 	int i;
+
+	iprandcpu = kmalloc_cachealign(ncpus * sizeof(*iprandcpu), M_DEVBUF,
+	    M_WAITOK | M_ZERO);
+	ip_shuffle = kmalloc(65536 * sizeof(uint16_t), M_DEVBUF, M_WAITOK);
 
 	for (i = 0; i < 65536; ++i)
 		ip_shuffle[i] = i;
