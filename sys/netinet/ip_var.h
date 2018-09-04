@@ -155,7 +155,7 @@ CTASSERT((sizeof(struct ip_stats) & __VM_CACHELINE_MASK) == 0);
 
 #define ipstat	ipstats_percpu[mycpuid]
 
-extern struct ip_stats	ipstats_percpu[MAXCPU];
+extern struct ip_stats	*ipstats_percpu;
 
 /* flags passed to ip_output as last parameter */
 #define	IP_FORWARDING		0x1		/* most of ip header exists */
