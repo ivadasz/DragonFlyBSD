@@ -145,9 +145,9 @@ struct tcp_reass_pcpu {
 	struct netmsg_base	drain_nmsg;
 } __cachealign;
 
-struct inpcbinfo tcbinfo[MAXCPU];
-struct tcpcbackq tcpcbackq[MAXCPU];
-struct tcp_reass_pcpu tcp_reassq[MAXCPU];
+struct inpcbinfo *tcbinfo;
+struct tcpcbackq *tcpcbackq;
+struct tcp_reass_pcpu *tcp_reassq;
 
 int tcp_mssdflt = TCP_MSS;
 SYSCTL_INT(_net_inet_tcp, TCPCTL_MSSDFLT, mssdflt, CTLFLAG_RW,
@@ -355,6 +355,13 @@ tcp_init(void)
 	struct inpcbinfo *ticb;
 	int hashsize = TCBHASHSIZE, portinfo_hsize;
 	int cpu;
+
+	tcbinfo = kmalloc(netisr_ncpus * sizeof(*tcbinfo), M_DEVBUF,
+	    M_WAITOK | M_ZERO);
+	tcpcbackq = kmalloc(netisr_ncpus * sizeof(*tcpcbackq), M_DEVBUF,
+	    M_WAITOK | M_ZERO);
+	tcp_reassq = kmalloc_cachealign(netisr_ncpus * sizeof(*tcp_reassq),
+	    M_DEVBUF, M_WAITOK | M_ZERO);
 
 	/*
 	 * note: tcptemp is used for keepalives, and it is ok for an
