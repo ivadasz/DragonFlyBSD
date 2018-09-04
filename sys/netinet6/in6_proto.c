@@ -307,11 +307,18 @@ struct protosw inet6sw[] = {
 };
 
 extern int in6_inithead (void **, int);
+extern void in6_rmxinit (void);
+
+static void
+inetdomain6_init(void)
+{
+	in6_rmxinit();
+}
 
 struct domain inet6domain = {
 	.dom_family		= AF_INET6,
 	.dom_name		= "internet6",
-	.dom_init		= NULL,
+	.dom_init		= inetdomain6_init,
 	.dom_externalize	= NULL,
 	.dom_dispose		= NULL,
 	.dom_protosw		= inet6sw,

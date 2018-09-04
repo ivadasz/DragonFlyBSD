@@ -639,8 +639,8 @@ struct tcpcbackq {
 	TAILQ_HEAD(, tcpcb)	head;
 } __cachealign;
 
-extern	struct inpcbinfo tcbinfo[];
-extern	struct tcpcbackq tcpcbackq[];
+extern	struct inpcbinfo *tcbinfo;
+extern	struct tcpcbackq *tcpcbackq;
 
 extern	int tcp_mssdflt;	/* XXX */
 extern	int tcp_minmss;

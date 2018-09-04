@@ -201,14 +201,14 @@ static int ipprintfs = 0;
 extern	struct domain inetdomain;
 extern	struct protosw inetsw[];
 u_char	ip_protox[IPPROTO_MAX];
-struct	in_ifaddrhead in_ifaddrheads[MAXCPU];	/* first inet address */
+struct	in_ifaddrhead *in_ifaddrheads;	/* first inet address */
 struct	in_ifaddrhashhead *in_ifaddrhashtbls[MAXCPU];
 						/* inet addr hash table */
 __read_mostly u_long	in_ifaddrhmask;		/* mask for hash table */
 
 static struct mbuf *ipforward_mtemp[MAXCPU];
 
-struct ip_stats ipstats_percpu[MAXCPU] __cachealign;
+struct ip_stats *ipstats_percpu;
 
 static int
 sysctl_ipstats(SYSCTL_HANDLER_ARGS)
@@ -246,7 +246,7 @@ struct ipfrag_queue {
 	struct ipqhead		ipq[IPREASS_NHASH];
 } __cachealign;
 
-static struct ipfrag_queue	ipfrag_queue_pcpu[MAXCPU];
+static struct ipfrag_queue	*ipfrag_queue_pcpu;
 
 #ifdef IPCTL_DEFMTU
 SYSCTL_INT(_net_inet_ip, IPCTL_DEFMTU, mtu, CTLFLAG_RW,
@@ -320,6 +320,13 @@ ip_init(void)
 	struct ipfrag_queue *fragq;
 	struct protosw *pr;
 	int cpu, i;
+
+	in_ifaddrheads = kmalloc(ncpus * sizeof(*in_ifaddrheads),
+	    M_DEVBUF, M_WAITOK | M_ZERO);
+	ipstats_percpu = kmalloc(ncpus * sizeof(*ipstats_percpu),
+	    M_DEVBUF, M_WAITOK | M_CACHEALIGN);
+	ipfrag_queue_pcpu = kmalloc(ncpus * sizeof(*ipfrag_queue_pcpu),
+	    M_DEVBUF, M_WAITOK | M_CACHEALIGN);
 
 	/*
 	 * Make sure we can handle a reasonable number of fragments but

@@ -455,6 +455,7 @@ RTFREE(struct rtentry *rt)
 }
 
 int	in_inithead(void **, int);
+void	in_rmxinit(void);
 
 #endif	/* _KERNEL */
 
