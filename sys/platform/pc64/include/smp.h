@@ -55,7 +55,7 @@ extern volatile cpumask_t	started_cpus;
 
 extern void (*cpustop_restartfunc) (void);
 
-extern struct pcb		stoppcbs[];
+extern struct pcb		*stoppcbs;
 
 /* functions in mp_machdep.c */
 u_int	mp_bootaddress		(u_int);
