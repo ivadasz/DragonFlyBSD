@@ -83,6 +83,7 @@
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/kernel.h>
+#include <sys/sysctl.h>
 #include <sys/interrupt.h>
 #include <sys/thread.h>
 
@@ -126,6 +127,53 @@ static void softclock_handler(void *arg);
 static void slotimer_callback(void *arg);
 static void callout_reset_ipi(void *arg);
 static void callout_stop_ipi(void *arg, int issync, struct intrframe *frame);
+
+static int
+sysctl_callwheel_dump(SYSCTL_HANDLER_ARGS)
+{
+	softclock_pcpu_t sc;
+	struct { int cnt; uintptr_t addr; } data[50];
+	char buf[1536];
+	int i, cnt, n;
+        int error;
+
+	cnt = 0;
+	sc = softclock_pcpu_ary[mycpu->gd_cpuid];
+	crit_enter();
+	for (i = 1; i < cwheelsize; i++) {
+		struct callout *c;
+		struct callout_tailq *bucket;
+
+		bucket = &sc->callwheel[(sc->softticks + i) & cwheelmask];
+		TAILQ_FOREACH(c, bucket, c_links.tqe) {
+			if (c->c_time == sc->softticks + i) {
+				data[cnt].addr = (uintptr_t)(void *)c->c_func;
+				data[cnt].cnt = i;
+				cnt++;
+			}
+		}
+	}
+	crit_exit();
+
+	n = 0;
+	for (i = 0; i < cnt; i++) {
+		if (n > sizeof(buf) - 40)
+			break;
+		n += ksnprintf(&buf[n], sizeof(buf) - n, "%s%d:%lx",
+		    i == 0 ? "" : " ", data[i].cnt, data[i].addr);
+	}
+	KKASSERT(n < sizeof(buf));
+	error = SYSCTL_OUT(req, buf, n + 1);
+	if (error)
+		return error;
+	if (req->newptr != NULL)
+		return EINVAL;
+	return 0;
+}
+
+/* XXX Provide a sysctl node for each cpu. */
+SYSCTL_PROC(_kern, OID_AUTO, callwheel, CTLFLAG_RD|CTLTYPE_STRING, 0, 0,
+            sysctl_callwheel_dump, "A", "Show callwheel");
 
 static __inline int
 callout_setclear(struct callout *c, int sflags, int cflags)
