@@ -1763,12 +1763,16 @@ scioctl(struct dev_ioctl_args *ap)
     return(ENOTTY);
 }
 
+extern int in_powersave_mode;
+
 static void
 scrn_kick_timer(sc_softc_t *sc)
 {
     /* Kick the periodic scrn update callout. */
     if (mycpu == sc->scrn_timer_gd)
 	ipi_scrn_timer(sc);
+    else if (in_powersave_mode > 0)
+	lwkt_send_ipiq(sc->scrn_timer_gd, ipi_scrn_timer, sc);
     else
 	lwkt_send_ipiq_passive(sc->scrn_timer_gd, ipi_scrn_timer, sc);
 }
