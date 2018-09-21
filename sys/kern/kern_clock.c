@@ -297,6 +297,7 @@ static void getnanotime_fast(struct timespec *tsp, struct globaldata *gd,
 static void getnanotime_nbt(struct timespec *nbt, struct timespec *tsp,
     sysclock_t now);
 
+int	ticks;			/* system master ticks at hz */
 int	clocks_running;		/* tsleep/timeout clocks operational */
 int64_t	nsec_adj;		/* ntpd per-tick adjustment in nsec << 32 */
 int64_t	nsec_acc;		/* accumulator */
@@ -836,10 +837,11 @@ hardclock_time_handle(struct globaldata *gd, systimer_t info)
 			hardtime[ni].cpuclock_base = gd->gd_cpuclock_base;
 
 			/*
-			 * The NTP related timedelta/tickdelta * adjustments
-			 * only occur on cpu #0.  NTP adjustments are
-			 * accomplished by updating basetime.
+			 * The system-wide ticks counter and NTP related timedelta/tickdelta
+			 * adjustments only occur on cpu #0.  NTP adjustments are accomplished
+			 * by updating basetime.
 			 */
+			ticks += cnt;
 			hardclock_ntp_update(cnt, now);
 		} else {
 			/* We have sufficiently recent data. */
@@ -900,6 +902,7 @@ hardclock_time_handle(struct globaldata *gd, systimer_t info)
 					hardtime[ni].time_second = gd->gd_time_seconds;
 					hardtime[ni].cpuclock_base = gd->gd_cpuclock_base;
 
+					ticks += cnt;
 					hardclock_ntp_update(cnt, now);
 				} else {
 					atomic_store_rel_int(&tick_skipsleep_state, 1);
@@ -1032,7 +1035,8 @@ hardclock_unskip(int mask)
 }
 
 /*
- * Each cpu has its own hardclock, but we only increments softticks * on cpu #0.
+ * Each cpu has its own hardclock, but we only increments ticks and softticks
+ * on cpu #0.
  *
  * NOTE! systimer! the MP lock might not be held here.  We can only safely
  * manipulate objects owned by the current cpu.
