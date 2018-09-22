@@ -833,8 +833,9 @@ hardclock_time_handle(struct globaldata *gd, systimer_t info)
 			cputicks = now - gd->gd_cpuclock_base;
 			if (cputicks >= sys_cputimer->freq) {
 				cputicks /= sys_cputimer->freq;
-				if (cputicks != 0 && cputicks != 1)
-					kprintf("Warning: hardclock missed > 1 sec\n");
+				if (cputicks != 0 && cputicks != 1) {
+					kprintf("Warning: hardclock missed %u sec\n", cputicks);
+				}
 				gd->gd_time_seconds += cputicks;
 				gd->gd_cpuclock_base += sys_cputimer->freq * cputicks;
 				/* uncorrected monotonic 1-sec gran */
