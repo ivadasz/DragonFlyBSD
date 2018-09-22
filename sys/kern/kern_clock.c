@@ -699,11 +699,19 @@ hardclock_ntp_update(int cnt, sysclock_t now)
     if (kpmap) {
 	int w;
 
+	if ((cnt & 1) == 0) {
+		w = (kpmap->upticks + cnt - 1) & 1;
+		getnanouptime_fast(&kpmap->ts_uptime[w], mycpu, now);
+		getnanotime_fast(&kpmap->ts_realtime[w], mycpu, now);
+		cpu_sfence();
+		kpmap->upticks += cnt - 1;
+		cpu_sfence();
+	}
 	w = (kpmap->upticks + 1) & 1;
 	getnanouptime_fast(&kpmap->ts_uptime[w], mycpu, now);
 	getnanotime_fast(&kpmap->ts_realtime[w], mycpu, now);
 	cpu_sfence();
-	kpmap->upticks += cnt;
+	kpmap->upticks += 1;
 	cpu_sfence();
     }
 }
