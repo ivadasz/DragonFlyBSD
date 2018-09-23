@@ -738,6 +738,18 @@ kpmap_init(const void *udata __unused)
 	kpmap->header[4].offset = offsetof(struct sys_kpmap, tsc_freq);
 	kpmap->header[5].type = KPTYPE_TICK_FREQ;
 	kpmap->header[5].offset = offsetof(struct sys_kpmap, tick_freq);
+	kpmap->header[6].type = KPTYPE_TSC_SHIFT;
+	kpmap->header[6].offset = offsetof(struct sys_kpmap, tsc_shift);
+	kpmap->header[7].type = KPTYPE_TIMER_BASE;
+	kpmap->header[7].offset = offsetof(struct sys_kpmap, timer_base);
+	kpmap->header[8].type = KPTYPE_FREQ_NSEC;
+	kpmap->header[8].offset = offsetof(struct sys_kpmap, freq64_nsec);
+	kpmap->header[9].type = KPTYPE_CLOCK_BASE;
+	kpmap->header[9].offset = offsetof(struct sys_kpmap, clock_base);
+	kpmap->header[10].type = KPTYPE_CLOCK_SECS;
+	kpmap->header[10].offset = offsetof(struct sys_kpmap, clock_secs);
+	kpmap->header[11].type = KPTYPE_TS_BASETIME;
+	kpmap->header[11].offset = offsetof(struct sys_kpmap, ts_basetime);
 	kpmap->version = KPMAP_VERSION;
 }
 SYSINIT(kpmapinit, SI_BOOT1_POST, SI_ORDER_FIRST, kpmap_init, NULL);
