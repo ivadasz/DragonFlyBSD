@@ -86,6 +86,12 @@ typedef struct ukpheader {
 #define KPTYPE_TS_REALTIME	(0x8002 | UKPLEN_TS)
 #define KPTYPE_TSC_FREQ		(0x8003 | UKPLEN_8)
 #define KPTYPE_TICK_FREQ	(0x8004 | UKPLEN_8)
+#define KPTYPE_TSC_SHIFT	(0x8005 | UKPLEN_4)
+#define KPTYPE_TIMER_BASE	(0x8006 | UKPLEN_4)
+#define KPTYPE_FREQ_NSEC	(0x8007 | UKPLEN_8)
+#define KPTYPE_CLOCK_BASE	(0x8008 | UKPLEN_8)
+#define KPTYPE_CLOCK_SECS	(0x8009 | UKPLEN_8)
+#define KPTYPE_TS_BASETIME	(0x800a | UKPLEN_TS)
 
 #if defined(_KERNEL) || defined(_KERNEL_STRUCTURES)
 
@@ -137,6 +143,12 @@ struct sys_kpmap {
 	struct timespec ts_realtime[2];	/* realtime @ticks resolution */
 	int64_t		tsc_freq;	/* (if supported by cpu) */
 	int32_t		tick_freq;	/* scheduler tick frequency */
+	uint32_t	tsc_shift;	/* (if supported by cpu) */
+	uint32_t	timer_base;
+	int64_t		freq64_nsec;
+	uint32_t	clock_base[2];
+	uint32_t	clock_secs[2];
+	struct timespec	ts_basetime[2];
 };
 
 #endif

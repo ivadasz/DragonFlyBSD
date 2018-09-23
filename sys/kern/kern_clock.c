@@ -316,6 +316,8 @@ time_t	ntp_leap_second;	/* time of next leap second */
 int	ntp_leap_insert;	/* whether to insert or remove a second */
 struct spinlock ntp_spin;
 
+extern int tsc_cputimer_shift;
+
 /*
  * Finish initializing clock frequencies and start all clocks running.
  */
@@ -329,7 +331,11 @@ initclocks(void *dummy)
 	clocks_running = 1;
 	if (kpmap) {
 	    kpmap->tsc_freq = tsc_frequency;
+	    kpmap->tsc_shift = tsc_cputimer_shift;
+	    kpmap->timer_base = sys_cputimer->base;
+	    kpmap->freq64_nsec = sys_cputimer->freq64_nsec;
 	    kpmap->tick_freq = hz;
+	    /* XXX Track whether TSC cputimer is active */
 	}
 }
 
@@ -553,6 +559,33 @@ SYSCTL_PROC(_kern, OID_AUTO, tickdiffs, CTLFLAG_RD|CTLTYPE_STRING, 0, 0,
 	    sysctl_tickdiffs_print, "A", "Show tick interrupt time offsets");
 #endif
 
+/*
+ * Update kpmap on each tick.  TS updates are integrated with
+ * fences and upticks allowing userland to read the data
+ * deterministically.
+ */
+static void
+hardclock_kpmap_update(sysclock_t now, int cnt)
+{
+	int w;
+
+	w = (kpmap->upticks + cnt) & 1;
+	getnanouptime_fast(&kpmap->ts_uptime[w], mycpu, now);
+	getnanotime_fast(&kpmap->ts_realtime[w], mycpu, now);
+	kpmap->clock_base[w] = mycpu->gd_cpuclock_base;
+	kpmap->clock_secs[w] = mycpu->gd_time_seconds;
+	kpmap->ts_basetime[w] = basetime[basetime_index];
+#if 1
+	/* XXX Update these values, when anything about the sys_cputimer changes. */
+	kpmap->tsc_shift = tsc_cputimer_shift;
+	kpmap->timer_base = sys_cputimer->base;
+	kpmap->freq64_nsec = sys_cputimer->freq64_nsec;
+#endif
+	cpu_sfence();
+	kpmap->upticks += cnt;
+	cpu_sfence();
+}
+
 static void
 hardclock_ntp_update(int cnt, sysclock_t now)
 {
@@ -691,28 +724,10 @@ hardclock_ntp_update(int cnt, sysclock_t now)
     cpu_sfence();
     basetime_index = ni;
 
-    /*
-     * Update kpmap on each tick.  TS updates are integrated with
-     * fences and upticks allowing userland to read the data
-     * deterministically.
-     */
     if (kpmap) {
-	int w;
-
-	if ((cnt & 1) == 0) {
-		w = (kpmap->upticks + cnt - 1) & 1;
-		getnanouptime_fast(&kpmap->ts_uptime[w], mycpu, now);
-		getnanotime_fast(&kpmap->ts_realtime[w], mycpu, now);
-		cpu_sfence();
-		kpmap->upticks += cnt - 1;
-		cpu_sfence();
-	}
-	w = (kpmap->upticks + 1) & 1;
-	getnanouptime_fast(&kpmap->ts_uptime[w], mycpu, now);
-	getnanotime_fast(&kpmap->ts_realtime[w], mycpu, now);
-	cpu_sfence();
-	kpmap->upticks += 1;
-	cpu_sfence();
+	if ((cnt & 1) == 0)
+		hardclock_kpmap_update(now, cnt - 1);
+	hardclock_kpmap_update(now, 1);
     }
 }
 

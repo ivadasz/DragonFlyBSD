@@ -1595,7 +1595,7 @@ SYSINIT(tsc_mpsync, SI_BOOT2_FINISH_SMP, SI_ORDER_ANY, tsc_mpsync_test, NULL);
 
 #define TSC_CPUTIMER_FREQMAX	128000000	/* 128Mhz */
 
-static int tsc_cputimer_shift;
+int tsc_cputimer_shift;
 
 static void
 tsc_cputimer_construct(struct cputimer *timer, sysclock_t oldclock)
