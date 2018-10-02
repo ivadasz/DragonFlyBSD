@@ -15,6 +15,7 @@ void pm_runtime_put_autosuspend(device_t dev);
 void pm_runtime_set_autosuspend_delay(device_t dev, int delay);
 void pm_runtime_get_sync(device_t dev);
 void pm_runtime_get_noresume(device_t dev);
+int pm_runtime_get_if_in_use(device_t dev);
 
 #endif /* _KERNEL */
 

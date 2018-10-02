@@ -252,6 +252,28 @@ pm_runtime_get_noresume(device_t dev)
 	lockmgr(&rpm_lock, LK_RELEASE);
 }
 
+int
+pm_runtime_get_if_in_use(device_t dev)
+{
+	struct rpm_client *client;
+	int ret = 0;
+
+	client = runtime_pm_lookup(dev);
+	if (client == NULL)
+		return ret;
+
+	lockmgr(&rpm_lock, LK_EXCLUSIVE);
+//	device_printf(client->dev, "%s: refcnt before: %d\n",
+//	    __func__, client->refcnt);
+	if (client->state == 0 && client->refcnt > 0) {
+		ret = 1;
+		KKASSERT(client->refcnt >= 1);
+		client->refcnt++;
+	}
+	lockmgr(&rpm_lock, LK_RELEASE);
+	return ret;
+}
+
 static void
 runtime_pm_init(void)
 {
