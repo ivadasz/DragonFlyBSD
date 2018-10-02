@@ -331,11 +331,11 @@ initclocks(void *dummy)
 	clocks_running = 1;
 	if (kpmap) {
 	    kpmap->tsc_freq = tsc_frequency;
-	    kpmap->tsc_shift = tsc_cputimer_shift;
-	    kpmap->timer_base = sys_cputimer->base;
-	    kpmap->freq64_nsec = sys_cputimer->freq64_nsec;
 	    kpmap->tick_freq = hz;
-	    /* XXX Track whether TSC cputimer is active */
+	    /* This runs before tsc_cputimer is initialized. */
+	    kpmap->tsc_shift = 0;
+	    kpmap->timer_base = 0;
+	    kpmap->freq64_nsec = 0;
 	}
 }
 
@@ -575,12 +575,6 @@ hardclock_kpmap_update(sysclock_t now, int cnt)
 	kpmap->clock_base[w] = mycpu->gd_cpuclock_base;
 	kpmap->clock_secs[w] = mycpu->gd_time_seconds;
 	kpmap->ts_basetime[w] = basetime[basetime_index];
-#if 1
-	/* XXX Update these values, when anything about the sys_cputimer changes. */
-	kpmap->tsc_shift = tsc_cputimer_shift;
-	kpmap->timer_base = sys_cputimer->base;
-	kpmap->freq64_nsec = sys_cputimer->freq64_nsec;
-#endif
 	cpu_sfence();
 	kpmap->upticks += cnt;
 	cpu_sfence();

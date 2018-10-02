@@ -47,7 +47,7 @@
 #define KPMAP_MAPSIZE		65536
 
 #define UPMAP_VERSION		1
-#define KPMAP_VERSION		1
+#define KPMAP_VERSION		2
 
 typedef uint64_t	forkid_t;
 
