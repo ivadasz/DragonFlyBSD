@@ -39,8 +39,6 @@
 #include <linux/vga_switcheroo.h>
 #include <drm/drm_crtc_helper.h>
 
-#include <sys/runtime_pm.h>
-
 int wait_for_spin_tries = 50;
 SYSCTL_INT(_hw_drm, OID_AUTO, spin_tries, CTLFLAG_RW, &wait_for_spin_tries, 0,
     "wait_for spinning attempts");
@@ -1544,14 +1542,11 @@ static int vlv_resume_prepare(struct drm_i915_private *dev_priv,
 	return ret;
 }
 
-static int intel_runtime_suspend(device_t device)
+#if 0
+static int intel_runtime_suspend(struct device *device)
 {
-#if defined(__DragonFly__)
-	struct drm_device *dev = device_get_softc(device);
-#else
 	struct pci_dev *pdev = to_pci_dev(device);
 	struct drm_device *dev = pci_get_drvdata(pdev);
-#endif
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	int ret;
 
@@ -1654,19 +1649,14 @@ static int intel_runtime_suspend(device_t device)
 	if (!IS_VALLEYVIEW(dev_priv) || !IS_CHERRYVIEW(dev_priv))
 		intel_hpd_poll_init(dev_priv);
 
-	pci_set_powerstate(device, PCI_POWERSTATE_D3);
 	DRM_DEBUG_KMS("Device suspended\n");
 	return 0;
 }
 
-static int intel_runtime_resume(device_t device)
+static int intel_runtime_resume(struct device *device)
 {
-#if defined(__DragonFly__)
-	struct drm_device *dev = device_get_softc(device);
-#else
 	struct pci_dev *pdev = to_pci_dev(device);
 	struct drm_device *dev = pci_get_drvdata(pdev);
-#endif
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	int ret = 0;
 
@@ -1674,7 +1664,6 @@ static int intel_runtime_resume(device_t device)
 		return -ENODEV;
 
 	DRM_DEBUG_KMS("Resuming device\n");
-	pci_set_powerstate(device, PCI_POWERSTATE_D0);
 
 	WARN_ON_ONCE(atomic_read(&dev_priv->pm.wakeref_count));
 	disable_rpm_wakeref_asserts(dev_priv);
@@ -1730,7 +1719,6 @@ static int intel_runtime_resume(device_t device)
 	return ret;
 }
 
-#if 0
 static const struct dev_pm_ops i915_pm_ops = {
 	/*
 	 * S0ix (via system suspend) and S3 event handlers [PMSG_SUSPEND,
@@ -1833,19 +1821,12 @@ static struct drm_driver driver = {
 
 static int __init i915_init(void);
 
-static struct rpm_ops ops = {
-	.runtime_suspend = intel_runtime_suspend,
-	.runtime_resume = intel_runtime_resume,
-};
-
 static int
 i915_attach(device_t kdev)
 {
 	struct drm_device *dev = device_get_softc(kdev);
 	int error;
 	int dummy;
-
-	pm_runtime_register(kdev, &ops);
 
 	dev->driver = &driver;
 	error = drm_attach(kdev, i915_attach_list);

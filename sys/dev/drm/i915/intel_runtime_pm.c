@@ -29,8 +29,6 @@
 #include "i915_drv.h"
 #include "intel_drv.h"
 
-#include <sys/runtime_pm.h>
-
 /**
  * DOC: runtime pm
  *
@@ -2172,7 +2170,7 @@ void intel_power_domains_fini(struct drm_i915_private *dev_priv)
 	 */
 #if 0
 	if (!HAS_RUNTIME_PM(dev_priv))
-		pm_runtime_put(device->bsddev);
+		pm_runtime_put(device);
 #endif
 }
 
@@ -2491,10 +2489,12 @@ void intel_power_domains_suspend(struct drm_i915_private *dev_priv)
  */
 void intel_runtime_pm_get(struct drm_i915_private *dev_priv)
 {
+#if 0
 	struct drm_device *dev = dev_priv->dev;
 	struct device *device = &dev->pdev->dev;
 
-	pm_runtime_get_sync(device->bsddev);
+	pm_runtime_get_sync(device);
+#endif
 
 	atomic_inc(&dev_priv->pm.wakeref_count);
 	assert_rpm_wakelock_held(dev_priv);
@@ -2512,11 +2512,12 @@ void intel_runtime_pm_get(struct drm_i915_private *dev_priv)
  */
 bool intel_runtime_pm_get_if_in_use(struct drm_i915_private *dev_priv)
 {
+#ifndef __DragonFly__
 	struct drm_device *dev = dev_priv->dev;
 	struct device *device = &dev->pdev->dev;
 
 	if (IS_ENABLED(CONFIG_PM)) {
-		int ret = pm_runtime_get_if_in_use(device->bsddev);
+		int ret = pm_runtime_get_if_in_use(device);
 
 		/*
 		 * In cases runtime PM is disabled by the RPM core and we get
@@ -2531,6 +2532,7 @@ bool intel_runtime_pm_get_if_in_use(struct drm_i915_private *dev_priv)
 
 	atomic_inc(&dev_priv->pm.wakeref_count);
 	assert_rpm_wakelock_held(dev_priv);
+#endif
 
 	return true;
 }
@@ -2554,11 +2556,15 @@ bool intel_runtime_pm_get_if_in_use(struct drm_i915_private *dev_priv)
  */
 void intel_runtime_pm_get_noresume(struct drm_i915_private *dev_priv)
 {
+#if 0
 	struct drm_device *dev = dev_priv->dev;
 	struct device *device = &dev->pdev->dev;
+#endif
 
 	assert_rpm_wakelock_held(dev_priv);
-	pm_runtime_get_noresume(device->bsddev);
+#if 0
+	pm_runtime_get_noresume(device);
+#endif
 
 	atomic_inc(&dev_priv->pm.wakeref_count);
 }
@@ -2573,6 +2579,7 @@ void intel_runtime_pm_get_noresume(struct drm_i915_private *dev_priv)
  */
 void intel_runtime_pm_put(struct drm_i915_private *dev_priv)
 {
+#if 0
 	struct drm_device *dev = dev_priv->dev;
 	struct device *device = &dev->pdev->dev;
 
@@ -2580,8 +2587,9 @@ void intel_runtime_pm_put(struct drm_i915_private *dev_priv)
 	if (atomic_dec_and_test(&dev_priv->pm.wakeref_count))
 		atomic_inc(&dev_priv->pm.atomic_seq);
 
-	pm_runtime_mark_last_busy(device->bsddev);
-	pm_runtime_put_autosuspend(device->bsddev);
+	pm_runtime_mark_last_busy(device);
+	pm_runtime_put_autosuspend(device);
+#endif
 }
 
 /**
@@ -2596,11 +2604,12 @@ void intel_runtime_pm_put(struct drm_i915_private *dev_priv)
  */
 void intel_runtime_pm_enable(struct drm_i915_private *dev_priv)
 {
+#if 0
 	struct drm_device *dev = dev_priv->dev;
 	struct device *device = &dev->pdev->dev;
 
-	pm_runtime_set_autosuspend_delay(device->bsddev, 10000); /* 10s */
-	pm_runtime_mark_last_busy(device->bsddev);
+	pm_runtime_set_autosuspend_delay(device, 10000); /* 10s */
+	pm_runtime_mark_last_busy(device);
 
 	/*
 	 * Take a permanent reference to disable the RPM functionality and drop
@@ -2609,14 +2618,10 @@ void intel_runtime_pm_enable(struct drm_i915_private *dev_priv)
 	 * platforms without RPM support.
 	 */
 	if (!HAS_RUNTIME_PM(dev)) {
-#if 0
 		pm_runtime_dont_use_autosuspend(device);
-#endif
-		pm_runtime_get_sync(device->bsddev);
+		pm_runtime_get_sync(device);
 	} else {
-#if 0
 		pm_runtime_use_autosuspend(device);
-#endif
 	}
 
 	/*
@@ -2624,5 +2629,7 @@ void intel_runtime_pm_enable(struct drm_i915_private *dev_priv)
 	 * We drop that here and will reacquire it during unloading in
 	 * intel_power_domains_fini().
 	 */
-	pm_runtime_put_autosuspend(device->bsddev);
+	pm_runtime_put_autosuspend(device);
+#endif
 }
+
