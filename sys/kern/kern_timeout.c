@@ -97,7 +97,6 @@ struct softclock_pcpu {
 	struct callout * volatile next;
 	intptr_t running;	/* NOTE! Bit 0 used to flag wakeup */
 	int softticks;		/* softticks index */
-	int curticks;		/* per-cpu ticks counter */
 	int isrunning;
 	struct thread thread;
 };
@@ -259,9 +258,9 @@ SYSINIT(softclock_setup, SI_BOOT2_SOFTCLOCK, SI_ORDER_SECOND,
 
 /*
  * This routine is called from the hardclock() (basically a FASTint/IPI) on
- * each cpu in the system.  sc->curticks is this cpu's notion of the timebase.
- * It IS NOT NECESSARILY SYNCHRONIZED WITH 'ticks'!  sc->softticks is where
- * the callwheel is currently indexed.
+ * each cpu in the system.  gd->gd_curticks is this cpu's notion of the
+ * timebase.  It IS NOT NECESSARILY SYNCHRONIZED WITH 'ticks'!  sc->softticks
+ * is where the callwheel is currently indexed.
  *
  * WARNING!  The MP lock is not necessarily held on call, nor can it be
  * safely obtained.
@@ -275,10 +274,9 @@ hardclock_softtick(globaldata_t gd, int cnt)
 	softclock_pcpu_t sc;
 
 	sc = softclock_pcpu_ary[gd->gd_cpuid];
-	sc->curticks += cnt;
 	if (sc->isrunning)
 		return;
-	if (sc->softticks + cnt == sc->curticks + 1) {
+	if (sc->softticks + cnt == gd->gd_curticks + 1) {
 		int i;
 
 		/*
@@ -319,7 +317,7 @@ callout_can_skip(struct globaldata *gd, int max)
 		return 0;
 
 	/* Only skip callouts, when callout thread actually caught up. */
-	if (sc->softticks != sc->curticks + 1)
+	if (sc->softticks != gd->gd_curticks + 1)
 		return 0;
 
 	iters = 0;
@@ -327,9 +325,9 @@ callout_can_skip(struct globaldata *gd, int max)
 		struct callout *c;
 		struct callout_tailq *bucket;
 
-		bucket = &sc->callwheel[(sc->curticks + i) & cwheelmask];
+		bucket = &sc->callwheel[(gd->gd_curticks + i) & cwheelmask];
 		TAILQ_FOREACH(c, bucket, c_links.tqe) {
-			if (c->c_time == sc->curticks + i)
+			if (c->c_time == gd->gd_curticks + i)
 				return i - 1;
 			/* Limit the time spent here. */
 			iters++;
@@ -343,7 +341,7 @@ callout_can_skip(struct globaldata *gd, int max)
 /*
  * This procedure is the main loop of our per-cpu helper thread.  The
  * sc->isrunning flag prevents us from racing hardclock_softtick() and
- * a critical section is sufficient to interlock sc->curticks and protect
+ * a critical section is sufficient to interlock gd->gd_curticks and protect
  * us from remote IPI's / list removal.
  *
  * The thread starts with the MP lock released and not in a critical
@@ -354,6 +352,7 @@ static void
 softclock_handler(void *arg)
 {
 	softclock_pcpu_t sc;
+	globaldata_t gd;
 	struct callout *c;
 	struct callout_tailq *bucket;
 	struct coarse_callout slotimer;
@@ -377,9 +376,10 @@ softclock_handler(void *arg)
 	 * Loop critical section against ipi operations to this cpu.
 	 */
 	sc = arg;
+	gd = mycpu;
 	crit_enter();
 loop:
-	while (sc->softticks != (int)(sc->curticks + 1)) {
+	while (sc->softticks != (int)(gd->gd_curticks + 1)) {
 		bucket = &sc->callwheel[sc->softticks & cwheelmask];
 
 		for (c = TAILQ_FIRST(bucket); c; c = sc->next) {
@@ -535,7 +535,7 @@ slotimer_callback(void *arg)
 /*
  * Start or restart a timeout.  Installs the callout structure on the
  * callwheel of the current cpu.  Callers may legally pass any value, even
- * if 0 or negative, but since the sc->curticks index may have already
+ * if 0 or negative, but since the gd->gd_curticks index may have already
  * been processed a minimum timeout of 1 tick will be enforced.
  *
  * This function will block if the callout is currently queued to a different
@@ -594,7 +594,7 @@ callout_reset(struct callout *c, int to_ticks, void (*ftn)(void *), void *arg)
 
 	c->c_arg = arg;
 	c->c_func = ftn;
-	c->c_time = sc->curticks + to_ticks;
+	c->c_time = gd->gd_curticks + to_ticks;
 
 	TAILQ_INSERT_TAIL(&sc->callwheel[c->c_time & cwheelmask],
 			  c, c_links.tqe);
@@ -707,7 +707,7 @@ callout_reset_ipi(void *arg)
 					c,
 					c_links.tqe);
 			}
-			c->c_time = sc->curticks + c->c_load;
+			c->c_time = gd->gd_curticks + c->c_load;
 			TAILQ_INSERT_TAIL(
 				&sc->callwheel[c->c_time & cwheelmask],
 				c, c_links.tqe);
@@ -1070,7 +1070,7 @@ periodic_runq(struct periodic_call_tailq *q)
 static void
 schedule_periodic_callout(struct periodic_info *info, int step)
 {
-	int val, t = ticks;
+	int val, t = mycpu->gd_curticks;
 
 	if (info->running)
 		return;
@@ -1114,7 +1114,7 @@ handle_periodic_callout(void *arg)
 	}
 
 	info->running = 1;
-	t = ticks;
+	t = mycpu->gd_curticks;
 	if (info->next_hztick <= t) {
 		anyto = 1;
 		periodic_runq(&info->calls);
@@ -1161,7 +1161,7 @@ callout_start_periodic(struct periodic_call *c, int to_ticks,
 	if (TAILQ_EMPTY(&info->calls) &&
 	    TAILQ_EMPTY(&info->calls_slow) &&
 	    TAILQ_EMPTY(&info->calls_fast)) {
-		int t = ticks;
+		int t = mycpu->gd_curticks;
 
 		t = rounddown(t, hz);
 		info->next_hztick = t + hz;

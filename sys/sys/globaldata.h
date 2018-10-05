@@ -197,7 +197,7 @@ struct globaldata {
 	struct periodic_call gd_schedcpu_callout;	/* scheduler/stats */
 	indefinite_info_t gd_indefinite;	/* scheduler cpu-bound */
 	uint32_t	gd_loadav_nrunnable;	/* pcpu lwps nrunnable */
-	uint32_t	gd_reserved32[1];
+	uint32_t	gd_curticks;		/* per-cpu tick counter */
 	struct lock	gd_sysctllock;		/* sysctl topology lock */
 	uintptr_t	gd_debug1;
 	uintptr_t	gd_debug2;

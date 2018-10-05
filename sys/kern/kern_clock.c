@@ -988,6 +988,7 @@ hardclock_unskip(int mask)
 		}
 		cnt = systimer_skip_periodic(&gd->gd_hardclock, 0);
 		if (cnt > 0) {
+			gd->gd_curticks += cnt;
 			hardclock_time_handle(gd, NULL);
 
 			lwkt_schedulerclock(curthread);
@@ -1083,6 +1084,7 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 		need_ipiq();
 	}
 
+	gd->gd_curticks++;
 	hardclock_time_handle(gd, info);
 
 	/*
@@ -1099,6 +1101,7 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 		int i;
 
 		KKASSERT(info->skipped > 0 && info->skipped < 63);
+		gd->gd_curticks += info->skipped;
 		hardclock_softtick(gd, info->skipped);
 	}
 #endif
