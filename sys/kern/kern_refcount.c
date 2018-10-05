@@ -65,17 +65,18 @@ void
 _refcount_wait(volatile u_int *countp, const char *wstr)
 {
 	u_int n;
-	int base_ticks = ticks;
+	globaldata_t gd = mycpu;
+	int base_ticks = gd->gd_curticks;
 
 	for (;;) {
 		n = *countp;
 		cpu_ccfence();
 		if (n == 0)
 			break;
-		if ((int)(ticks - base_ticks) >= hz*60 - 1) {
+		if ((int)(gd->gd_curticks - base_ticks) >= hz*60 - 1) {
 			kprintf("warning: refcount_wait %s: long wait\n",
 				wstr);
-			base_ticks = ticks;
+			base_ticks = gd->gd_curticks;
 		}
 		KKASSERT(n != REFCNTF_WAITING);	/* impossible state */
 		tsleep_interlock(countp, 0);
