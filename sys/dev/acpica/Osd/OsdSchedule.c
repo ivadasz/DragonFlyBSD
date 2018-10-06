@@ -181,12 +181,12 @@ AcpiOsSleep(UINT64 Milliseconds)
      * use DELAY instead for better granularity.
      */
     if (clocks_running == 0) {
-	while (timo > 1000000) {
+	while (Milliseconds > 1000) {
 	    DELAY(1000000);
-	    timo -= 1000000;
+	    Milliseconds -= 1000;
 	}
-	if (timo)
-	    DELAY(timo * 1000);
+	if (Milliseconds)
+	    DELAY(Milliseconds * 1000);
     } else if (timo > 0) {
 	tsleep(&dummy, 0, "acpislp", timo);
     } else {
