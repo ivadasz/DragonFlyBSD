@@ -112,4 +112,10 @@ boolean_t cpu_mwait_hint_valid(uint32_t);
 void	cpu_mwait_cx_no_bmsts(void);
 void	cpu_mwait_cx_no_bmarb(void);
 
+void	cpu_mwait_cx_io_wait(int);
+void	cpu_mwait_cx_io_done(int);
+void	cpu_mwait_cx_io_wait_mp(int);
+void	cpu_mwait_cx_io_done_mp(int);
+int	cpu_mwait_cx_io_available(void);
+
 #endif /* !_MACHINE_MD_VAR_H_ */
