@@ -66,6 +66,8 @@
 #define TRANS_PCALL	2
 #define TRANS_BLOCK	3
 
+extern cpumask_t smp_idleinvl_mask;
+
 static void ig4iic_intr(void *cookie);
 static void ig4iic_dump(ig4iic_softc_t *sc);
 
@@ -130,6 +132,24 @@ set_controller(ig4iic_softc_t *sc, uint32_t ctl)
 	return error;
 }
 
+static
+void
+cxio_wait(void *arg)
+{
+	ig4iic_softc_t *sc = arg;
+
+	cpu_mwait_cx_io_wait_mp(sc->intr_cpu);
+}
+
+static
+void
+cxio_done(void *arg)
+{
+	ig4iic_softc_t *sc = arg;
+
+	cpu_mwait_cx_io_done_mp(sc->intr_cpu);
+}
+
 /*
  * Wait up to 25ms for the requested status using a 25uS polling loop.
  */
@@ -192,7 +212,30 @@ wait_status(ig4iic_softc_t *sc, uint32_t status)
 		 * work, otherwise poll with the lock held.
 		 */
 		if (status & IG4_STATUS_RX_NOTEMPTY) {
+			cpu_mwait_cx_io_wait(mycpuid);
+			if (cpu_mwait_cx_io_available() &&
+			    sc->intr_cpu != mycpuid &&
+			    atomic_cmpset_int(&sc->intr_await, 0, 1)) {
+				if (CPUMASK_TESTBIT(smp_idleinvl_mask,
+				    sc->intr_cpu)) {
+					lwkt_send_ipiq(sc->intr_gd, cxio_wait,
+					    sc);
+				} else {
+					cpu_mwait_cx_io_wait_mp(sc->intr_cpu);
+				}
+			}
 			lksleep(sc, &sc->lk, 0, "i2cwait", (hz + 99) / 100);
+			if (sc->intr_cpu != mycpuid &&
+			    atomic_cmpset_int(&sc->intr_await, 1, 0)) {
+				if (CPUMASK_TESTBIT(smp_idleinvl_mask,
+				    sc->intr_cpu)) {
+					lwkt_send_ipiq(sc->intr_gd, cxio_done,
+					    sc);
+				} else {
+					cpu_mwait_cx_io_done_mp(sc->intr_cpu);
+				}
+			}
+			cpu_mwait_cx_io_done(mycpuid);
 		} else {
 			DELAY(25);
 		}
@@ -632,6 +675,8 @@ ig4iic_attach(ig4iic_softc_t *sc)
 			      "Unable to setup irq: error %d\n", error);
 		goto done;
 	}
+	sc->intr_cpu = rman_get_cpuid(sc->intr_res);
+	sc->intr_gd = globaldata_find(sc->intr_cpu),
 
 	/* Attach us to the smbus */
 	lockmgr(&sc->lk, LK_RELEASE);
@@ -983,6 +1028,9 @@ ig4iic_intr(void *cookie)
 		    (uint8_t)reg_read(sc, IG4_REG_DATA_CMD);
 		++sc->rnext;
 		status = reg_read(sc, IG4_REG_I2C_STA);
+	}
+	if (atomic_cmpset_int(&sc->intr_await, 1, 0)) {
+		cpu_mwait_cx_io_done_mp(sc->intr_cpu);
 	}
 	wakeup(sc);
 	lockmgr(&sc->lk, LK_RELEASE);
