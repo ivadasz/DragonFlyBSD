@@ -165,6 +165,30 @@ AcpiOsGetTimer (void)
     return (((UINT64) time.tv_sec * 10000000) + ((UINT64) time.tv_usec * 10));
 }
 
+static void
+_Acpi_msleep_wakeup(systimer_t info, int in_ipi, struct intrframe *frame)
+{
+        lwkt_schedule(info->data);
+}
+
+static void
+_Acpi_msleep(unsigned int msecs)
+{
+        thread_t td = curthread;
+        struct systimer info;
+
+	if (msecs <= 2)
+                cpu_mwait_cx_io_wait(mycpuid);
+        crit_enter_quick(td);
+        systimer_init_oneshot(&info, _Acpi_msleep_wakeup, td, msecs*1000);
+        lwkt_deschedule_self(td);
+        crit_exit_quick(td);
+        lwkt_switch();
+        systimer_del(&info);
+	if (msecs <= 2)
+                cpu_mwait_cx_io_done(mycpuid);
+}
+
 void
 AcpiOsSleep(UINT64 Milliseconds)
 {
@@ -190,7 +214,7 @@ AcpiOsSleep(UINT64 Milliseconds)
     } else if (timo > 0) {
 	tsleep(&dummy, 0, "acpislp", timo);
     } else {
-	DELAY(Milliseconds * 1000);
+	_Acpi_msleep(Milliseconds);
     }
     return_VOID;
 }
