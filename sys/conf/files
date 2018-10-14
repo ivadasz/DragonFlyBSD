@@ -116,7 +116,7 @@ dev/raid/asr/asr.c			optional asr pci
 dev/disk/ahci/ahci.c			optional ahci
 dev/disk/ahci/ahci_dragonfly.c		optional ahci
 dev/disk/ahci/ahci_attach.c		optional ahci
-dev/disk/ahci/ahci_cam.c		optional ahci
+dev/disk/ahci/ahci_disk.c		optional ahci
 dev/disk/ahci/ahci_pm.c			optional ahci
 dev/disk/sili/sili.c			optional sili
 dev/disk/sili/sili_dragonfly.c		optional sili

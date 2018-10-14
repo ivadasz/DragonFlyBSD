@@ -25,7 +25,7 @@
 #include "atascsi.h"
 
 /* change to AHCI_DEBUG for dmesg spam */
-#define NO_AHCI_DEBUG
+#define AHCI_NO_DEBUG
 
 #ifdef AHCI_DEBUG
 #define DPRINTF(m, f...) do { if ((ahcidebug & (m)) == (m)) kprintf(f); } \
@@ -34,7 +34,7 @@
 #define AHCI_D_VERBOSE		0x01
 #define AHCI_D_INTR		0x02
 #define AHCI_D_XFER		0x08
-int ahcidebug = AHCI_D_VERBOSE;
+extern int ahcidebug;
 #else
 #define DPRINTF(m, f...)
 #endif
@@ -460,14 +460,21 @@ struct ahci_port {
 	int			ap_signal;	/* os per-port thread sig */
 	thread_t		ap_thread;	/* os per-port thread */
 	struct lock		ap_lock;	/* os per-port lock */
+#if 0
 	struct lock		ap_sim_lock;	/* cam sim lock */
+#endif
 	struct lock		ap_sig_lock;	/* signal thread */
 #define AP_SIGF_INIT		0x0001
 #define AP_SIGF_TIMEOUT		0x0002
 #define AP_SIGF_PORTINT		0x0004
 #define AP_SIGF_THREAD_SYNC	0x0008
 #define AP_SIGF_STOP		0x8000
+#if 0
 	struct cam_sim		*ap_sim;
+#endif
+
+	cdev_t			ap_cdev;
+	struct disk		ap_disk;
 
 	struct ahci_rfis	*ap_rfis;
 	struct ahci_dmamem	*ap_dmamem_rfis;
@@ -565,7 +572,7 @@ struct ahci_softc {
 	u_int32_t		sc_ccc_ports_cur;
 #endif
 };
-#define DEVNAME(_s)		((_s)->sc_dev.dv_xname)
+#define DEVNAME(_s)		device_get_nameunit((_s)->sc_dev)
 
 struct ahci_device {
 	pci_vendor_id_t		ad_vendor;
@@ -617,9 +624,14 @@ void	ahci_flush_tfd(struct ahci_port *ap);
 int	ahci_set_feature(struct ahci_port *ap, struct ata_port *atx,
 			int feature, int enable);
 
+#if 0
 int	ahci_cam_attach(struct ahci_port *ap);
-void	ahci_cam_changed(struct ahci_port *ap, struct ata_port *at, int found);
 void	ahci_cam_detach(struct ahci_port *ap);
+#else
+int	ahci_disks_attach(struct ahci_port *ap);
+void	ahci_disks_detach(struct ahci_port *ap);
+#endif
+void	ahci_cam_changed(struct ahci_port *ap, struct ata_port *at, int found);
 int	ahci_cam_probe(struct ahci_port *ap, struct ata_port *at);
 
 struct ata_xfer *ahci_ata_get_xfer(struct ahci_port *ap, struct ata_port *at);

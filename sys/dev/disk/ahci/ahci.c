@@ -53,6 +53,10 @@
 
 #include "ahci.h"
 
+#ifdef AHCI_DEBUG
+int ahcidebug = AHCI_D_VERBOSE;
+#endif
+
 void	ahci_port_interrupt_enable(struct ahci_port *ap);
 
 int	ahci_load_prdt(struct ahci_ccb *);

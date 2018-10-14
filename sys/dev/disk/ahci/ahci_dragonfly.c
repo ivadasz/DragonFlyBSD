@@ -81,7 +81,6 @@ static driver_t ahci_driver = {
 	sizeof(struct ahci_softc)
 };
 
-MODULE_DEPEND(ahci, cam, 1, 1, 1);
 DRIVER_MODULE(ahci, pci, ahci_driver, ahci_devclass, NULL, NULL);
 MODULE_VERSION(ahci, 1);
 
@@ -246,7 +245,9 @@ ahci_os_start_port(struct ahci_port *ap)
 
 	atomic_set_int(&ap->ap_signal, AP_SIGF_INIT | AP_SIGF_THREAD_SYNC);
 	lockinit(&ap->ap_lock, "ahcipo", 0, LK_CANRECURSE);
+#if 0
 	lockinit(&ap->ap_sim_lock, "ahcicam", 0, LK_CANRECURSE);
+#endif
 	lockinit(&ap->ap_sig_lock, "ahport", 0, 0);
 	sysctl_ctx_init(&ap->sysctl_ctx);
 	ksnprintf(name, sizeof(name), "%d", ap->ap_num);
@@ -368,8 +369,6 @@ ahci_port_thread(void *arg)
 	 * so all the ports can be inited in parallel.
 	 *
 	 * We also run the state machine which should do all probes.
-	 * Since CAM is not attached yet we will not get out-of-order
-	 * SCSI attachments.
 	 */
 	ahci_os_lock_port(ap);
 	ahci_port_init(ap);
@@ -386,8 +385,10 @@ ahci_port_thread(void *arg)
 	if (ahci_synchronous_boot) {
 		wakeup(&ap->ap_signal);
 	} else {
+#if 0
 		if (ahci_cam_attach(ap) == 0)
 			ahci_cam_changed(ap, NULL, -1);
+#endif
 	}
 	ahci_os_unlock_port(ap);
 

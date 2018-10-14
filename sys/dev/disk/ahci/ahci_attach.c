@@ -582,12 +582,19 @@ noccc:
 			while (ap->ap_signal & AP_SIGF_INIT)
 				tsleep(&ap->ap_signal, 0, "ahprb2", hz);
 			ahci_os_lock_port(ap);
+#if 0
 			if (ahci_cam_attach(ap) == 0) {
 				ahci_cam_changed(ap, NULL, -1);
 				ahci_os_unlock_port(ap);
 				while ((ap->ap_flags & AP_F_SCAN_COMPLETED) == 0) {
 					tsleep(&ap->ap_flags, 0, "ahprb3", hz);
 				}
+#else
+			if (ahci_disks_attach(ap) == 0) {
+				ahci_cam_changed(ap, NULL, -1);
+				ahci_os_unlock_port(ap);
+				/* ahci_disks_attach() is waiting already. */
+#endif
 			} else {
 				ahci_os_unlock_port(ap);
 			}
@@ -627,7 +634,11 @@ ahci_pci_detach(device_t dev)
 	for (i = 0; i < AHCI_MAX_PORTS; i++) {
 		ap = sc->sc_ports[i];
 		if (ap) {
+#if 0
 			ahci_cam_detach(ap);
+#else
+			ahci_disks_detach(ap);
+#endif
 			ahci_port_free(sc, i);
 		}
 	}
