@@ -924,7 +924,7 @@ ahci_pm_check_good(struct ahci_port *ap, int target)
 			PORTNAME(ap));
 	}
 
-	if (target == CAM_TARGET_WILDCARD || target >= ap->ap_pmcount)
+	if (target == -1 || target >= ap->ap_pmcount)
 		return;
 	at = ap->ap_ata[target];
 
