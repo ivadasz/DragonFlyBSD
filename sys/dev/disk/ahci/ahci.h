@@ -472,6 +472,12 @@ struct ahci_port {
 #if 0
 	struct cam_sim		*ap_sim;
 #endif
+	struct devstat		ap_device_stats;
+	struct bio_queue_head	ap_bioq;
+	int			ap_maxcmds;
+	int			ap_curcmds;
+	struct lwkt_serialize	ap_slz;
+	struct task		ap_task;
 
 	cdev_t			ap_cdev;
 	struct disk		ap_disk;
