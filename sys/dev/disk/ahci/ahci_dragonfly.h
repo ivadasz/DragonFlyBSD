@@ -40,25 +40,18 @@
 #include <sys/bus.h>
 #include <sys/device.h>
 #include <sys/disk.h>
+#include <sys/devicestat.h>
 #include <sys/stat.h>
 #include <sys/buf.h>
+#include <sys/buf2.h>
+#include <sys/taskqueue.h>
+#include <sys/dtype.h>
 #include <sys/proc.h>
 #include <sys/queue.h>
 #include <sys/rman.h>
 #include <sys/endian.h>
 #include <sys/sysctl.h>
 #include <sys/kthread.h>
-
-#if 0
-#include <bus/cam/cam.h>
-#include <bus/cam/cam_ccb.h>
-#include <bus/cam/cam_periph.h>
-#include <bus/cam/cam_sim.h>
-#include <bus/cam/cam_xpt_sim.h>
-#include <bus/cam/cam_xpt_periph.h>
-#include <bus/cam/cam_debug.h>
-#include <bus/cam/scsi/scsi_all.h>
-#endif
 
 #include <machine/clock.h>
 
