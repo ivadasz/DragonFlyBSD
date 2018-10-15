@@ -74,6 +74,7 @@
 
 static void ahci_ata_complete_disk_rw(struct ata_xfer *xa);
 static void ahci_ata_complete_disk_synchronize_cache(struct ata_xfer *xa);
+static void ahci_submit_task(void *context, int pending);
 #if 0
 static void ahci_atapi_complete_cmd(struct ata_xfer *xa);
 static void ahci_ata_dummy_sense(struct scsi_sense_data *sense_data);
@@ -231,6 +232,15 @@ ahci_ata_complete_disk_synchronize_cache(struct ata_xfer *xa)
 	}
 	ahci_ata_put_xfer(xa);
 	biodone(bio);
+	lwkt_serialize_enter(&ap->ap_slz);
+	ap->ap_curcmds--;
+	if (ap->ap_curcmds == ap->ap_maxcmds - 1 &&
+	    bioq_first(&ap->ap_bioq) != NULL) {
+		lwkt_serialize_exit(&ap->ap_slz);
+		taskqueue_enqueue(taskqueue_thread[mycpuid], &ap->ap_task);
+	} else {
+		lwkt_serialize_exit(&ap->ap_slz);
+	}
 }
 
 /*
@@ -278,7 +288,17 @@ ahci_ata_complete_disk_rw(struct ata_xfer *xa)
 		break;
 	}
 	ahci_ata_put_xfer(xa);
+	devstat_end_transaction_buf(&ap->ap_device_stats, bp);
 	biodone(bio);
+	lwkt_serialize_enter(&ap->ap_slz);
+	ap->ap_curcmds--;
+	if (ap->ap_curcmds == ap->ap_maxcmds - 1 &&
+	    bioq_first(&ap->ap_bioq) != NULL) {
+		lwkt_serialize_exit(&ap->ap_slz);
+		taskqueue_enqueue(taskqueue_thread[mycpuid], &ap->ap_task);
+	} else {
+		lwkt_serialize_exit(&ap->ap_slz);
+	}
 }
 
 #if 0
@@ -399,6 +419,7 @@ ahci_disks_attach(struct ahci_port *ap)
 	int error;
 
 	ap->ap_flags |= AP_F_BUS_REGISTERED;
+	bioq_init(&ap->ap_bioq);
 
 	if (ap->ap_probe == ATA_PROBE_NEED_IDENT)
 		error = ahci_cam_probe(ap, NULL);
@@ -545,7 +566,14 @@ ahci_cam_probe(struct ahci_port *ap, struct ata_port *atx)
 		ap->ap_probe = ATA_PROBE_GOOD;
 
 	capacity_bytes = capacity * 512;
+	ap->ap_curcmds = 0;
+	lwkt_serialize_init(&ap->ap_slz);
+	TASK_INIT(&ap->ap_task, 0, ahci_submit_task, ap);
 
+	if (ap->ap_sc->sc_ncmds > 1)
+		ap->ap_maxcmds = ap->ap_sc->sc_ncmds - 1;
+	else
+		ap->ap_maxcmds = ap->ap_sc->sc_ncmds;
 	/*
 	 * Negotiate NCQ, throw away any ata_xfer's beyond the negotiated
 	 * number of slots and limit the number of CAM ccb's to one less
@@ -581,6 +609,8 @@ ahci_cam_probe(struct ahci_port *ap, struct ata_port *atx)
 				cam_sim_set_max_tags(ap->ap_sim,
 						     at->at_ncqdepth - 1);
 			}
+#else
+			ap->ap_maxcmds = at->at_ncqdepth - 1;
 #endif
 		}
 	} else {
@@ -683,7 +713,10 @@ ahci_cam_probe(struct ahci_port *ap, struct ata_port *atx)
 	}
 	if (at->at_type == ATA_PORT_T_DISK) {
 		struct disk_info info;
+		char serialno[21];
 
+		memcpy(serialno, serial_id, serial_len);
+		serialno[serial_len] = '\0';
 		bzero(&info, sizeof(info));
 		info.d_media_blksize = 512;
 		info.d_media_blocks = capacity;
@@ -692,10 +725,17 @@ ahci_cam_probe(struct ahci_port *ap, struct ata_port *atx)
 		info.d_nheads = 1;
 		info.d_secpercyl = info.d_secpertrack * info.d_nheads;
 		info.d_ncylinders =  (u_int)(capacity / info.d_secpercyl);
+		info.d_type = DTYPE_SCSI;
+		info.d_serialno = &serialno[0];
 
 		device_printf(ap->ap_sc->sc_dev, "Using geometry secpertrac=%u heads=%u secpercyl=%u ncylinders=%u\n", info.d_secpertrack, info.d_nheads, info.d_secpercyl, info.d_ncylinders);
 
 		/* XXX Fix device unit selection. */
+		devstat_add_entry(&ap->ap_device_stats, "ahcid",
+		    device_get_unit(ap->ap_sc->sc_dev), 512,
+		    DEVSTAT_NO_ORDERED_TAGS,
+		    DEVSTAT_TYPE_DIRECT | DEVSTAT_TYPE_IF_OTHER,
+		    DEVSTAT_PRIORITY_DISK);
 		ap->ap_cdev = disk_create(device_get_unit(ap->ap_sc->sc_dev), &ap->ap_disk,
 		    &ahcid_ops);
 		ap->ap_cdev->si_drv1 = ap;
@@ -839,32 +879,17 @@ ahcid_close(struct dev_close_args *ap __unused)
 	return (0);
 }
 
-
-static int
-ahcid_strategy(struct dev_strategy_args *ap)
+static void
+ahcid_submit_disk_io(struct ahci_port *ap, struct bio *bio)
 {
-	struct ahci_port *port = (void *)ap->a_head.a_dev->si_drv1;
-	struct ata_port *at = port->ap_ata[0];
-	struct ata_xfer *xa;
-	struct bio *bio = ap->a_bio;
+	struct ata_port *at = ap->ap_ata[0];
 	struct buf *bp = bio->bio_buf;
+	struct ata_xfer *xa;
 	struct ata_fis_h2d *fis;
 	off_t block;
 
-	if (bp->b_cmd != BUF_CMD_READ && bp->b_cmd != BUF_CMD_WRITE &&
-	    bp->b_cmd != BUF_CMD_FLUSH) {
-		bp->b_error = EIO;
-		bp->b_resid = bp->b_bcount;
-		bp->b_flags |= B_ERROR;
-		//devstat_end_transaction_buf(&sc->device_stats, bp);
-		biodone(bio);
-		return 0;
-	}
-
-	/* XXX Use a worker thread for scheduling queued transfers. */
-
 	/* XXX Not passing NULL for direct attached disk! Doesn't seem to matter... */
-	xa = ahci_ata_get_xfer(port, at);
+	xa = ahci_ata_get_xfer(ap, at);
 	fis = xa->fis;
 
 	if (bp->b_cmd == BUF_CMD_FLUSH) {
@@ -883,6 +908,7 @@ ahcid_strategy(struct dev_strategy_args *ap)
 		goto out;
 	}
 
+	devstat_start_transaction(&ap->ap_device_stats);
 	block = bio->bio_offset / 512;
 #if 0
 	device_printf(port->ap_sc->sc_dev, "%s: cmd=%s block=%lu count=%u\n",
@@ -902,8 +928,8 @@ ahcid_strategy(struct dev_strategy_args *ap)
 	 * try to use NCQ with port multipliers.
 	 */
 	if (at->at_ncqdepth > 1 &&
-	    port->ap_type == ATA_PORT_T_DISK &&
-	    (port->ap_sc->sc_cap & AHCI_REG_CAP_SNCQ)) {
+	    ap->ap_type == ATA_PORT_T_DISK &&
+	    (ap->ap_sc->sc_cap & AHCI_REG_CAP_SNCQ)) {
 		/*
 		 * Use NCQ - always uses 48 bit addressing
 		 */
@@ -947,12 +973,60 @@ ahcid_strategy(struct dev_strategy_args *ap)
 	xa->timeout = 60000;
 
 out:
-	bio->bio_driver_info = port;
+	bio->bio_driver_info = ap;
 	xa->atascsi_private = bio;
-	ahci_os_lock_port(port);
+	ahci_os_lock_port(ap);
 	xa->fis->flags |= at->at_target;
 	ahci_ata_cmd(xa);
-	ahci_os_unlock_port(port);
+	ahci_os_unlock_port(ap);
+}
+
+static void
+ahci_submit_task(void *context, int pending __unused)
+{
+	struct ahci_port *ap = context;
+	struct bio *bio;
+
+	lwkt_serialize_enter(&ap->ap_slz);
+	while (ap->ap_curcmds < ap->ap_maxcmds) {
+		bio = bioq_takefirst(&ap->ap_bioq);
+		if (bio != NULL) {
+			ap->ap_curcmds++;
+			lwkt_serialize_exit(&ap->ap_slz);
+			ahcid_submit_disk_io(ap, bio);
+			lwkt_serialize_enter(&ap->ap_slz);
+		} else {
+			break;
+		}
+	}
+	lwkt_serialize_exit(&ap->ap_slz);
+}
+
+static int
+ahcid_strategy(struct dev_strategy_args *ap)
+{
+	struct ahci_port *port = (void *)ap->a_head.a_dev->si_drv1;
+	struct bio *bio = ap->a_bio;
+	struct buf *bp = bio->bio_buf;
+
+	if (bp->b_cmd != BUF_CMD_READ && bp->b_cmd != BUF_CMD_WRITE &&
+	    bp->b_cmd != BUF_CMD_FLUSH) {
+		bp->b_error = EIO;
+		bp->b_resid = bp->b_bcount;
+		bp->b_flags |= B_ERROR;
+		biodone(bio);
+		return 0;
+	}
+
+	lwkt_serialize_enter(&port->ap_slz);
+	if (port->ap_curcmds < port->ap_maxcmds) {
+		port->ap_curcmds++;
+		lwkt_serialize_exit(&port->ap_slz);
+		ahcid_submit_disk_io(port, bio);
+	} else {
+		bioqdisksort(&port->ap_bioq, bio);
+		lwkt_serialize_exit(&port->ap_slz);
+	}
 
 	return 0;
 }
