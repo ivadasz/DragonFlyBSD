@@ -195,6 +195,20 @@ ahci_ata_dummy_done(struct ata_xfer *xa)
 {
 }
 
+static void
+ahci_schedule_next(struct ahci_port *ap)
+{
+	lwkt_serialize_enter(&ap->ap_slz);
+	ap->ap_curcmds--;
+	if (ap->ap_curcmds == ap->ap_maxcmds - 1 &&
+	    bioq_first(&ap->ap_bioq) != NULL) {
+		lwkt_serialize_exit(&ap->ap_slz);
+		taskqueue_enqueue(taskqueue_thread[mycpuid], &ap->ap_task);
+	} else {
+		lwkt_serialize_exit(&ap->ap_slz);
+	}
+}
+
 /*
  * Completion function for ATA_PORT_T_DISK cache synchronization.
  */
@@ -232,15 +246,7 @@ ahci_ata_complete_disk_synchronize_cache(struct ata_xfer *xa)
 	}
 	ahci_ata_put_xfer(xa);
 	biodone(bio);
-	lwkt_serialize_enter(&ap->ap_slz);
-	ap->ap_curcmds--;
-	if (ap->ap_curcmds == ap->ap_maxcmds - 1 &&
-	    bioq_first(&ap->ap_bioq) != NULL) {
-		lwkt_serialize_exit(&ap->ap_slz);
-		taskqueue_enqueue(taskqueue_thread[mycpuid], &ap->ap_task);
-	} else {
-		lwkt_serialize_exit(&ap->ap_slz);
-	}
+	ahci_schedule_next(ap);
 }
 
 /*
@@ -290,15 +296,7 @@ ahci_ata_complete_disk_rw(struct ata_xfer *xa)
 	ahci_ata_put_xfer(xa);
 	devstat_end_transaction_buf(&ap->ap_device_stats, bp);
 	biodone(bio);
-	lwkt_serialize_enter(&ap->ap_slz);
-	ap->ap_curcmds--;
-	if (ap->ap_curcmds == ap->ap_maxcmds - 1 &&
-	    bioq_first(&ap->ap_bioq) != NULL) {
-		lwkt_serialize_exit(&ap->ap_slz);
-		taskqueue_enqueue(taskqueue_thread[mycpuid], &ap->ap_task);
-	} else {
-		lwkt_serialize_exit(&ap->ap_slz);
-	}
+	ahci_schedule_next(ap);
 }
 
 #if 0
@@ -900,8 +898,7 @@ ahcid_submit_disk_io(struct ahci_port *ap, struct bio *bio)
 		fis->flags = ATA_H2D_FLAGS_CMD;
 		fis->command = ATA_C_FLUSH_CACHE;
 		fis->device = 0;
-		if (xa->timeout < 45000)
-			xa->timeout = 45000;
+		xa->timeout = 45000;
 		xa->datalen = 0;
 		xa->flags = 0;
 		xa->complete = ahci_ata_complete_disk_synchronize_cache;
@@ -986,20 +983,27 @@ ahci_submit_task(void *context, int pending __unused)
 {
 	struct ahci_port *ap = context;
 	struct bio *bio;
+	int done = 0;
 
-	lwkt_serialize_enter(&ap->ap_slz);
-	while (ap->ap_curcmds < ap->ap_maxcmds) {
-		bio = bioq_takefirst(&ap->ap_bioq);
-		if (bio != NULL) {
-			ap->ap_curcmds++;
-			lwkt_serialize_exit(&ap->ap_slz);
-			ahcid_submit_disk_io(ap, bio);
-			lwkt_serialize_enter(&ap->ap_slz);
+	do {
+		lwkt_serialize_enter(&ap->ap_slz);
+		if (ap->ap_curcmds < ap->ap_maxcmds) {
+			bio = bioq_takefirst(&ap->ap_bioq);
+			if (bio == NULL) {
+				lwkt_serialize_exit(&ap->ap_slz);
+				done = 1;
+			} else {
+				ap->ap_curcmds++;
+				if (ap->ap_curcmds == ap->ap_maxcmds)
+					done = 1;
+				lwkt_serialize_exit(&ap->ap_slz);
+				ahcid_submit_disk_io(ap, bio);
+			}
 		} else {
-			break;
+			lwkt_serialize_exit(&ap->ap_slz);
+			done = 1;
 		}
-	}
-	lwkt_serialize_exit(&ap->ap_slz);
+	} while (!done);
 }
 
 static int
@@ -1008,6 +1012,7 @@ ahcid_strategy(struct dev_strategy_args *ap)
 	struct ahci_port *port = (void *)ap->a_head.a_dev->si_drv1;
 	struct bio *bio = ap->a_bio;
 	struct buf *bp = bio->bio_buf;
+	int done = 0;
 
 	if (bp->b_cmd != BUF_CMD_READ && bp->b_cmd != BUF_CMD_WRITE &&
 	    bp->b_cmd != BUF_CMD_FLUSH) {
@@ -1019,14 +1024,27 @@ ahcid_strategy(struct dev_strategy_args *ap)
 	}
 
 	lwkt_serialize_enter(&port->ap_slz);
-	if (port->ap_curcmds < port->ap_maxcmds) {
-		port->ap_curcmds++;
-		lwkt_serialize_exit(&port->ap_slz);
-		ahcid_submit_disk_io(port, bio);
-	} else {
-		bioqdisksort(&port->ap_bioq, bio);
-		lwkt_serialize_exit(&port->ap_slz);
-	}
+	bioqdisksort(&port->ap_bioq, bio);
+	do {
+		if (port->ap_curcmds < port->ap_maxcmds) {
+			bio = bioq_takefirst(&port->ap_bioq);
+			if (bio == NULL) {
+				lwkt_serialize_exit(&port->ap_slz);
+				done = 1;
+			} else {
+				port->ap_curcmds++;
+				if (port->ap_curcmds == port->ap_maxcmds)
+					done = 1;
+				lwkt_serialize_exit(&port->ap_slz);
+				ahcid_submit_disk_io(port, bio);
+			}
+		} else {
+			lwkt_serialize_exit(&port->ap_slz);
+			done = 1;
+		}
+		if (!done)
+			lwkt_serialize_enter(&port->ap_slz);
+	} while (!done);
 
 	return 0;
 }
