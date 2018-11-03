@@ -5,12 +5,13 @@ dfly_kernel_object(
     name = "kern_rbtree",
     srcs = ["subr_rbtree.c"],
     deps = [
+        "//sys/sys:options",
         "//sys/sys",
         "//include:std",
         "//sys/sys:machine",
         "//sys/sys:machine_cpu",
         "//sys/sys:platform",
-        "//sys/sys:platform_cpu",
+        "//sys/vm",
     ],
     visibility = ["//visibility:public"],
 )
@@ -22,12 +23,13 @@ dfly_kernel_lib(
         "kern_time.c",
     ],
     deps = [
+        "//sys/sys:options",
         "//sys/sys",
         "//include:std",
         "//sys/sys:machine",
         "//sys/sys:machine_cpu",
         "//sys/sys:platform",
-        "//sys/sys:platform_cpu",
+        "//sys/vm",
     ],
 )
 
@@ -59,11 +61,18 @@ dfly_kernel_lib(
         "vfs_vopops.c",
     ],
     deps = [
+        "//sys/sys:options",
         "//sys/sys",
         "//include:std",
         "//sys/sys:machine",
         "//sys/sys:machine_cpu",
         "//sys/sys:platform",
-        "//sys/sys:platform_cpu",
+        "//sys/ddb",
+        "//sys/vm",
+        "//sys/libprop",
+        "//sys/net",
+        "//sys/net:radix",
+        "//sys/netinet",
+        "//sys/netinet6",
     ],
 )

@@ -119,5 +119,12 @@ def dfly_kernel_lib(name, srcs=[], deps=[], hdrs=[], include_prefix="", visibili
   if len(srcs) > 0:
     dfly_kernel_object(name = name, srcs = srcs, deps = deps, visibility = visibility)
 
+def dfly_opt_header(name, opt):
+  native.genrule(name = name,
+                 srcs = [],
+                 outs = ["opt_" + opt + ".h"],
+                 cmd = "touch \"$@\"")
+
+# XXX
 def dfly_kernel_binary(name, deps=[], visibility=None):
   dfly_kernel_object(name = name, deps = deps, visibility = visibility)

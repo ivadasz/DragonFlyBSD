@@ -29,8 +29,9 @@ dfly_toolchain(
         "-c",
         "-fno-builtin-log",
         "-pipe",
+        "-O2",
         "-D_KERNEL",
-        # TODO(ivadasz): Make this a build configuration setting
+        # TODO(ivadasz): Should be declared via an opt_*.h header instead.
         "-DINVARIANTS",
     ],
     compiler_path = "/usr/bin/gcc",
