@@ -14,6 +14,11 @@
 .*.sw[po]
 .sw[po]
 cscope.*
+/bazel-bin
+/bazel-dragonflybsd
+/bazel-genfiles
+/bazel-out
+/bazel-testlogs
 
 # The following patterns were previously active.
 # They have been commented out because the system "make" will pick up build
