@@ -47,7 +47,6 @@
 #include <sys/buf.h>
 #include <sys/conf.h>
 #include <sys/dirent.h>
-#include <sys/eventhandler.h>
 #include <sys/fcntl.h>
 #include <sys/file.h>
 #include <sys/kernel.h>
@@ -80,8 +79,6 @@
 #include <vm/vm_zone.h>
 
 #include <sys/buf2.h>
-#include <sys/thread2.h>
-#include <sys/mplock2.h>
 #include <vm/vm_page2.h>
 
 #include <netinet/in.h>
