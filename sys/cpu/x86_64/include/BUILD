@@ -6,6 +6,6 @@ filegroup(
 
 filegroup(
     name = "machine_headers",
-    srcs = glob(["*.h"], exclude = ["cpu.h", "pmap.h", "types.h"]),
+    srcs = glob(["*.h"], exclude = ["cpu.h", "param.h", "pmap.h", "types.h"]),
     visibility = ["//visibility:public"],
 )
