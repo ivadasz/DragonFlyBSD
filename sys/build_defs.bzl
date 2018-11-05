@@ -78,7 +78,6 @@ dfly_kernel_object = rule(
         "deps": attr.label_list(allow_files = True),
     },
     toolchains = ["//sys:toolchain_type"],
-    executable = False,
 )
 
 def _dfly_kernel_headers_impl(ctx):
@@ -109,7 +108,6 @@ dfly_kernel_headers = rule(
         "include_prefix": attr.string(),
         "deps": attr.label_list(),
     },
-    executable = False,
 )
 
 def dfly_kernel_lib(name, srcs=[], deps=[], hdrs=[], include_prefix="", visibility=None):
@@ -119,10 +117,29 @@ def dfly_kernel_lib(name, srcs=[], deps=[], hdrs=[], include_prefix="", visibili
   if len(srcs) > 0:
     dfly_kernel_object(name = name, srcs = srcs, deps = deps, visibility = visibility)
 
-def dfly_opt_header(name, opt):
+def dfly_kobj_hdr(name, kobj):
+    if kobj.endswith(".m"):
+        hdr = kobj.rstrip("m") + "h"
+        native.genrule(name = name, srcs = [kobj], outs = [hdr],
+                       cmd = "/usr/bin/awk -f $(location //sys/tools:makeobjops.awk) $< -h && cp %s $@" % hdr,
+                       tools = ["//sys/tools:makeobjops.awk"])
+
+def dfly_opt_header(name, opt, vals=[]):
+  if len(vals) > 0:
+    native.genrule(name = name,
+                   srcs = [],
+                   outs = ["opt_" + opt + ".h"],
+                   cmd = "for i in %s; do echo \#define $$i > \"$@\"; done" % ' '.join(vals))
+  else:
+    native.genrule(name = name,
+                   srcs = [],
+                   outs = ["opt_" + opt + ".h"],
+                   cmd = "touch \"$@\"")
+
+def dfly_use_header(name, use):
   native.genrule(name = name,
                  srcs = [],
-                 outs = ["opt_" + opt + ".h"],
+                 outs = ["use_" + use + ".h"],
                  cmd = "touch \"$@\"")
 
 # XXX
