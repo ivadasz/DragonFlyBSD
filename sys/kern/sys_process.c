@@ -48,6 +48,7 @@
 #include <vm/vm_page.h>
 
 #include <sys/user.h>
+/* TODO(ivadasz): This dependency can be avoided, by moving some code from procfs into common code in //sys/kern/. */
 #include <vfs/procfs/procfs.h>
 
 #include <sys/thread2.h>
