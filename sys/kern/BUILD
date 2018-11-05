@@ -1,65 +1,22 @@
+load("//sys:build_defs.bzl", "dfly_kernel_headers")
 load("//sys:build_defs.bzl", "dfly_kernel_lib")
 load("//sys:build_defs.bzl", "dfly_kernel_object")
+load("//sys:build_defs.bzl", "dfly_kobj_hdr")
 
-dfly_kernel_object(
-    name = "kern_rbtree",
-    srcs = ["subr_rbtree.c"],
-    deps = [
-        "//sys/sys:options",
-        "//sys/sys",
-        "//include:std",
-        "//sys/sys:machine",
-        "//sys/sys:machine_cpu",
-        "//sys/sys:platform",
-        "//sys/vm",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-dfly_kernel_lib(
-    name = "kern_clock",
-    srcs = [
-        "kern_clock.c",
-        "kern_time.c",
-    ],
-    deps = [
-        "//sys/sys:options",
-        "//sys/sys",
-        "//include:std",
-        "//sys/sys:machine",
-        "//sys/sys:machine_cpu",
-        "//sys/sys:platform",
-        "//sys/vm",
+dfly_kobj_hdr(name = "device_if_hdr", kobj = "device_if.m")
+dfly_kobj_hdr(name = "bus_if_hdr", kobj = "bus_if.m")
+dfly_kernel_headers(
+    name = "core_ifs",
+    hdrs = [
+        ":device_if_hdr",
+        ":bus_if_hdr",
     ],
 )
 
 dfly_kernel_lib(
-    name = "kern_vfs",
-    srcs = [
-        "vfs_aio.c",
-        "vfs_bio.c",
-        "vfs_cache.c",
-        "vfs_cluster.c",
-        "vfs_conf.c",
-        "vfs_default.c",
-        "vfs_helper.c",
-        "vfs_init.c",
-        "vfs_jops.c",
-        "vfs_journal.c",
-        "vfs_lock.c",
-        "vfs_lookup.c",
-        "vfs_mount.c",
-        "vfs_nlookup.c",
-        "vfs_quota.c",
-        "vfs_subr.c",
-        "vfs_sync.c",
-        "vfs_synth.c",
-        "vfs_syscalls.c",
-        "vfs_vfsops.c",
-        "vfs_vm.c",
-        "vfs_vnops.c",
-        "vfs_vopops.c",
-    ],
+    name = "kern",
+    # TODO(ivadasz): kern_sched.c depends on _kposix_priority_scheduling feature
+    srcs = glob(["*.c"], exclude = ["subr_input.c", "kern_sched.c"]),
     deps = [
         "//sys/sys:options",
         "//sys/sys",
@@ -70,9 +27,20 @@ dfly_kernel_lib(
         "//sys/ddb",
         "//sys/vm",
         "//sys/libprop",
+        "//sys/crypto/sha2",
+        "//sys/crypto/chacha",
         "//sys/net",
-        "//sys/net:radix",
         "//sys/netinet",
         "//sys/netinet6",
+        "//sys/net/altq:net_altq",
+        # kobj headers
+        ":core_ifs",
+        # very specific includes
+        "//sys/net:radix",
+        "//sys/vfs/ufs:dinode",
+        "//sys/vfs/ufs:fs",
+        "//sys/vfs/procfs",
+        "//crypto/libressl/include/openssl:md5",
+        "//sys/dev/acpica/acpi_pvpanic",
     ],
 )

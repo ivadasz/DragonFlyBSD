@@ -1,6 +1,7 @@
 load("//sys:build_defs.bzl", "dfly_kernel_headers")
 load("//sys:build_defs.bzl", "dfly_opt_header")
 load("//sys/sys:opt_headers.bzl", "dfly_opt_dummies")
+load("//sys/sys:opt_headers.bzl", "dfly_use_dummies")
 
 filegroup(
     name = "sys_headers",
@@ -51,23 +52,48 @@ dfly_kernel_headers(
 
 ### Deal with the opt_* header files, currently just generate stub headers.
 opt_dummy_headers = [
+    "bus",
+    "comconsole",
     "ddb",
+    "ddb_trace",
     "debug_cluster",
+    "debug_lockf",
     "global",
     "inet",
     "inet6",
+    "init_path",
+    "ktr",
     "ktrace",
+    "lint",
+    "mbuf_stress_test",
     "ntp",
     "quota",
+    "panic",
+    "param",
     "pctrack",
+    "posix",
     "rootdevname",
     "suiddir",
+    "sysvipc",
+    "uconsole",
+    "vm",
 ]
+
+#opt_basic_headers = [
+#    XXX opt_global.h should have a MAXUSERS setting
+#},
 
 dfly_opt_dummies("opt_dummy_targets", opt_dummy_headers)
 
+use_dummy_headers = [
+    "gpio",
+]
+dfly_use_dummies("use_dummy_targets", use_dummy_headers)
+
+dfly_opt_header("maxusers_options", "maxusers", ["'MAXUSERS 64'"])
+
 dfly_kernel_headers(
     name = "options",
-    hdrs = [":opt_dummy_targets"],
+    hdrs = [":opt_dummy_targets", ":use_dummy_targets", ":maxusers_options"],
     visibility = ["//visibility:public"],
 )
