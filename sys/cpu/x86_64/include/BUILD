@@ -1,7 +1,7 @@
 filegroup(
     name = "cpu_headers",
     srcs = glob(["*.h"]),
-    visibility = ["//visibility:public"],
+    visibility = ["//sys/sys:__pkg__"],
 )
 
 # Headers from here that are needed in machine/ on pc64.
@@ -36,5 +36,5 @@ filegroup(
         "ucontext.h",
         "vframe.h",
     ],
-    visibility = ["//visibility:public"],
+    visibility = ["//sys/sys:__pkg__"],
 )
