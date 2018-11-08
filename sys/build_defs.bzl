@@ -46,26 +46,23 @@ def _dfly_kernel_object_impl(ctx):
     cflags = [
         "-nostdinc",
     ] + info.arch_flags
-    for i in trans_incs.to_list():
+    for i in trans_incs:
         cflags += ["-I%s" % i]
-    myobj = None
     set = depset()
-    depfiles = []
+    depfiles = depset()
     for i in trans_deps:
-        depfiles += i.files.to_list()
+        depfiles = depset(direct = i.files.to_list(), transitive = [depfiles])
     for s in ctx.attr.srcs:
         for i in s.files.to_list():
+            # TODO(ivadasz): Handle assembler files with .s and .S suffix
             if i.extension == "c":
                 objname = i.basename.rstrip("c") + "o"
-            else:
-                objname = i.basename + ".o"
-            obj = ctx.actions.declare_file(objname)
-            set = depset(direct = [obj], transitive = [set])
-            ctx.actions.run(outputs = [obj], inputs = [i] + depfiles,
-                            executable = info.compiler_path,
-                            arguments = cflags + ["-o", obj.path] + [i.path], mnemonic = "CCompile",
-                            progress_message = "Compiling %s to %s" % (i.basename, obj.basename))
-            myobj = obj
+                obj = ctx.actions.declare_file(objname)
+                set = depset(direct = [obj], transitive = [set])
+                ctx.actions.run(outputs = [obj], inputs = depset(direct = [i], transitive = [depfiles]),
+                                executable = info.compiler_path,
+                                arguments = cflags + ["-o", obj.path] + [i.path], mnemonic = "CCompile",
+                                progress_message = "Compiling %s to %s" % (i.basename, obj.basename))
     return [
         IncludeDirs(transitive_includes = trans_incs),
         DefaultInfo(files = set)
@@ -149,6 +146,6 @@ def dfly_use_header(name, use):
                  outs = ["use_" + use + ".h"],
                  cmd = "touch \"$@\"")
 
-# XXX
 def dfly_kernel_binary(name, deps=[], visibility=None):
+  # TODO(ivadasz): Call the gcc linker on all the files referenced by deps.
   dfly_kernel_object(name = name, deps = deps, visibility = visibility)
