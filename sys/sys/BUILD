@@ -53,7 +53,6 @@ opt_dummy_headers = [
     "ddb_trace",
     "debug_cluster",
     "debug_lockf",
-    "global",
     "inet",
     "inet6",
     "init_path",
@@ -86,9 +85,15 @@ use_dummy_headers = [
 dfly_use_dummies("use_dummy_targets", use_dummy_headers)
 
 dfly_opt_header("maxusers_options", "maxusers", ["'MAXUSERS 64'"])
+dfly_opt_header("global_options", "global", ["'INVARIANTS 1'"])
 
 dfly_kernel_headers(
     name = "options",
-    hdrs = [":opt_dummy_targets", ":use_dummy_targets", ":maxusers_options"],
+    hdrs = [
+        ":opt_dummy_targets",
+        ":use_dummy_targets",
+        ":maxusers_options",
+        ":global_options",
+    ],
     visibility = ["//visibility:public"],
 )

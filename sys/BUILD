@@ -31,8 +31,6 @@ dfly_toolchain(
         "-pipe",
         "-O2",
         "-D_KERNEL",
-        # TODO(ivadasz): Should be declared via an opt_*.h header instead.
-        "-DINVARIANTS",
     ],
     compiler_path = "/usr/bin/gcc",
     visibility = ["//visibility:public"],
