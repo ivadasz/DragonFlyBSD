@@ -4,8 +4,37 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+# Headers from here that are needed in machine/ on pc64.
 filegroup(
     name = "machine_headers",
-    srcs = glob(["*.h"], exclude = ["cpu.h", "param.h", "pmap.h", "types.h"]),
+    srcs = [
+        "atomic.h",
+        "bus_dma.h",
+        "cpufunc.h",
+        "cpumask.h",
+        "cputypes.h",
+        "db_machdep.h",
+        "elf.h",
+        "endian.h",
+        "exec.h",
+        "frame.h",
+        "inttypes.h",
+        "int_const.h",
+        "int_limits.h",
+        "limits.h",
+        "npx.h",
+        "psl.h",
+        "reg.h",
+        "segments.h",
+        "sigframe.h",
+        "signal.h",
+        "specialreg.h",
+        "stdarg.h",
+        "stdint.h",
+        "trap.h",
+        "tss.h",
+        "ucontext.h",
+        "vframe.h",
+    ],
     visibility = ["//visibility:public"],
 )

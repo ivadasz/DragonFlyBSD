@@ -21,7 +21,6 @@ dfly_kernel_lib(
         "//sys/sys:options",
         "//sys/sys",
         "//include:std",
-        "//sys/sys:machine",
         "//sys/sys:machine_cpu",
         "//sys/sys:platform",
         "//sys/ddb",

@@ -16,14 +16,6 @@ dfly_kernel_headers(
 )
 
 dfly_kernel_headers(
-    name = "machine",
-    # TODO(ivadasz): Do a select on the cpu architecture
-    hdrs = ["//sys/cpu/x86_64/include:machine_headers"],
-    include_prefix = "machine",
-    visibility = ["//visibility:public"],
-)
-
-dfly_kernel_headers(
     name = "machine_cpu",
     # TODO(ivadasz): Do a select on the cpu architecture
     hdrs = ["//sys/cpu/x86_64/include:cpu_headers"],
@@ -34,7 +26,10 @@ dfly_kernel_headers(
 dfly_kernel_headers(
     name = "platform",
     # TODO(ivadasz): Do a select on the dragonfly platform
-    hdrs = ["//sys/platform/pc64/include:platform_headers"],
+    hdrs = [
+        "//sys/platform/pc64/include:platform_headers",
+        "//sys/cpu/x86_64/include:machine_headers",
+    ],
     include_prefix = "machine",
     deps = [
         ":apic",
