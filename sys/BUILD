@@ -51,5 +51,5 @@ toolchain(
 
 dfly_kernel_binary(
     name = "kernel_generic",
-    deps = ["//sys/kern:all"],
+    deps = ["//sys/kern", "//sys/libprop:libprop_obj"],
 )

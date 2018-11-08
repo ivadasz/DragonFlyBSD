@@ -59,4 +59,5 @@ dfly_kernel_lib(
         "//crypto/libressl/include/openssl:md5",
         "//sys/dev/acpica/acpi_pvpanic",
     ],
+    visibility = ["//visibility:public"],
 )

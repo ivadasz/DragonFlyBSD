@@ -15,6 +15,8 @@ dfly_kernel_headers(
     visibility = ["//visibility:public"],
 )
 
+# TODO(ivadasz): Separate out some of the cpu/ headers that are usually needed
+# by code all over the kernel.
 dfly_kernel_headers(
     name = "machine_cpu",
     # TODO(ivadasz): Do a select on the cpu architecture
