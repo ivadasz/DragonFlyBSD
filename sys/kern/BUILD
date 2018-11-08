@@ -1,22 +1,39 @@
 load("//sys:build_defs.bzl", "dfly_kernel_headers")
 load("//sys:build_defs.bzl", "dfly_kernel_lib")
 load("//sys:build_defs.bzl", "dfly_kernel_object")
+load("//sys:build_defs.bzl", "dfly_kobj_code")
 load("//sys:build_defs.bzl", "dfly_kobj_hdr")
 
 dfly_kobj_hdr(name = "device_if_hdr", kobj = "device_if.m")
 dfly_kobj_hdr(name = "bus_if_hdr", kobj = "bus_if.m")
+dfly_kobj_hdr(name = "cpu_if_hdr", kobj = "cpu_if.m")
 dfly_kernel_headers(
     name = "core_ifs",
     hdrs = [
         ":device_if_hdr",
         ":bus_if_hdr",
+        ":cpu_if_hdr",
+    ],
+)
+
+dfly_kobj_code(name = "device_if_src", kobj = "device_if.m")
+dfly_kobj_code(name = "bus_if_src", kobj = "bus_if.m")
+dfly_kobj_code(name = "cpu_if_src", kobj = "cpu_if.m")
+filegroup(
+    name = "core_ifs_srcs",
+    srcs = [
+        ":device_if_src",
+        ":bus_if_src",
+        ":cpu_if_src",
     ],
 )
 
 dfly_kernel_lib(
     name = "kern",
     # TODO(ivadasz): kern_sched.c depends on _kposix_priority_scheduling feature
-    srcs = glob(["*.c"], exclude = ["subr_input.c", "kern_sched.c"]),
+    srcs = glob(["*.c"], exclude = ["subr_input.c", "kern_sched.c"]) + [
+        ":core_ifs_srcs",
+    ],
     deps = [
         "//sys/sys:options",
         "//sys/sys",

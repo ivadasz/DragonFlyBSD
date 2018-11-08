@@ -124,6 +124,13 @@ def dfly_kobj_hdr(name, kobj):
                        cmd = "/usr/bin/awk -f $(location //sys/tools:makeobjops.awk) $< -h && cp %s $@" % hdr,
                        tools = ["//sys/tools:makeobjops.awk"])
 
+def dfly_kobj_code(name, kobj):
+    if kobj.endswith(".m"):
+        code = kobj.rstrip("m") + "c"
+        native.genrule(name = name, srcs = [kobj], outs = [code],
+                       cmd = "/usr/bin/awk -f $(location //sys/tools:makeobjops.awk) $< -c && cp %s $@" % code,
+                       tools = ["//sys/tools:makeobjops.awk"])
+
 def dfly_opt_header(name, opt, vals=[]):
   if len(vals) > 0:
     native.genrule(name = name,
