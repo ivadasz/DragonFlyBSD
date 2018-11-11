@@ -5,22 +5,32 @@ load("//sys/sys:opt_headers.bzl", "dfly_use_dummies")
 
 filegroup(
     name = "sys_headers",
-    srcs = glob(["*.h"]),
+    srcs = glob(["*.h"], exclude = ["idr.h"]),
 )
 
 dfly_kernel_headers(
     name = "sys",
     hdrs = [":sys_headers"],
     include_prefix = "sys",
+    # TODO(ivadasz): //sys/conf.h includes libprop/proplib.h.
+    # This will require special treatment of //sys/conf.h, or using a struct *.
+    #deps = ["//sys/libprop"],
     visibility = ["//visibility:public"],
 )
 
-# TODO(ivadasz): Separate out some of the cpu/ headers that are usually needed
-# by code all over the kernel.
+dfly_kernel_headers(
+    name = "machine_cpu_core",
+    # TODO(ivadasz): Do a select on the cpu architecture
+    hdrs = ["//sys/cpu/x86_64/include:cpu_headers_core"],
+    include_prefix = "cpu",
+    visibility = ["//visibility:public"],
+)
+
 dfly_kernel_headers(
     name = "machine_cpu",
     # TODO(ivadasz): Do a select on the cpu architecture
     hdrs = ["//sys/cpu/x86_64/include:cpu_headers"],
+    deps = [":machine_cpu_core"],
     include_prefix = "cpu",
     visibility = ["//visibility:public"],
 )
@@ -35,6 +45,7 @@ dfly_kernel_headers(
     include_prefix = "machine",
     deps = [
         ":apic",
+        ":machine_cpu_core",
     ],
     visibility = ["//visibility:public"],
 )
@@ -49,6 +60,7 @@ dfly_kernel_headers(
 
 ### Deal with the opt_* header files, currently just generate stub headers.
 opt_dummy_headers = [
+    "acpi",
     "bus",
     "comconsole",
     "ddb",
@@ -74,10 +86,6 @@ opt_dummy_headers = [
     "uconsole",
     "vm",
 ]
-
-#opt_basic_headers = [
-#    XXX opt_global.h should have a MAXUSERS setting
-#},
 
 dfly_opt_dummies("opt_dummy_targets", opt_dummy_headers)
 

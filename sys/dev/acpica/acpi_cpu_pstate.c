@@ -46,7 +46,7 @@
 #include <sys/cpu_topology.h>
 
 #include "acpi.h"
-#include "acpivar.h"
+#include <dev/acpica/acpivar.h>
 #include "acpi_cpu.h"
 #include "acpi_cpu_pstate.h"
 

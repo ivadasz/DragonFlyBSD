@@ -14,6 +14,7 @@ dfly_kernel_headers(
         ":bus_if_hdr",
         ":cpu_if_hdr",
     ],
+    visibility = ["//visibility:public"],
 )
 
 dfly_kobj_code(name = "device_if_src", kobj = "device_if.m")
@@ -38,17 +39,16 @@ dfly_kernel_lib(
         "//sys/sys:options",
         "//sys/sys",
         "//include:std",
-        "//sys/sys:machine_cpu",
         "//sys/sys:platform",
         "//sys/ddb",
         "//sys/vm",
-        "//sys/libprop",
         "//sys/crypto/sha2",
         "//sys/crypto/chacha",
         "//sys/net",
         "//sys/netinet",
         "//sys/netinet6",
         "//sys/net/altq:net_altq",
+        "//sys/libprop",
         # kobj headers
         ":core_ifs",
         # very specific includes

@@ -41,7 +41,7 @@
 
 #include "acpi.h"
 #include "accommon.h"
-#include "acpivar.h"
+#include <dev/acpica/acpivar.h>
 #include "acpi_hpet.h"
 
 #if !defined(KLD_MODULE)

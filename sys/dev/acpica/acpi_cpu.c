@@ -38,7 +38,7 @@
 #include <machine/smp.h>
 
 #include "acpi.h"
-#include "acpivar.h"
+#include <dev/acpica/acpivar.h>
 #include "acpi_cpu.h"
 #include "cpu_if.h"
 

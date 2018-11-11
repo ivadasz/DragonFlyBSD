@@ -33,6 +33,7 @@ dfly_toolchain(
         "-D_KERNEL",
     ],
     compiler_path = "/usr/bin/gcc",
+    linker_path = "/usr/bin/ld",
     visibility = ["//visibility:public"],
 )
 
@@ -51,5 +52,11 @@ toolchain(
 
 dfly_kernel_binary(
     name = "kernel_generic",
-    deps = ["//sys/kern", "//sys/libprop:libprop_obj"],
+    deps = [
+        "//sys/kern",
+        "//sys/libkern",
+        "//sys/libprop",
+        "//sys/dev/acpica:acpica_obj",
+    ],
+    ldscript = "//sys/platform/pc64/conf:ldscript.x86_64"
 )

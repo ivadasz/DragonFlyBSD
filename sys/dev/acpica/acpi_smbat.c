@@ -33,9 +33,9 @@
 #include <sys/bus.h>
 
 #include "acpi.h"
-#include <acpivar.h>
-#include <acpiio.h>
-#include <acpi_smbus.h>
+#include <dev/acpica/acpivar.h>
+#include <dev/acpica/acpiio.h>
+#include "acpi_smbus.h"
 
 /* Transactions have failed after 500 ms. */
 #define SMBUS_TIMEOUT	50

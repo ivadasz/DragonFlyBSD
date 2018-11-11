@@ -40,7 +40,7 @@
 
 #include "acpi.h"
 #include "accommon.h"
-#include "acpivar.h"
+#include <dev/acpica/acpivar.h>
 
 /*
  * A timecounter based on the free-running ACPI timer.

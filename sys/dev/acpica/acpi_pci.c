@@ -36,7 +36,7 @@
 #include <sys/module.h>
 
 #include "acpi.h"
-#include "acpivar.h"
+#include <dev/acpica/acpivar.h>
 
 #include <sys/pciio.h>
 #include <bus/pci/pcireg.h>

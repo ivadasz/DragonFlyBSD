@@ -51,7 +51,7 @@
 #include <sys/rman.h>
 
 #include "acpi.h"
-#include "acpivar.h"
+#include <dev/acpica/acpivar.h>
 #include "acpi_cpu.h"
 #include "acpi_cpu_cstate.h"
 

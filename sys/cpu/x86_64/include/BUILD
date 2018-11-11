@@ -1,6 +1,24 @@
+# TODO(ivadasz): lwbuf.h is actually needed by "sys" includes.
+core_cpu_headers = [
+    "atomic.h",
+    "cpu.h",
+    "frame.h",
+    "lwbuf.h",
+    "param.h",
+    "pmap.h",
+    "trap.h",
+    "types.h",
+]
+
 filegroup(
     name = "cpu_headers",
-    srcs = glob(["*.h"]),
+    srcs = glob(["*.h"], exclude = core_cpu_headers),
+    visibility = ["//sys/sys:__pkg__"],
+)
+
+filegroup(
+    name = "cpu_headers_core",
+    srcs = core_cpu_headers,
     visibility = ["//sys/sys:__pkg__"],
 )
 
@@ -23,6 +41,7 @@ filegroup(
         "int_limits.h",
         "limits.h",
         "npx.h",
+        "profile.h",
         "psl.h",
         "reg.h",
         "segments.h",
