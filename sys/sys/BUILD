@@ -12,10 +12,8 @@ dfly_kernel_headers(
     name = "sys",
     hdrs = [":sys_headers"],
     include_prefix = "sys",
-    # TODO(ivadasz): //sys/conf.h includes libprop/proplib.h.
-    # This will require special treatment of //sys/conf.h, or using a struct *.
     deps = [
-        #"//sys/libprop",
+        "//sys/libprop",
         "//include:std",
         ":platform",
     ],

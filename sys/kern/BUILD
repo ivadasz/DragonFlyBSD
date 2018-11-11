@@ -50,7 +50,6 @@ dfly_kernel_lib(
         "//sys/netinet",
         "//sys/netinet6",
         "//sys/net/altq:net_altq",
-        "//sys/libprop",
         # kobj headers
         ":core_ifs",
         # very specific includes

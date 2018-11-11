@@ -96,7 +96,6 @@ dfly_kernel_lib(
         "//sys/sys",
         "//sys/kern:core_ifs",
         "//sys/vm",
-        "//sys/libprop",
         "//sys/contrib/dev/acpica/source/include:acpica",
         "//sys/contrib/dev/acpica/source/include:acpica_priv",
         "//sys/bus/isa",

@@ -57,7 +57,7 @@ dfly_kernel_binary(
         "//sys/kern",
         "//sys/vm",
         "//sys/libkern",
-        "//sys/libprop",
+        "//sys/libprop:libprop_obj",
         "//sys/dev/acpica:acpica_obj",
         "//sys/bus/pci:pci_obj",
         "//sys/bus/isa:isa_obj",
