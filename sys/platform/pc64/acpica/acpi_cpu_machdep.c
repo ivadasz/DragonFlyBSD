@@ -41,7 +41,7 @@
 #include <machine/specialreg.h>
 
 #include "acpi.h"
-#include "acpivar.h"
+#include <dev/acpica/acpivar.h>
 #include "acpi_cpu.h"
 
 uint32_t

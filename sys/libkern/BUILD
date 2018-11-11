@@ -23,9 +23,7 @@ dfly_kernel_lib(
     ]),
     deps = [
         "//sys/sys",
-        "//sys/sys:platform",
         "//sys/vm",
-        "//include:std",
         "//include/xlocale",
         "//sys/netinet",
         "//sys/netinet6",

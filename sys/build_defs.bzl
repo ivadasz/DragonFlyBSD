@@ -1,6 +1,6 @@
 CompilerInfo = provider(
     doc = "Information about how to invoke gcc for the DragonFly kernel.",
-    fields = ["compiler_path", "linker_path", "arch_flags"],
+    fields = ["compiler_path", "linker_path", "assembler_path", "arch_flags"],
 )
 
 def _dfly_toolchain_impl(ctx):
@@ -8,6 +8,7 @@ def _dfly_toolchain_impl(ctx):
         compilerinfo = CompilerInfo(
             compiler_path = ctx.attr.compiler_path,
             linker_path = ctx.attr.linker_path,
+            assembler_path = ctx.attr.assembler_path,
             arch_flags = ctx.attr.arch_flags,
         ),
     )
@@ -18,6 +19,7 @@ dfly_toolchain = rule(
     attrs = {
         "compiler_path": attr.string(),
         "linker_path": attr.string(),
+        "assembler_path": attr.string(),
         "arch_flags": attr.string_list(),
     },
 )
@@ -72,7 +74,7 @@ def _dfly_kernel_object_impl(ctx):
     for i in trans_deps:
         for h in i.files:
             # TODO(ivadasz): Solve the problem of including .c files nicer.
-            if h.extension == "h" or h.extension == "c":
+            if h.extension in ["h", "c", "s"]:
                 depfiles = depset(direct = [h], transitive = [depfiles])
     for i in trans_hdeps:
         for h in i.files:
@@ -80,14 +82,21 @@ def _dfly_kernel_object_impl(ctx):
                 depfiles = depset(direct = [h], transitive = [depfiles])
     for s in ctx.attr.srcs:
         for i in s.files:
-            # TODO(ivadasz): Handle assembler files with .s and .S suffix
             if i.extension == "c":
                 objname = i.basename.rstrip("c") + "o"
                 obj = ctx.actions.declare_file(objname)
                 set = depset(direct = [obj], transitive = [set])
                 ctx.actions.run(outputs = [obj], inputs = depset(direct = [i], transitive = [depfiles]),
                                 executable = info.compiler_path,
-                                arguments = cflags + ["-o", obj.path] + [i.path], mnemonic = "CCompile",
+                                arguments = cflags + ["-x", "c", "-o", obj.path, i.path], mnemonic = "CCompile",
+                                progress_message = "Compiling %s to %s" % (i.basename, obj.basename))
+            elif i.extension in ["s", "S"]:
+                objname = i.basename.rstrip("s") + "o"
+                obj = ctx.actions.declare_file(objname)
+                set = depset(direct = [obj], transitive = [set])
+                ctx.actions.run(outputs = [obj], inputs = depset(direct = [i], transitive = [depfiles]),
+                                executable = info.compiler_path,
+                                arguments = cflags + ["-DLOCORE", "-x", "assembler-with-cpp", "-o", obj.path, i.path], mnemonic = "Assembler",
                                 progress_message = "Compiling %s to %s" % (i.basename, obj.basename))
     return [
         IncludeDirs(transitive_includes = trans_hdr_incs),

@@ -35,18 +35,11 @@ filegroup(
 )
 
 dfly_kernel_headers(
-    name = "pci_x86_64_priv",
-    hdrs = [
-        "x86_64/pci_cfgreg.h",
-    ],
-    include_prefix = "x86_64",
-)
-
-dfly_kernel_headers(
     name = "pci_priv",
     hdrs = [":pci_private_headers"],
     include_prefix = "bus/pci",
     visibility = [
+        "//sys/bus/pci/x86_64:__pkg__",
         "//sys/dev/acpica:__pkg__",
     ],
 )
@@ -59,23 +52,25 @@ dfly_kernel_headers(
     include_prefix = "bus/pci",
     deps = [
         ":ifs",
-        ":pci_x86_64_priv",
+        "//sys/bus/pci/x86_64:priv",
     ],
     visibility = ["//visibility:public"],
 )
 
-#dfly_kernel_lib(
-#    name = "isa_obj",
-#    srcs = [
-#    ],
-#    deps  = [
-#        "//sys/sys:options",
-#        "//sys/sys",
-#        "//sys/kern:core_ifs",
-#        "//include:std",
-#        "//sys/sys:platform",
-#        ":isa_priv",
-#        ":isa",
-#    ],
-#    visibility = ["//visibility:public"],
-#)
+dfly_kernel_lib(
+    name = "pci_obj",
+    srcs = glob(["*.c"]) + [":pci_if_src", ":pcib_if_src"],
+    deps  = [
+        "//sys/sys:options",
+        "//sys/sys",
+        "//sys/kern:core_ifs",
+        "//sys/vm",
+        "//sys/bus/pci/x86_64",
+        "//sys/bus/isa",
+        "//sys/bus/u4b/controller:usb_regs",
+        "//sys/platform/pc64/apic",
+        ":pci_priv",
+        ":pci",
+    ],
+    visibility = ["//visibility:public"],
+)

@@ -34,6 +34,7 @@ dfly_toolchain(
     ],
     compiler_path = "/usr/bin/gcc",
     linker_path = "/usr/bin/ld",
+    assembler_path = "/usr/bin/as",
     visibility = ["//visibility:public"],
 )
 
@@ -54,9 +55,17 @@ dfly_kernel_binary(
     name = "kernel_generic",
     deps = [
         "//sys/kern",
+        "//sys/vm",
         "//sys/libkern",
         "//sys/libprop",
         "//sys/dev/acpica:acpica_obj",
+        "//sys/bus/pci:pci_obj",
+        "//sys/bus/isa:isa_obj",
+        "//sys/contrib/dev/acpica/source:acpica",
+        "//sys/platform/pc64/acpica:acpica_obj",
+        "//sys/platform/pc64/isa:isa_obj",
+        "//sys/platform/pc64/icu:icu_obj",
+        "//sys/platform/pc64/apic:apic_obj",
     ],
-    ldscript = "//sys/platform/pc64/conf:ldscript.x86_64"
+    ldscript = "//sys/platform/pc64/conf:ldscript.x86_64",
 )

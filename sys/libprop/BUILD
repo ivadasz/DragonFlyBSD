@@ -18,10 +18,8 @@ dfly_kernel_lib(
     deps = [
         "//sys/sys:options",
         "//sys/sys",
-        "//sys/sys:platform",
         "//sys/sys:machine_cpu",
         "//sys/vm",
-        "//include:std",
     ],
     hdrs = [":libprop_headers"],
     include_prefix = "libprop",

@@ -15,16 +15,14 @@ dfly_kernel_headers(
 dfly_kobj_code(name = "isa_if_src", kobj = "isa_if.m")
 
 filegroup(
-    name = "isa_priv_headers",
-    srcs = [
-    ],
-)
-
-filegroup(
     name = "isa_headers",
     srcs = [
         "isavar.h",
         "pnpvar.h",
+        "isa_common.h",
+        "isa.h",
+        "rtc.h",
+        "isareg.h",
     ],
 )
 
@@ -42,22 +40,29 @@ dfly_kernel_headers(
     include_prefix = "bus/isa",
     deps = [
         ":ifs",
+        "//sys/bus/isa/x86_64:priv",
     ],
     visibility = ["//visibility:public"],
 )
 
 dfly_kernel_lib(
     name = "isa_obj",
-    srcs = [
+    srcs = glob(["*.c"], exclude = ["vga_isa.c"]) + [
+        ":isa_if_src",
+        ":isa_headers",
+        "pnpreg.h",
     ],
     deps  = [
         "//sys/sys:options",
         "//sys/sys",
         "//sys/kern:core_ifs",
-        "//include:std",
-        "//sys/sys:platform",
+        "//sys/vm",
+        "//sys/platform/pc64/include:pc",
+        "//sys/bus/isa/x86_64",
+        "//sys/bus/isa/x86_64:priv",
         ":isa_priv",
         ":isa",
+        ":ifs",
     ],
     visibility = ["//visibility:public"],
 )

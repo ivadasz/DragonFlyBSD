@@ -4,6 +4,10 @@ load("//sys:build_defs.bzl", "dfly_kernel_object")
 load("//sys:build_defs.bzl", "dfly_kobj_code")
 load("//sys:build_defs.bzl", "dfly_kobj_hdr")
 
+exports_files([
+    "genassym.sh",
+])
+
 dfly_kobj_hdr(name = "device_if_hdr", kobj = "device_if.m")
 dfly_kobj_hdr(name = "bus_if_hdr", kobj = "bus_if.m")
 dfly_kobj_hdr(name = "cpu_if_hdr", kobj = "cpu_if.m")
@@ -38,8 +42,6 @@ dfly_kernel_lib(
     deps = [
         "//sys/sys:options",
         "//sys/sys",
-        "//include:std",
-        "//sys/sys:platform",
         "//sys/ddb",
         "//sys/vm",
         "//sys/crypto/sha2",

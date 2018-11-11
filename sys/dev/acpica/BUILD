@@ -30,6 +30,17 @@ filegroup(
 )
 
 dfly_kernel_headers(
+    name = "acpi_machine",
+    hdrs = [
+        "acpi_cpu.h",
+        "acpi_cpu_cstate.h",
+        "acpi_cpu_pstate.h",
+        "acpi_sci_var.h",
+    ],
+    visibility = ["//sys/platform/pc64/acpica:__pkg__"],
+)
+
+dfly_kernel_headers(
     name = "acpi_priv",
     hdrs = [":acpi_priv_headers"],
     visibility = ["//visibility:public"],
@@ -86,14 +97,12 @@ dfly_kernel_lib(
         "//sys/kern:core_ifs",
         "//sys/vm",
         "//sys/libprop",
-        "//include:std",
-        "//sys/sys:platform",
         "//sys/contrib/dev/acpica/source/include:acpica",
         "//sys/contrib/dev/acpica/source/include:acpica_priv",
         "//sys/bus/isa",
         "//sys/bus/pci",
         "//sys/bus/pci:pci_priv",
-        "//sys/platform/pc64/acpica",
+        "//sys/platform/pc64/acpica:acpica_sdt",
         ":acpi_priv",
     ],
     hdrs = [":acpi_headers"],

@@ -14,7 +14,11 @@ dfly_kernel_headers(
     include_prefix = "sys",
     # TODO(ivadasz): //sys/conf.h includes libprop/proplib.h.
     # This will require special treatment of //sys/conf.h, or using a struct *.
-    #deps = ["//sys/libprop"],
+    deps = [
+        #"//sys/libprop",
+        "//include:std",
+        ":platform",
+    ],
     visibility = ["//visibility:public"],
 )
 
@@ -44,16 +48,9 @@ dfly_kernel_headers(
     ],
     include_prefix = "machine",
     deps = [
-        ":apic",
+        "//sys/platform/pc64/apic:apicreg",
         ":machine_cpu_core",
     ],
-    visibility = ["//visibility:public"],
-)
-
-dfly_kernel_headers(
-    name = "apic",
-    hdrs = ["//sys/platform/pc64:apic_headers"],
-    include_prefix = "machine_base/apic",
     visibility = ["//visibility:public"],
 )
 
@@ -61,12 +58,14 @@ dfly_kernel_headers(
 ### Deal with the opt_* header files, currently just generate stub headers.
 opt_dummy_headers = [
     "acpi",
+    "auto_eoi",
     "bus",
     "comconsole",
     "ddb",
     "ddb_trace",
     "debug_cluster",
     "debug_lockf",
+    "fb",
     "inet",
     "inet6",
     "init_path",
@@ -74,6 +73,7 @@ opt_dummy_headers = [
     "ktrace",
     "lint",
     "mbuf_stress_test",
+    "nfs",
     "ntp",
     "quota",
     "panic",
@@ -82,8 +82,11 @@ opt_dummy_headers = [
     "posix",
     "rootdevname",
     "suiddir",
+    "swap",
+    "syscons",
     "sysvipc",
     "uconsole",
+    "vga",
     "vm",
 ]
 

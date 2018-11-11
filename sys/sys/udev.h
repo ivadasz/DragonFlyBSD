@@ -78,7 +78,7 @@ int	udev_event_detach(cdev_t dev, char *name, int alias);
 
 struct udev_event {
 	int	ev_type;
-	prop_dictionary_t	ev_dict;
+	struct _prop_dictionary	*ev_dict;
 };
 
 #endif /* _SYS_UDEV_H_ */

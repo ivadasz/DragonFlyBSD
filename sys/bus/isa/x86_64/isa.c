@@ -62,8 +62,8 @@
 #include <sys/rman.h>
 #include <sys/machintr.h>
 
-#include "../isavar.h"
-#include "../isa_common.h"
+#include <bus/isa/isavar.h>
+#include <bus/isa/isa_common.h>
 
 /*
  * This implementation simply passes the request up to the parent

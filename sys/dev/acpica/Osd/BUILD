@@ -6,7 +6,6 @@ dfly_kernel_lib(
     deps  = [
         "//sys/sys:options",
         "//sys/sys",
-        "//sys/sys:platform",
         "//sys/kern:core_ifs",
         "//sys/contrib/dev/acpica/source/include:acpica",
         "//sys/contrib/dev/acpica/source/include:acpica_priv",
@@ -16,7 +15,6 @@ dfly_kernel_lib(
         "//sys/ddb",
         "//sys/ddb:ddb_misc",
         "//sys/vm",
-        "//include:std",
     ],
     visibility = ["//visibility:public"],
 )

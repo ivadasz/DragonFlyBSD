@@ -35,7 +35,8 @@
 
 #include <sys/mount.h>
 #include <sys/vnode.h>
-#include <libprop/proplib.h>
+
+struct plistref;
 
 extern void vq_init(struct mount*);
 extern void vq_done(struct mount*);

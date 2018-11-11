@@ -26,6 +26,7 @@ filegroup(
 filegroup(
     name = "machine_headers",
     srcs = [
+        "asmacros.h",
         "atomic.h",
         "bus_dma.h",
         "cpufunc.h",

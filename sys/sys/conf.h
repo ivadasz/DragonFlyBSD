@@ -56,7 +56,6 @@
 #ifndef _SYS_EVENT_H_
 #include <sys/event.h>
 #endif
-#include <libprop/proplib.h>
 
 #define SPECNAMELEN	63
 
@@ -101,7 +100,7 @@ struct cdev {
 	time_t		si_lastread;	/* time_uptime */
 	time_t		si_lastwrite;	/* time_uptime */
 	struct vm_object *si_object;	/* vm_pager support */
-	prop_dictionary_t si_dict;
+	struct _prop_dictionary *si_dict;
 	struct kqinfo	si_kqinfo;	/* degenerate delegated knotes */
 };
 
