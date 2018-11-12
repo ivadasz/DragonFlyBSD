@@ -92,7 +92,9 @@
 
 #include <sys/efi.h>
 
+#ifdef DDB
 #include <ddb/ddb.h>
+#endif
 
 #include <machine/cpu.h>
 #include <machine/clock.h>

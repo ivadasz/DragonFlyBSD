@@ -84,7 +84,9 @@
 #include <machine_base/isa/isa_intr.h>
 #include <machine_base/apic/lapic.h>
 
+#ifdef DDB
 #include <ddb/ddb.h>
+#endif
 
 #include <sys/thread2.h>
 #include <sys/spinlock2.h>

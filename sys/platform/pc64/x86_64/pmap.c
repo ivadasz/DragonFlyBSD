@@ -94,7 +94,9 @@
 #include <machine/pmap_inval.h>
 #include <machine/inttypes.h>
 
+#ifdef DDB
 #include <ddb/ddb.h>
+#endif
 
 #define PMAP_KEEP_PDIRS
 #ifndef PMAP_SHPGPERPROC
