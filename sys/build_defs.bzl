@@ -89,6 +89,9 @@ def _dfly_kernel_object_impl(ctx):
     for s in ctx.attr.srcs:
         for i in s.files:
             if i.extension == "c":
+                # TODO(ivadasz): Fix these cases where -fno-common breaks stuff.
+                if i.basename == "genassym.c":
+                  comp_flags.remove("-fno-common")
                 objname = i.basename.rstrip("c") + "o"
                 obj = ctx.actions.declare_file(objname)
                 set = depset(direct = [obj], transitive = [set])

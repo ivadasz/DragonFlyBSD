@@ -29,6 +29,7 @@ dfly_toolchain(
         "-c",
 
         "-fno-builtin-log",
+        "-fno-common",
         "-fno-stack-protector",
         "-fno-strict-aliasing",
         "-fno-strict-overflow",
@@ -77,12 +78,10 @@ dfly_toolchain(
     ],
     asm_flags = [
         "-DLOCORE",
-        #"-fno-common",
         "-x",
         "assembler-with-cpp",
     ],
     conly_flags = [
-        #"-fno-common",
         "-x",
         "c",
     ],
