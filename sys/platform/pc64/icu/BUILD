@@ -3,12 +3,13 @@ load("//sys:build_defs.bzl", "dfly_kernel_lib")
 
 dfly_kernel_headers(
     name = "icu",
-    hdrs = ["icu.h", "icu_var.h", "icu_ipl.h", "elcr_var.h"],
+    hdrs = ["icu.h", "icu_abi.h", "icu_var.h", "icu_ipl.h", "elcr_var.h"],
     include_prefix = "machine_base/icu",
     visibility = [
         "//sys/platform/pc64/acpica:__pkg__",
         "//sys/platform/pc64/isa:__pkg__",
         "//sys/platform/pc64/apic:__pkg__",
+        "//sys/platform/pc64/x86_64:__pkg__",
     ]
 )
 

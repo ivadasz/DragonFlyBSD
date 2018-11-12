@@ -17,6 +17,7 @@ dfly_kernel_headers(
 dfly_kernel_lib(
     name = "libkern",
     srcs = glob(["*.c"], exclude = [
+        "bcmp.c",
         "ffsl.c", "flsl.c", "flsll.c",
         "linux_idr.c",
         "mcount.c",

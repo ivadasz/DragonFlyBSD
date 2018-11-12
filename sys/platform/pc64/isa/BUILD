@@ -9,6 +9,7 @@ dfly_kernel_headers(
         "//sys/platform/pc64/acpica:__pkg__",
         "//sys/platform/pc64/icu:__pkg__",
         "//sys/platform/pc64/apic:__pkg__",
+        "//sys/platform/pc64/x86_64:__pkg__",
     ]
 )
 

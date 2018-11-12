@@ -1,5 +1,6 @@
 load("//sys:build_defs.bzl", "dfly_kernel_headers")
 load("//sys:build_defs.bzl", "dfly_opt_header")
+load("//sys:build_defs.bzl", "dfly_use_header")
 load("//sys/sys:opt_headers.bzl", "dfly_opt_dummies")
 load("//sys/sys:opt_headers.bzl", "dfly_use_dummies")
 
@@ -57,7 +58,10 @@ dfly_kernel_headers(
 opt_dummy_headers = [
     "acpi",
     "auto_eoi",
+    "bootp",
     "bus",
+    "cam",
+    "cd9660",
     "comconsole",
     "ddb",
     "ddb_trace",
@@ -71,7 +75,9 @@ opt_dummy_headers = [
     "ktrace",
     "lint",
     "mbuf_stress_test",
+    "msgbuf",
     "nfs",
+    "nfsroot",
     "ntp",
     "quota",
     "panic",
@@ -97,6 +103,18 @@ dfly_use_dummies("use_dummy_targets", use_dummy_headers)
 
 dfly_opt_header("maxusers_options", "maxusers", ["'MAXUSERS 64'"])
 dfly_opt_header("global_options", "global", ["'INVARIANTS 1'"])
+dfly_opt_header("cpu_options", "cpu", ["'HAMMER_CPU 1'"])
+
+dfly_use_header("use_isa", "isa", ["'NISA 1'"])
+dfly_use_header("use_pci", "pci", ["'NPCI 1'"])
+
+filegroup(
+    name = "use_options",
+    srcs = [
+        ":use_isa",
+        ":use_pci",
+    ],
+)
 
 dfly_kernel_headers(
     name = "options",
@@ -105,6 +123,8 @@ dfly_kernel_headers(
         ":use_dummy_targets",
         ":maxusers_options",
         ":global_options",
+        ":cpu_options",
+        ":use_options",
     ],
     visibility = ["//visibility:public"],
 )

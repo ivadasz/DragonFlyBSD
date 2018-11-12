@@ -1,6 +1,6 @@
 CompilerInfo = provider(
     doc = "Information about how to invoke gcc for the DragonFly kernel.",
-    fields = ["compiler_path", "linker_path", "assembler_path", "arch_flags"],
+    fields = ["compiler_path", "linker_path", "assembler_path", "arch_flags", "asm_flags", "conly_flags"],
 )
 
 def _dfly_toolchain_impl(ctx):
@@ -10,6 +10,8 @@ def _dfly_toolchain_impl(ctx):
             linker_path = ctx.attr.linker_path,
             assembler_path = ctx.attr.assembler_path,
             arch_flags = ctx.attr.arch_flags,
+            asm_flags = ctx.attr.asm_flags,
+            conly_flags = ctx.attr.conly_flags,
         ),
     )
     return [toolchain_info]
@@ -21,6 +23,8 @@ dfly_toolchain = rule(
         "linker_path": attr.string(),
         "assembler_path": attr.string(),
         "arch_flags": attr.string_list(),
+        "asm_flags": attr.string_list(),
+        "conly_flags": attr.string_list(),
     },
 )
 
@@ -65,6 +69,8 @@ def _dfly_kernel_object_impl(ctx):
         cflags += ["-I%s" % i]
     for i in trans_hdr_incs:
         cflags += ["-I%s" % i]
+    comp_flags = info.conly_flags + cflags
+    asm_flags = info.asm_flags + cflags
     set = depset()
     depfiles = depset()
     for s in ctx.attr.srcs:
@@ -88,15 +94,15 @@ def _dfly_kernel_object_impl(ctx):
                 set = depset(direct = [obj], transitive = [set])
                 ctx.actions.run(outputs = [obj], inputs = depset(direct = [i], transitive = [depfiles]),
                                 executable = info.compiler_path,
-                                arguments = cflags + ["-x", "c", "-o", obj.path, i.path], mnemonic = "CCompile",
+                                arguments = comp_flags + ["-o", obj.path, i.path], mnemonic = "CCompile",
                                 progress_message = "Compiling %s to %s" % (i.basename, obj.basename))
             elif i.extension in ["s", "S"]:
-                objname = i.basename.rstrip("s") + "o"
+                objname = i.basename.rstrip(i.extension) + "o"
                 obj = ctx.actions.declare_file(objname)
                 set = depset(direct = [obj], transitive = [set])
                 ctx.actions.run(outputs = [obj], inputs = depset(direct = [i], transitive = [depfiles]),
                                 executable = info.compiler_path,
-                                arguments = cflags + ["-DLOCORE", "-x", "assembler-with-cpp", "-o", obj.path, i.path], mnemonic = "Assembler",
+                                arguments = asm_flags + ["-o", obj.path, i.path], mnemonic = "Assembler",
                                 progress_message = "Compiling %s to %s" % (i.basename, obj.basename))
     return [
         IncludeDirs(transitive_includes = trans_hdr_incs),
@@ -169,23 +175,20 @@ def dfly_kobj_code(name, kobj):
                        cmd = "/usr/bin/awk -f $(location //sys/tools:makeobjops.awk) $< -c && cp %s $@" % code,
                        tools = ["//sys/tools:makeobjops.awk"])
 
-def dfly_opt_header(name, opt, vals=[]):
+def dfly_define_header(name, header, vals):
+  cmd = "touch \"$@\""
   if len(vals) > 0:
-    native.genrule(name = name,
-                   srcs = [],
-                   outs = ["opt_" + opt + ".h"],
-                   cmd = "for i in %s; do echo \#define $$i > \"$@\"; done" % ' '.join(vals))
-  else:
-    native.genrule(name = name,
-                   srcs = [],
-                   outs = ["opt_" + opt + ".h"],
-                   cmd = "touch \"$@\"")
-
-def dfly_use_header(name, use):
+    cmd = "for i in %s; do echo \#define $$i > \"$@\"; done" % ' '.join(vals)
   native.genrule(name = name,
                  srcs = [],
-                 outs = ["use_" + use + ".h"],
-                 cmd = "touch \"$@\"")
+                 outs = [header],
+                 cmd = cmd)
+
+def dfly_opt_header(name, opt, vals=[]):
+  dfly_define_header(name, "opt_" + opt + ".h", vals)
+
+def dfly_use_header(name, use, vals=[]):
+  dfly_define_header(name, "use_" + use + ".h", vals)
 
 def map_depfile(itm):
   if itm.extension == "o":

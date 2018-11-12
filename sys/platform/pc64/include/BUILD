@@ -19,5 +19,6 @@ dfly_kernel_headers(
         "//sys/bus/pci/x86_64:__pkg__",
         "//sys/bus/isa:__pkg__",
         "//sys/platform/pc64/acpica:__pkg__",
+        "//sys/platform/pc64/x86_64:__pkg__",
     ],
 )
