@@ -121,6 +121,7 @@ dfly_kernel_binary(
         "//sys/platform/pc64/icu:icu_obj",
         "//sys/platform/pc64/apic:apic_obj",
         "//sys/platform/pc64/x86_64",
+        "//sys/platform/pc64/vmm",
         "//sys/cpu/x86_64/misc",
     ],
     ldscript = "//sys/platform/pc64/conf:ldscript.x86_64",
