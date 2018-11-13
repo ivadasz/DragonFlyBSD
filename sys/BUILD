@@ -110,6 +110,7 @@ dfly_kernel_binary(
         "//sys/kern",
         "//sys/vm",
         "//sys/libkern",
+        "//sys/net:netisr_obj",
         "//sys/vfs/procfs:core",
         "//sys/libprop:libprop_obj",
         "//sys/dev/acpica:acpica_obj",

@@ -36,7 +36,14 @@ filegroup(
 dfly_kernel_lib(
     name = "kern",
     # TODO(ivadasz): kern_sched.c depends on _kposix_priority_scheduling feature
-    srcs = glob(["*.c"], exclude = ["subr_input.c", "kern_sched.c"]) + [
+    srcs = glob(["*.c"], exclude = [
+        "subr_input.c",
+        "kern_sched.c",
+        "uipc_accf.c",
+        "kern_ktr.c",
+        "imgact_gzip.c",
+        "inflate.c",
+    ]) + [
         ":core_ifs_srcs",
     ],
     deps = [
