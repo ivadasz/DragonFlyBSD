@@ -46,7 +46,9 @@
 #include <sys/wait.h>
 #include <sys/vkernel.h>
 #include <sys/mplock2.h>
+#ifdef VMM_DEBUG
 #include <ddb/ddb.h>
+#endif
 
 #include <cpu/cpu.h>
 
