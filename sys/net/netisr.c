@@ -43,11 +43,8 @@
 #include <sys/msgport.h>
 #include <sys/proc.h>
 #include <sys/interrupt.h>
-#include <sys/socket.h>
 #include <sys/sysctl.h>
 #include <sys/socketvar.h>
-#include <net/if.h>
-#include <net/if_var.h>
 #include <net/netisr2.h>
 #include <machine/cpufunc.h>
 #include <machine/smp.h>
