@@ -1,13 +1,10 @@
-load("//sys:build_defs.bzl", "dfly_kernel_headers")
+load("//sys:build_defs.bzl", "dfly_kernel_lib")
 
-filegroup(
-    name = "chacha_headers",
-    srcs = glob(["*.h"]),
-)
-
-dfly_kernel_headers(
+dfly_kernel_lib(
     name = "chacha",
-    hdrs = [":chacha_headers"],
+    srcs = ["chacha.c", "chacha.h"],
+    deps = ["//sys/sys"],
+    hdrs = ["chacha.h"],
     include_prefix = "crypto/chacha",
     visibility = ["//visibility:public"],
 )

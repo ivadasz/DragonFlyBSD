@@ -1,13 +1,10 @@
-load("//sys:build_defs.bzl", "dfly_kernel_headers")
+load("//sys:build_defs.bzl", "dfly_kernel_lib")
 
-filegroup(
-    name = "sha2_headers",
-    srcs = glob(["*.h"]),
-)
-
-dfly_kernel_headers(
+dfly_kernel_lib(
     name = "sha2",
-    hdrs = [":sha2_headers"],
+    srcs = ["sha2.c"],
+    deps = ["//sys/sys"],
+    hdrs = ["sha2.h"],
     include_prefix = "crypto/sha2",
     visibility = ["//visibility:public"],
 )

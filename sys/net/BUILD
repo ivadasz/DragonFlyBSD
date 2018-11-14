@@ -26,8 +26,13 @@ filegroup(
     srcs = ["radix.h"],
 )
 
-dfly_kernel_headers(
+dfly_kernel_lib(
     name = "radix",
+    srcs = ["radix.c"],
+    deps = [
+        "//sys/sys",
+        ":netisr",
+    ],
     hdrs = [":radix_headers"],
     include_prefix = "net",
     visibility = ["//visibility:public"],
@@ -54,6 +59,31 @@ dfly_kernel_lib(
     deps = [
         "//sys/sys:options",
         "//sys/sys",
+        "//sys/vm",
+        ":netisr",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+dfly_kernel_lib(
+    name = "net_obj",
+    srcs = [
+        "if.c",
+        "if_clone.c",
+        "route.c",
+        "rtsock.c",
+        "raw_cb.c",
+        "raw_usrreq.c",
+    ],
+    deps = [
+        "//sys/sys:options",
+        "//sys/sys",
+        "//sys/kern:core_ifs",
+        "//sys/net",
+        "//sys/net/altq:net_altq",
+        "//sys/netinet",
+        "//sys/netinet6",
+        "//sys/net/ip_mroute",
         "//sys/vm",
         ":netisr",
     ],
