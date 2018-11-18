@@ -34,7 +34,7 @@
 #ifndef _DEV_SERIAL_SIO_SIOREG_H_
 #define _DEV_SERIAL_SIO_SIOREG_H_
 
-#include "../ic_layer/ns16550.h"
+#include <dev/serial/ic_layer/ns16550.h>
 
 /* Receiver clock frequency for "standard" pc serial ports. */
 #define	DEFAULT_RCLK	1843200
