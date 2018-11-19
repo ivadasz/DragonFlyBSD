@@ -1,4 +1,5 @@
 load("//sys:build_defs.bzl", "dfly_kernel_headers")
+load("//sys:build_defs.bzl", "dfly_kernel_lib")
 
 dfly_kernel_headers(
     name = "ddb",
@@ -11,8 +12,10 @@ dfly_kernel_headers(
     name = "ddb_misc",
     hdrs = ["db_sym.h", "db_variables.h", "db_access.h", "db_output.h"],
     include_prefix = "ddb",
-    # TODO(ivadasz): Limit visibility to the few places that need this.
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//sys/dev/acpica/Osd:__pkg__",
+        "//sys/platform/pc64/x86_64:__pkg__",
+    ],
 )
 
 filegroup(
@@ -25,4 +28,18 @@ dfly_kernel_headers(
     name = "ddb_all",
     hdrs = [":ddb_all_headers"],
     include_prefix = "ddb",
+    visibility = [
+        "//sys/cpu/x86_64/misc:__pkg__",
+    ],
+)
+
+dfly_kernel_lib(
+    name = "ddb_obj",
+    srcs = glob(["*.c"], exclude = ["db_kld.c"]),
+    deps = [
+        "//sys/sys",
+        "//sys/vm",
+        ":ddb_all",
+    ],
+    visibility = ["//visibility:public"],
 )
