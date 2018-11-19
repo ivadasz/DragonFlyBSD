@@ -63,11 +63,11 @@ opt_dummy_headers = [
     "cam",
     "cd9660",
     "comconsole",
-    "ddb",
     "ddb_trace",
     "debug_cluster",
     "debug_lockf",
     "fb",
+    "ffs",
     "ifpoll",
     "inet",
     "inet6",
@@ -87,11 +87,13 @@ opt_dummy_headers = [
     "pctrack",
     "posix",
     "rootdevname",
+    "sio",
     "suiddir",
     "swap",
     "syscons",
     "sysvipc",
     "uconsole",
+    "ufs",
     "vga",
     "vm",
 ]
@@ -100,12 +102,31 @@ dfly_opt_dummies("opt_dummy_targets", opt_dummy_headers)
 
 use_dummy_headers = [
     "gpio",
+    "puc",
 ]
 dfly_use_dummies("use_dummy_targets", use_dummy_headers)
 
+# TODO(ivadasz): Implement a macro for definining these.
 dfly_opt_header("maxusers_options", "maxusers", ["'MAXUSERS 64'"])
-dfly_opt_header("global_options", "global", ["'INVARIANTS 1'"])
+dfly_opt_header("global_options", "global", [
+    "'INVARIANTS 1'",
+])
 dfly_opt_header("cpu_options", "cpu", ["'HAMMER_CPU 1'"])
+dfly_opt_header("ddb_options", "ddb", [
+    #"'DDB 1'",
+])
+dfly_opt_header("md_options", "md", [
+    "'MD_ROOT 1'",
+])
+dfly_opt_header("kcollect_options", "kcollect", [
+    #"'ENABLE_KCOLLECT 1'",
+])
+dfly_opt_header("sensors_options", "sensors", [
+    #"'ENABLE_SENSORS 1'",
+])
+dfly_opt_header("constty_options", "constty", [
+    #"'ENABLE_CONSTTY 1'",
+])
 
 dfly_use_header("use_isa", "isa", ["'NISA 1'"])
 dfly_use_header("use_pci", "pci", ["'NPCI 1'"])
@@ -127,6 +148,11 @@ dfly_kernel_headers(
         ":global_options",
         ":cpu_options",
         ":use_options",
+        ":ddb_options",
+        ":md_options",
+        ":kcollect_options",
+        ":sensors_options",
+        ":constty_options",
     ],
     visibility = ["//visibility:public"],
 )
