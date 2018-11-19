@@ -34,6 +34,17 @@ filegroup(
 )
 
 dfly_kernel_lib(
+    name = "ioconf",
+    srcs = ["ioconf.c"],
+    deps = [
+        "//sys/sys:options",
+        "//sys/sys",
+        ":core_ifs",
+        "//sys/bus/isa",
+    ],
+)
+
+dfly_kernel_lib(
     name = "kern",
     # TODO(ivadasz): kern_sched.c depends on _kposix_priority_scheduling feature
     srcs = glob(["*.c"], exclude = [
@@ -43,6 +54,9 @@ dfly_kernel_lib(
         "kern_ktr.c",
         "imgact_gzip.c",
         "inflate.c",
+
+        # built separately
+        "ioconf.c",
     ]) + [
         ":core_ifs_srcs",
     ],
@@ -66,6 +80,9 @@ dfly_kernel_lib(
         "//sys/vfs/procfs",
         "//crypto/libressl/include/openssl:md5",
         "//sys/dev/acpica/acpi_pvpanic",
+
+        # ioconf
+        ":ioconf",
     ],
     visibility = ["//visibility:public"],
 )
