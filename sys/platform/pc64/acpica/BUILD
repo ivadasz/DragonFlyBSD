@@ -17,7 +17,10 @@ dfly_kernel_headers(
 
 dfly_kernel_lib(
     name = "acpica_obj",
-    srcs = glob(["*.c"]) + ["acpi_sdt_var.h"],
+    srcs = glob(["*.c"], exclude = [
+        "acpi_cstate_machdep.c",
+        "acpi_pstate_machdep.c",
+    ]) + ["acpi_sdt_var.h"],
     deps = [
         "//sys/sys:options",
         "//sys/sys",
