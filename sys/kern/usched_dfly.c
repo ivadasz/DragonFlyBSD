@@ -34,6 +34,7 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "opt_topology.h"
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -45,7 +46,9 @@
 #include <sys/sysctl.h>
 #include <sys/resourcevar.h>
 #include <sys/spinlock.h>
+#ifdef ENABLE_TOPOLOGY
 #include <sys/cpu_topology.h>
+#endif
 #include <sys/thread2.h>
 #include <sys/spinlock2.h>
 
@@ -138,7 +141,9 @@ struct usched_dfly_pcpu {
 	int		runqcount;
 	int		cpuid;
 	cpumask_t	cpumask;
+#ifdef ENABLE_TOPOLOGY
 	cpu_node_t	*cpunode;
+#endif
 } __cachealign;
 
 /*
@@ -1610,12 +1615,15 @@ static
 dfly_pcpu_t
 dfly_choose_best_queue(struct lwp *lp)
 {
+#ifdef ENABLE_TOPOLOGY
 	cpumask_t wakemask;
 	cpumask_t mask;
 	cpu_node_t *cpup;
 	cpu_node_t *cpun;
 	cpu_node_t *cpub;
+#endif
 	dfly_pcpu_t dd = &dfly_pcpu[lp->lwp_qcpu];
+#ifdef ENABLE_TOPOLOGY
 	dfly_pcpu_t rdd;
 	int wakecpu;
 	int cpuid;
@@ -1628,8 +1636,10 @@ dfly_choose_best_queue(struct lwp *lp)
 	 * idle.
 	 */
 	if (dd->cpunode == NULL)
+#endif
 		return (dfly_choose_queue_simple(dd, lp));
 
+#ifdef ENABLE_TOPOLOGY
 	/*
 	 * Pairing mask
 	 */
@@ -1782,6 +1792,7 @@ dfly_choose_best_queue(struct lwp *lp)
 			lp->lwp_qcpu, rdd->cpuid, lp->lwp_proc->p_comm);
 	}
 	return (rdd);
+#endif
 }
 
 /*
@@ -1802,6 +1813,7 @@ static
 dfly_pcpu_t
 dfly_choose_worst_queue(dfly_pcpu_t dd, int forceit)
 {
+#ifdef ENABLE_TOPOLOGY
 	cpumask_t mask;
 	cpu_node_t *cpup;
 	cpu_node_t *cpun;
@@ -1821,7 +1833,9 @@ dfly_choose_worst_queue(dfly_pcpu_t dd, int forceit)
 	 * idle.
 	 */
 	if (dd->cpunode == NULL) {
+#endif
 		return (NULL);
+#ifdef ENABLE_TOPOLOGY
 	}
 
 	/*
@@ -1951,6 +1965,7 @@ dfly_choose_worst_queue(dfly_pcpu_t dd, int forceit)
 		return(NULL);
 #endif
 	return (rdd);
+#endif
 }
 
 static
@@ -2410,7 +2425,9 @@ usched_dfly_cpu_init(void)
 				SYSCTL_STATIC_CHILDREN(_kern), OID_AUTO,
 				"usched_dfly", CTLFLAG_RD, 0, "");
 
+#ifdef ENABLE_TOPOLOGY
 	usched_dfly_node_mem = get_highest_node_memory();
+#endif
 
 	lockmgr(&usched_dfly_config_lk, LK_EXCLUSIVE);
 
@@ -2423,7 +2440,9 @@ usched_dfly_cpu_init(void)
 		    continue;
 
 		spin_init(&dd->spin, "uschedcpuinit");
+#ifdef ENABLE_TOPOLOGY
 		dd->cpunode = get_cpu_node_by_cpuid(i);
+#endif
 		dd->cpuid = i;
 		dd->gd = globaldata_find(i);
 		CPUMASK_ASSBIT(dd->cpumask, i);
@@ -2436,12 +2455,15 @@ usched_dfly_cpu_init(void)
 		if (i == 0)
 			dd->flags &= ~DFLY_PCPU_CURMASK;
 
+#ifdef ENABLE_TOPOLOGY
 		if (dd->cpunode == NULL) {
+#endif
 			smt_not_supported = 1;
 			cache_coherent_not_supported = 1;
 			if (bootverbose)
 				kprintf ("    cpu%d - WARNING: No CPU NODE "
 					 "found for cpu\n", i);
+#ifdef ENABLE_TOPOLOGY
 		} else {
 			switch (dd->cpunode->type) {
 			case THREAD_LEVEL:
@@ -2490,6 +2512,7 @@ usched_dfly_cpu_init(void)
 				}
 			}
 		}
+#endif
 
 		lwkt_create(dfly_helper_thread, NULL, &dd->helper_thread, NULL,
 			    0, i, "usched %d", i);

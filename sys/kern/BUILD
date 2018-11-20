@@ -61,6 +61,9 @@ dfly_kernel_lib(
         # Not used by core kernel parts
         "subr_cpuhelper.c",
 
+        # Optional cpu topology support
+        "subr_cpu_topology.c",
+
         # pty driver
         "tty_pty.c",
 

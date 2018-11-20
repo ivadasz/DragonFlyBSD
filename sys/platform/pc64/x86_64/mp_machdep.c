@@ -26,6 +26,7 @@
  */
 
 #include "opt_cpu.h"
+#include "opt_topology.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -35,7 +36,9 @@
 #include <sys/memrange.h>
 #include <sys/cons.h>	/* cngetc() */
 #include <sys/machintr.h>
+#ifdef ENABLE_TOPOLOGY
 #include <sys/cpu_topology.h>
+#endif
 
 #include <sys/mplock2.h>
 
@@ -1872,6 +1875,7 @@ detect_amd_topology(int count_htt_cores)
 	}
 }
 
+#ifdef ENABLE_TOPOLOGY
 static void
 amd_get_compute_unit_id(void *arg)
 {
@@ -1946,6 +1950,7 @@ OUT:
 			logical_CPU_bits, core_bits);
 	}
 }
+#endif
 
 /*
  * Interface functions to calculate chip_ID,

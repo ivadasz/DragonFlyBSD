@@ -29,6 +29,7 @@
  * SUCH DAMAGE.
  */
 
+#include "opt_topology.h"
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -40,7 +41,9 @@
 #include <sys/sysctl.h>
 #include <sys/resourcevar.h>
 #include <sys/spinlock.h>
+#ifdef ENABLE_TOPOLOGY
 #include <sys/cpu_topology.h>
+#endif
 #include <sys/thread2.h>
 #include <sys/spinlock2.h>
 
@@ -102,7 +105,9 @@ static void bsd4_uload_update(struct lwp *lp);
 static void bsd4_yield(struct lwp *lp);
 static void bsd4_need_user_resched_remote(void *dummy);
 static int bsd4_batchy_looser_pri_test(struct lwp* lp);
+#ifdef ENABLE_TOPOLOGY
 static struct lwp *bsd4_chooseproc_locked_cache_coherent(struct lwp *chklp);
+#endif
 static void bsd4_kick_helper(struct lwp *lp);
 static struct lwp *bsd4_chooseproc_locked(struct lwp *chklp);
 static void bsd4_remrunqueue_locked(struct lwp *lp);
@@ -134,7 +139,9 @@ struct usched_bsd4_pcpu {
 	short		upri;
 	struct lwp	*uschedcp;
 	struct lwp	*old_uschedcp;
+#ifdef ENABLE_TOPOLOGY
 	cpu_node_t	*cpunode;
+#endif
 };
 
 typedef struct usched_bsd4_pcpu	*bsd4_pcpu_t;
@@ -185,8 +192,10 @@ SYSCTL_INT(_debug, OID_AUTO, bsd4_pid_debug, CTLFLAG_RW,
 	   "Print KTR debug information for this pid");
 
 /* Tunning usched_bsd4 - configurable through kern.usched_bsd4.* */
+#ifdef ENABLE_TOPOLOGY
 static int usched_bsd4_smt = 0;
 static int usched_bsd4_cache_coherent = 0;
+#endif
 static int usched_bsd4_upri_affinity = 16; /* 32 queues - half-way */
 static int usched_bsd4_queue_checks = 5;
 static int usched_bsd4_stick_to_level = 0;
@@ -531,9 +540,11 @@ bsd4_select_curproc(globaldata_t gd)
 	crit_enter_gd(gd);
 
 	spin_lock(&bsd4_spin);
+#ifdef ENABLE_TOPOLOGY
 	if(usched_bsd4_cache_coherent)
 		nlp = bsd4_chooseproc_locked_cache_coherent(dd->uschedcp);
 	else
+#endif
 		nlp = bsd4_chooseproc_locked(dd->uschedcp);
 
 	if (nlp) {
@@ -684,6 +695,7 @@ bsd4_setrunqueue(struct lwp *lp)
 	 */
 	++bsd4_scancpu;
 
+#ifdef ENABLE_TOPOLOGY
 	if (usched_bsd4_smt) {
 
 		/*
@@ -768,6 +780,7 @@ bsd4_setrunqueue(struct lwp *lp)
 			goto found;
 		}
 	} else {
+#endif
 		/* Fallback to the original heuristic */
 		cpuid = (bsd4_scancpu & 0xFFFF) % ncpus;
 		mask = bsd4_rdyprocmask;
@@ -808,7 +821,9 @@ bsd4_setrunqueue(struct lwp *lp)
 			}
 			CPUMASK_NANDBIT(mask, cpuid);
 		}
+#ifdef ENABLE_TOPOLOGY
 	}
+#endif
 
 	/*
 	 * Then cpus which might have a currently running lp
@@ -1410,6 +1425,7 @@ again:
  * we can't wait more than one tick. If that tick expired, we pull in that
  * process, no matter what.
  */
+#ifdef ENABLE_TOPOLOGY
 static
 struct lwp *
 bsd4_chooseproc_locked_cache_coherent(struct lwp *chklp)
@@ -1577,6 +1593,7 @@ found:
 
 	return lp;
 }
+#endif
 
 /*
  * If we aren't willing to schedule a ready process on our cpu, give it's
@@ -1863,6 +1880,7 @@ sched_thread(void *dummy)
     }
 }
 
+#ifdef ENABLE_TOPOLOGY
 /* sysctl stick_to_level parameter */
 static int
 sysctl_usched_bsd4_stick_to_level(SYSCTL_HANDLER_ARGS)
@@ -1879,6 +1897,7 @@ sysctl_usched_bsd4_stick_to_level(SYSCTL_HANDLER_ARGS)
 	usched_bsd4_stick_to_level = new_val;
 	return (0);
 }
+#endif
 
 /*
  * Setup our scheduler helpers.  Note that curprocmask bit 0 has already
@@ -1888,8 +1907,10 @@ static void
 sched_thread_cpu_init(void)
 {
 	int i;
+#ifdef ENABLE_TOPOLOGY
 	int smt_not_supported = 0;
 	int cache_coherent_not_supported = 0;
+#endif
 
 	if (bootverbose)
 		kprintf("Start usched_bsd4 helpers on cpus:\n");
@@ -1909,6 +1930,7 @@ sched_thread_cpu_init(void)
 		if (CPUMASK_TESTMASK(mask, smp_active_mask) == 0)
 		    continue;
 
+#ifdef ENABLE_TOPOLOGY
 		dd->cpunode = get_cpu_node_by_cpuid(i);
 
 		if (dd->cpunode == NULL) {
@@ -1965,6 +1987,7 @@ sched_thread_cpu_init(void)
 				}
 			}
 		}
+#endif
 
 		lwkt_create(sched_thread, NULL, &dd->helper_thread, NULL,
 			    0, i, "usched %d", i);
@@ -2000,12 +2023,15 @@ sched_thread_cpu_init(void)
 		       &usched_bsd4_kicks, "Number of kickstarts");
 
 	/* Add enable/disable option for SMT scheduling if supported */
+#ifdef ENABLE_TOPOLOGY
 	if (smt_not_supported) {
 		usched_bsd4_smt = 0;
+#endif
 		SYSCTL_ADD_STRING(&usched_bsd4_sysctl_ctx,
 				  SYSCTL_CHILDREN(usched_bsd4_sysctl_tree),
 				  OID_AUTO, "smt", CTLFLAG_RD,
 				  "NOT SUPPORTED", 0, "SMT NOT SUPPORTED");
+#ifdef ENABLE_TOPOLOGY
 	} else {
 		usched_bsd4_smt = 1;
 		SYSCTL_ADD_INT(&usched_bsd4_sysctl_ctx,
@@ -2013,7 +2039,9 @@ sched_thread_cpu_init(void)
 			       OID_AUTO, "smt", CTLFLAG_RW,
 			       &usched_bsd4_smt, 0, "Enable SMT scheduling");
 	}
+#endif
 
+#ifdef ENABLE_TOPOLOGY
 	/*
 	 * Add enable/disable option for cache coherent scheduling
 	 * if supported
@@ -2054,6 +2082,7 @@ sched_thread_cpu_init(void)
 				"Stick a process to this level. See sysctl"
 				"paremter hw.cpu_topology.level_description");
 	}
+#endif
 }
 SYSINIT(uschedtd, SI_BOOT2_USCHED, SI_ORDER_SECOND,
 	sched_thread_cpu_init, NULL);

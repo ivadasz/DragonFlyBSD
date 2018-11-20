@@ -68,6 +68,7 @@
  * A VM page is the core building block for memory management.
  */
 
+#include "opt_topology.h"
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
@@ -77,7 +78,9 @@
 #include <sys/kernel.h>
 #include <sys/alist.h>
 #include <sys/sysctl.h>
+#ifdef ENABLE_TOPOLOGY
 #include <sys/cpu_topology.h>
+#endif
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
@@ -119,7 +122,9 @@ static void vm_page_free_wakeup(void);
 static vm_page_t vm_page_select_cache(u_short pg_color);
 static vm_page_t _vm_page_list_find2(int basequeue, int index);
 static void _vm_page_deactivate_locked(vm_page_t m, int athead);
+#ifdef ENABLE_TOPOLOGY
 static void vm_numa_add_topology_mem(cpu_node_t *cpup, int physid, long bytes);
+#endif
 
 /*
  * Array of tailq lists
@@ -462,6 +467,7 @@ vm_page_startup(void)
 void
 vm_numa_organize(vm_paddr_t ran_beg, vm_paddr_t bytes, int physid)
 {
+#ifdef ENABLE_TOPOLOGY
 	vm_paddr_t scan_beg;
 	vm_paddr_t scan_end;
 	vm_paddr_t ran_end;
@@ -478,7 +484,9 @@ vm_numa_organize(vm_paddr_t ran_beg, vm_paddr_t bytes, int physid)
 	 */
 	if (cpu_topology_phys_ids <= 1 ||
 	    cpu_topology_core_ids == 0) {
+#endif
 		return;
+#ifdef ENABLE_TOPOLOGY
 	}
 
 	/*
@@ -547,6 +555,7 @@ vm_numa_organize(vm_paddr_t ran_beg, vm_paddr_t bytes, int physid)
 	}
 
 	crit_exit();
+#endif
 }
 
 /*
@@ -593,6 +602,7 @@ vm_numa_organize_finalize(void)
 	 * core_ids, ht_ids, etc.  This can slightly reduce the actual
 	 * range of indices in vm_page_queues[] that are nominally used.
 	 */
+#ifdef ENABLE_TOPOLOGY
 	if (cpu_topology_ht_ids) {
 		scale_lim = PQ_L2_SIZE / cpu_topology_phys_ids;
 		scale_lim = scale_lim / cpu_topology_core_ids;
@@ -601,8 +611,11 @@ vm_numa_organize_finalize(void)
 		scale_lim = scale_lim * cpu_topology_core_ids;
 		scale_lim = scale_lim * cpu_topology_phys_ids;
 	} else {
+#endif
 		scale_lim = PQ_L2_SIZE;
+#ifdef ENABLE_TOPOLOGY
 	}
+#endif
 
 	/*
 	 * Calculate an average, set hysteresis for balancing from
@@ -643,6 +656,7 @@ vm_numa_organize_finalize(void)
 	crit_exit();
 }
 
+#ifdef ENABLE_TOPOLOGY
 static
 void
 vm_numa_add_topology_mem(cpu_node_t *cpup, int physid, long bytes)
@@ -678,6 +692,7 @@ vm_numa_add_topology_mem(cpu_node_t *cpup, int physid, long bytes)
 	for (i = 0; i < MAXCPU && cpup->child_node[i]; ++i)
 		vm_numa_add_topology_mem(cpup->child_node[i], physid, bytes);
 }
+#endif
 
 /*
  * We tended to reserve a ton of memory for contigmalloc().  Now that most
@@ -1072,6 +1087,7 @@ vm_get_pg_color(int cpuid, vm_object_t object, vm_pindex_t pindex)
 	 */
 	object_pg_color = object ? object->pg_color : 0;
 
+#ifdef ENABLE_TOPOLOGY
 	if (cpu_topology_ht_ids) {
 		int phys_id;
 		int core_id;
@@ -1127,6 +1143,7 @@ vm_get_pg_color(int cpuid, vm_object_t object, vm_pindex_t pindex)
 		}
 #endif
 	} else {
+#endif
 		/*
 		 * Unknown topology, distribute things evenly.
 		 *
@@ -1139,7 +1156,9 @@ vm_get_pg_color(int cpuid, vm_object_t object, vm_pindex_t pindex)
 
 		pg_color = cpuid * cpuscale;
 		pg_color += (pindex + object_pg_color) % cpuscale;
+#ifdef ENABLE_TOPOLOGY
 	}
+#endif
 	return (pg_color & PQ_L2_MASK);
 }
 
