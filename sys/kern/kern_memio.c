@@ -41,6 +41,8 @@
  * Memory special file
  */
 
+#include "opt_upmap.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
@@ -152,6 +154,7 @@ mmopen(struct dev_open_args *ap)
 		}
 		error = 0;
 		break;
+#ifdef ENABLE_UPMAP
 	case 6:
 		/*
 		 * /dev/kpmap can only be opened for reading.
@@ -160,6 +163,7 @@ mmopen(struct dev_open_args *ap)
 			return (EPERM);
 		error = 0;
 		break;
+#endif
 	case 14:
 		error = priv_check_cred(ap->a_cred, PRIV_ROOT, 0);
 		if (error != 0)
@@ -406,6 +410,7 @@ memmmap(struct dev_mmap_args *ap)
 		ap->a_result = atop(vtophys(ap->a_offset));
 		error = 0;
 		break;
+#ifdef ENABLE_UPMAP
 	case 5:
 	case 6:
 		/*
@@ -416,6 +421,7 @@ memmmap(struct dev_mmap_args *ap)
 		error = user_kernel_mapping(minor(dev), ap->a_offset, &result);
 		ap->a_result = atop(result);
 		break;
+#endif
 	default:
 		error = EINVAL;
 		break;
@@ -446,6 +452,7 @@ memuksmap(cdev_t dev, vm_page_t fake)
 		fake->phys_addr = vtophys(ptoa(fake->pindex));
 		error = 0;
 		break;
+#ifdef ENABLE_UPMAP
 	case 5:
 	case 6:
 		/*
@@ -457,6 +464,7 @@ memuksmap(cdev_t dev, vm_page_t fake)
 					    ptoa(fake->pindex), &result);
 		fake->phys_addr = result;
 		break;
+#endif
 	default:
 		error = EINVAL;
 		break;
@@ -699,6 +707,7 @@ iszerodev(cdev_t dev)
 	return (zerodev == dev);
 }
 
+#ifdef ENABLE_UPMAP
 /*
  * /dev/upmap and /dev/kpmap.
  */
@@ -768,6 +777,7 @@ user_kernel_mapping(int num, vm_ooffset_t offset, vm_ooffset_t *resultp)
 	}
 	return error;
 }
+#endif
 
 static void
 mem_drvinit(void *unused)
@@ -782,8 +792,10 @@ mem_drvinit(void *unused)
 	make_dev(&mem_ops, 2, UID_ROOT, GID_WHEEL, 0666, "null");
 	make_dev(&mem_ops, 3, UID_ROOT, GID_WHEEL, 0644, "random");
 	make_dev(&mem_ops, 4, UID_ROOT, GID_WHEEL, 0644, "urandom");
+#ifdef ENABLE_UPMAP
 	make_dev(&mem_ops, 5, UID_ROOT, GID_WHEEL, 0666, "upmap");
 	make_dev(&mem_ops, 6, UID_ROOT, GID_WHEEL, 0444, "kpmap");
+#endif
 	zerodev = make_dev(&mem_ops, 12, UID_ROOT, GID_WHEEL, 0666, "zero");
 	make_dev(&mem_ops_noq, 14, UID_ROOT, GID_WHEEL, 0600, "io");
 }

@@ -39,6 +39,7 @@
  */
 
 #include "opt_init_path.h"
+#include "opt_upmap.h"
 
 #include <sys/param.h>
 #include <sys/file.h>
@@ -88,7 +89,9 @@ struct proc *initproc;
 struct proc proc0;
 struct lwp lwp0;
 struct thread thread0;
+#ifdef ENABLE_UPMAP
 struct sys_kpmap *kpmap;
+#endif
 struct sysreaper initreaper;
 
 int cmask = CMASK;
@@ -720,6 +723,7 @@ kick_init(const void *udata __unused)
 }
 SYSINIT(kickinit, SI_SUB_KTHREAD_INIT, SI_ORDER_FIRST, kick_init, NULL);
 
+#ifdef ENABLE_UPMAP
 static void
 kpmap_init(const void *udata __unused)
 {
@@ -743,6 +747,7 @@ kpmap_init(const void *udata __unused)
 	kpmap->version = KPMAP_VERSION;
 }
 SYSINIT(kpmapinit, SI_BOOT1_POST, SI_ORDER_FIRST, kpmap_init, NULL);
+#endif
 
 /*
  * Machine independant globaldata initialization

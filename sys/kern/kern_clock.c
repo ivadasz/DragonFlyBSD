@@ -71,6 +71,7 @@
 #include "opt_kcollect.h"
 #include "opt_ntp.h"
 #include "opt_pctrack.h"
+#include "opt_upmap.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,7 +86,9 @@
 #include <sys/priv.h>
 #include <sys/timex.h>
 #include <sys/timepps.h>
+#ifdef ENABLE_UPMAP
 #include <sys/upmap.h>
+#endif
 #include <sys/lock.h>
 #include <sys/sysctl.h>
 #ifdef ENABLE_KCOLLECT
@@ -318,10 +321,12 @@ initclocks(void *dummy)
 	spin_init(&ntp_spin, "ntp");
 	initclocks_pcpu();
 	clocks_running = 1;
+#ifdef ENABLE_UPMAP
 	if (kpmap) {
 	    kpmap->tsc_freq = tsc_frequency;
 	    kpmap->tick_freq = hz;
 	}
+#endif
 }
 
 /*
@@ -735,6 +740,7 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 	    cpu_sfence();
 	    basetime_index = ni;
 
+#ifdef ENABLE_UPMAP
 	    /*
 	     * Update kpmap on each tick.  TS updates are integrated with
 	     * fences and upticks allowing userland to read the data
@@ -750,6 +756,7 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 		++kpmap->upticks;
 		cpu_sfence();
 	    }
+#endif
 	}
 
 	/*
@@ -782,8 +789,10 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 	 */
 	if ((p = curproc) != NULL && lwkt_trytoken(&p->p_token)) {
 		crit_enter_hard();
+#ifdef ENABLE_UPMAP
 		if (p->p_upmap)
 			++p->p_upmap->runticks;
+#endif
 
 		if (frame && CLKF_USERMODE(frame) &&
 		    timevalisset(&p->p_timer[ITIMER_VIRTUAL].it_value) &&

@@ -30,6 +30,8 @@
  * $FreeBSD: src/sys/kern/kern_time.c,v 1.68.2.1 2002/10/01 08:00:41 bde Exp $
  */
 
+#include "opt_upmap.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
@@ -45,7 +47,9 @@
 #include <sys/vnode.h>
 #include <sys/sysctl.h>
 #include <sys/kern_syscall.h>
+#ifdef ENABLE_UPMAP
 #include <sys/upmap.h>
+#endif
 #include <vm/vm.h>
 #include <vm/vm_extern.h>
 
@@ -1146,7 +1150,9 @@ sysctl_gettimeofday_quick(SYSCTL_HANDLER_ARGS)
 	if (error || req->newptr == NULL)
 		return error;
 	gettimeofday_quick = gtod;
+#ifdef ENABLE_UPMAP
 	if (kpmap)
 		kpmap->fast_gtod = gtod;
+#endif
 	return 0;
 }

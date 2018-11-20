@@ -59,7 +59,9 @@ dfly_kernel_headers(
 
 dfly_kernel_lib(
     name = "pci_obj",
-    srcs = glob(["*.c"]) + [":pci_if_src", ":pcib_if_src"],
+    srcs = glob(["*.c"], exclude = [
+        "vga_pci.c",
+    ]) + [":pci_if_src", ":pcib_if_src"],
     deps  = [
         "//sys/sys:options",
         "//sys/sys",

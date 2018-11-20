@@ -130,6 +130,9 @@ dfly_opt_header("constty_options", "constty", [
 dfly_opt_header("topology_options", "topology", [
     #"'ENABLE_TOPOLOGY 1'",
 ])
+dfly_opt_header("upmap_options", "upmap", [
+    #"'ENABLE_UPMAP 1'",
+])
 
 dfly_use_header("use_isa", "isa", ["'NISA 1'"])
 dfly_use_header("use_pci", "pci", ["'NPCI 1'"])
@@ -157,6 +160,7 @@ dfly_kernel_headers(
         ":sensors_options",
         ":constty_options",
         ":topology_options",
+        ":upmap_options",
     ],
     visibility = ["//visibility:public"],
 )

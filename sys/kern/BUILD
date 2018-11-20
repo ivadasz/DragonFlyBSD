@@ -74,6 +74,9 @@ dfly_kernel_lib(
         # pty driver
         "tty_pty.c",
 
+        # watchdog support
+        "kern_wdog.c",
+
         # kcollect
         "kern_collect.c",
 
