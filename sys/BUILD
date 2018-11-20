@@ -27,8 +27,12 @@ dfly_toolchain(
     name = "dragonfly_kernel",
     arch_flags = [
         "-c",
+        # TODO(ivadasz): Only set -g flag when compiling for debugging.
+        #"-g",
 
+        "-ffreestanding",
         "-fno-builtin-log",
+        "-fno-builtin-bcmp",
         "-fno-common",
         "-fno-stack-protector",
         "-fno-strict-aliasing",
@@ -109,7 +113,6 @@ dfly_kernel_binary(
     deps = [
         "//sys/kern",
         "//sys/vm",
-        "//sys/libkern",
         "//sys/net:radix",
         "//sys/net:netisr_obj",
         "//sys/net:net_obj",
@@ -120,7 +123,6 @@ dfly_kernel_binary(
         "//sys/bus/isa:isa_obj",
         "//sys/crypto/chacha",
         "//sys/crypto/sha2",
-        "//sys/vfs/deadfs",
         "//sys/contrib/dev/acpica/source:acpica",
         "//sys/platform/pc64/acpica:acpica_obj",
         "//sys/platform/pc64/isa:isa_obj",
@@ -129,6 +131,21 @@ dfly_kernel_binary(
         "//sys/platform/pc64/x86_64",
         "//sys/platform/pc64/vmm",
         "//sys/cpu/x86_64/misc",
+        "//sys/libkern",
+
+        # Filesystems
+        "//sys/vfs/deadfs",
+        "//sys/vfs/fifofs",
+        "//sys/vfs/devfs",
+        "//sys/vfs/tmpfs",
+        "//sys/vfs/ufs",
+
+        # Drivers
+        "//sys/dev/serial/sio",
+        "//sys/dev/disk/md",
+
+        # DDB support
+        #"//sys/ddb:ddb_obj",
     ],
     ldscript = "//sys/platform/pc64/conf:ldscript.x86_64",
 )
