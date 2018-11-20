@@ -28,6 +28,8 @@
  */
 
 #include "opt_acpi.h"
+#include "opt_sensors.h"
+
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/bus.h>
@@ -39,7 +41,9 @@
 #include <sys/sysctl.h>
 #include <sys/unistd.h>
 #include <sys/power.h>
+#ifdef ENABLE_SENSORS
 #include <sys/sensors.h>
+#endif
 
 #include "acpi.h"
 #include "accommon.h"
@@ -118,9 +122,11 @@ struct acpi_tz_softc {
     int				tz_cooling_active;
     int				tz_cooling_updated;
     int				tz_cooling_saved_freq;
+#ifdef ENABLE_SENSORS
     /* sensors(9) related */
     struct ksensordev		sensordev;
     struct ksensor		sensor;
+#endif
 };
 
 /* silence errors after X seconds, try again after Y seconds */
@@ -369,6 +375,7 @@ acpi_tz_attach(device_t dev)
      */
     sc->tz_flags |= TZ_FLAG_GETPROFILE;
 
+#ifdef ENABLE_SENSORS
     /* Attach sensors(9). */
     strlcpy(sc->sensordev.xname, device_get_nameunit(sc->tz_dev),
         sizeof(sc->sensordev.xname));
@@ -377,6 +384,7 @@ acpi_tz_attach(device_t dev)
     sensor_attach(&sc->sensordev, &sc->sensor);
 
     sensordev_install(&sc->sensordev);
+#endif
 
 out:
     if (error != 0) {
@@ -520,10 +528,12 @@ acpi_tz_get_temperature(struct acpi_tz_softc *sc)
     ACPI_DEBUG_PRINT((ACPI_DB_VALUES, "got %d.%dC\n", TZ_KELVTOC(temp)));
     sc->tz_temperature = temp;
     sc->tz_error_time = 0;
+#ifdef ENABLE_SENSORS
     /* Update sensor */
     if(sc->tz_temperature == -1)
         sc->sensor.flags &= ~SENSOR_FINVALID;
     sc->sensor.value = sc->tz_temperature * 100000 - 50000;
+#endif
     return (TRUE);
 }
 

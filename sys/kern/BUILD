@@ -16,7 +16,7 @@ dfly_kernel_headers(
     hdrs = [
         ":device_if_hdr",
         ":bus_if_hdr",
-        ":cpu_if_hdr",
+        #":cpu_if_hdr",
     ],
     visibility = ["//visibility:public"],
 )
@@ -29,7 +29,7 @@ filegroup(
     srcs = [
         ":device_if_src",
         ":bus_if_src",
-        ":cpu_if_src",
+        #":cpu_if_src",
     ],
 )
 
@@ -57,6 +57,9 @@ dfly_kernel_lib(
 
         # built separately
         "ioconf.c",
+
+        # sensors
+        "kern_sensors.c",
     ]) + [
         ":core_ifs_srcs",
     ],

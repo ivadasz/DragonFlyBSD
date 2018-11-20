@@ -28,6 +28,7 @@
  */
 
 #include "opt_acpi.h"
+#include "opt_sensors.h"
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -40,7 +41,9 @@
 #include "acpi.h"
 #include <dev/acpica/acpivar.h>
 #include "acpi_cpu.h"
+#ifdef ENABLE_SENSORS
 #include "cpu_if.h"
+#endif
 
 #define ACPI_NOTIFY_PX_STATES	0x80	/* _PPC/_PDL changed. */
 #define ACPI_NOTIFY_CX_STATES	0x81	/* _CST changed. */
@@ -54,8 +57,10 @@ static struct resource *
 			int, int *, u_long, u_long, u_long, u_int, int);
 static int	acpi_cpu_release_resource(device_t, device_t,
 			int, int, struct resource *);
+#ifdef ENABLE_SENSORS
 static struct ksensordev *
 		acpi_cpu_get_sensdev(device_t);
+#endif
 
 static int	acpi_cpu_get_id(uint32_t, uint32_t *, uint32_t *);
 static void	acpi_cpu_notify(ACPI_HANDLE, UINT32, void *);
@@ -85,8 +90,10 @@ static device_method_t acpi_cpu_methods[] = {
     DEVMETHOD(bus_setup_intr,		bus_generic_setup_intr),
     DEVMETHOD(bus_teardown_intr,	bus_generic_teardown_intr),
 
+#ifdef ENABLE_SENSORS
     /* CPU interface */
     DEVMETHOD(cpu_get_sensdev,		acpi_cpu_get_sensdev),
+#endif
 
     DEVMETHOD_END
 };
@@ -228,9 +235,11 @@ acpi_cpu_attach(device_t dev)
 	}
     }
 
+#ifdef ENABLE_SENSORS
     ksnprintf(sc->cpu_sensdev.xname, sizeof(sc->cpu_sensdev.xname), "%s",
 	device_get_nameunit(dev));
     sensordev_install(&sc->cpu_sensdev);
+#endif
 
     child = BUS_ADD_CHILD(dev, dev, 0, "cpu_cst", -1);
     if (child == NULL)
@@ -341,6 +350,7 @@ acpi_cpu_notify(ACPI_HANDLE handle __unused, UINT32 notify, void *xsc)
     }
 }
 
+#ifdef ENABLE_SENSORS
 static struct ksensordev *
 acpi_cpu_get_sensdev(device_t dev)
 {
@@ -348,3 +358,4 @@ acpi_cpu_get_sensdev(device_t dev)
 
     return &sc->cpu_sensdev;
 }
+#endif
