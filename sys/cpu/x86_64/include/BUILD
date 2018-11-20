@@ -46,6 +46,7 @@ filegroup(
         "psl.h",
         "reg.h",
         "segments.h",
+        "setjmp.h",
         "sigframe.h",
         "signal.h",
         "specialreg.h",
