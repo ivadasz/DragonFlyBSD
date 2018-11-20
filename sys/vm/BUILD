@@ -12,6 +12,7 @@ dfly_kernel_lib(
         "//sys/sys:options",
         "//sys/sys",
         "//sys/net:radix",
+        #"//sys/ddb",
     ],
     hdrs = [":vm_headers"],
     include_prefix = "vm",

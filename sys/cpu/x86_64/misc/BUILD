@@ -10,12 +10,18 @@ dfly_kernel_lib(
         "elf_machdep.c",
         "bzeront.s",
         "monitor.s",
+
+        # DDB support
+        #"db_disasm.c",
+        #"x86_64-gdbstub.c",
     ],
     deps = [
         "//sys/sys:options",
         "//sys/sys",
         "//sys/vm",
         "//sys/platform/pc64/x86_64:assym",
+        # For db_disasm.c
+        #"//sys/ddb:ddb_all",
     ],
     visibility = ["//visibility:public"],
 )

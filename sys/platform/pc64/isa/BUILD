@@ -23,6 +23,7 @@ dfly_kernel_lib(
     deps = [
         "//sys/sys:options",
         "//sys/sys",
+        #"//sys/ddb",
         "//sys/kern:core_ifs",
         "//sys/bus/isa",
         "//sys/platform/pc64/apic",

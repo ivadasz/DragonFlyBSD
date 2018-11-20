@@ -74,10 +74,15 @@ dfly_kernel_lib(
         "minidump_machdep.c",
         "procfs_machdep.c",
         "vm_machdep.c",
+
+        # DDB support
+        #"db_interface.c",
+        #"db_trace.c",
     ],
     deps = [
         "//sys/sys:options",
         "//sys/sys",
+        #"//sys/ddb",
         "//sys/vm",
         "//sys/kern:core_ifs",
         "//sys/net",
@@ -93,6 +98,9 @@ dfly_kernel_lib(
         # TODO(ivadasz): For procfs_machdep.c
         "//sys/vfs/procfs",
         ":assym",
+
+        # For db_trace.c
+        #"//sys/ddb:ddb_misc",
     ],
     visibility = ["//visibility:public"],
 )
