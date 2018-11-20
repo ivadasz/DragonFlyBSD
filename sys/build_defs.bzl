@@ -164,6 +164,14 @@ def dfly_kernel_lib(name, srcs=[], deps=[], hdrs=[], include_prefix="", visibili
     hdeps = [name + "_hdrs"]
   dfly_kernel_object(name = name, srcs = srcs, deps = deps, hdeps = hdeps, visibility = visibility)
 
+def dfly_kernel_driver(name, srcs=[], deps=[], hdrs=[], include_prefix="", visibility=None):
+  add_deps = [
+    "//sys/sys:options",
+    "//sys/sys",
+    "//sys/kern:core_ifs",
+  ]
+  dfly_kernel_lib(name, srcs, add_deps + deps, hdrs, include_prefix, visibility);
+
 def dfly_kobj_hdr(name, kobj):
     if kobj.endswith(".m"):
         hdr = kobj.rstrip("m") + "h"
@@ -207,8 +215,14 @@ def _dfly_kernel_binary_impl(ctx):
         fail("Exactly one ldscript needed")
     ldflags = [
         "-nostdlib",
+        # -ffreestanding causes linking to fail
+        #"-ffreestanding",
+        "--hash-style=sysv",
+        "-Bdynamic",
         "-T",
         ldscript[0].path,
+        "--export-dynamic",
+        "--dynamic-linker=/red/herring",
     ]
     bin = ctx.actions.declare_file("kernel")
     depfiles = depset(transitive = [ctx.attr.ldscript.files])
