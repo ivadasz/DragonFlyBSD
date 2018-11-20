@@ -58,6 +58,9 @@ dfly_kernel_lib(
         # built separately
         "ioconf.c",
 
+        # Not used by core kernel parts
+        "subr_cpuhelper.c",
+
         # sensors
         "kern_sensors.c",
     ]) + [
