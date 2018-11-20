@@ -638,7 +638,7 @@ fetch_pss:
 		 * Make sure that P-State tables are same
 		 * for all processors.
 		 */
-		if (memcmp(pstate, acpi_pstates,
+		if (bcmp(pstate, acpi_pstates,
 			   sizeof(*pstate) * npstate) != 0) {
 			device_printf(dev, "Inconsistent _PSS "
 				      "cross Processor objects\n");
@@ -751,9 +751,9 @@ proc_pdl:
 					break;
 			}
 			if (pst != NULL &&
-			    memcmp(&pst->pst_creg, &sc->pst_creg,
+			    bcmp(&pst->pst_creg, &sc->pst_creg,
 			        sizeof(sc->pst_creg)) == 0 &&
-			    memcmp(&pst->pst_sreg, &sc->pst_sreg,
+			    bcmp(&pst->pst_sreg, &sc->pst_sreg,
 			        sizeof(sc->pst_sreg)) == 0) {
 				/*
 				 * Use the same domain for CPUs in the
