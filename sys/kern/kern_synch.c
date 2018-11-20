@@ -35,6 +35,7 @@
  * $FreeBSD: src/sys/kern/kern_synch.c,v 1.87.2.6 2002/10/13 07:29:53 kbyanc Exp $
  */
 
+#include "opt_kcollect.h"
 #include "opt_ktrace.h"
 
 #include <sys/param.h>
@@ -48,7 +49,9 @@
 #include <sys/lock.h>
 #include <sys/uio.h>
 #include <sys/priv.h>
+#ifdef ENABLE_KCOLLECT
 #include <sys/kcollect.h>
+#endif
 #ifdef KTRACE
 #include <sys/ktrace.h>
 #endif
@@ -1441,6 +1444,7 @@ loadav_count_runnable(struct lwp *lp, void *data)
 	return(0);
 }
 
+#ifdef ENABLE_KCOLLECT
 /*
  * Regular data collection
  */
@@ -1451,6 +1455,7 @@ collect_load_callback(int n)
 
 	return ((averunnable.ldavg[0] * 100 + (fscale >> 1)) / fscale);
 }
+#endif
 
 static void
 sched_setup(void *dummy __unused)
@@ -1459,8 +1464,10 @@ sched_setup(void *dummy __unused)
 	globaldata_t gd;
 	int n;
 
+#ifdef ENABLE_KCOLLECT
 	kcollect_register(KCOLLECT_LOAD, "load", collect_load_callback,
 			  KCOLLECT_SCALE(KCOLLECT_LOAD_FORMAT, 0));
+#endif
 
 	/*
 	 * Kick off timeout driven events by calling first time.  We

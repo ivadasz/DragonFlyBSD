@@ -94,6 +94,7 @@
  * $FreeBSD: src/sys/vm/swap_pager.c,v 1.130.2.12 2002/08/31 21:15:55 dillon Exp $
  */
 
+#include "opt_kcollect.h"
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
@@ -106,7 +107,9 @@
 #include <sys/sysctl.h>
 #include <sys/blist.h>
 #include <sys/lock.h>
+#ifdef ENABLE_KCOLLECT
 #include <sys/kcollect.h>
+#endif
 
 #include <unistd.h>
 #include "opt_swap.h"
@@ -336,6 +339,7 @@ swp_sizecheck(void)
  * regularly added or removed and may cause some historical confusion
  * in that case, but SWAPPCT will always be historically accurate.
  */
+#ifdef ENABLE_KCOLLECT
 
 #define PTOB(value)	((uint64_t)(value) << PAGE_SHIFT)
 
@@ -356,6 +360,7 @@ collect_swap_callback(int n)
 			  KCOLLECT_SCALE(KCOLLECT_SWAPCAC_FORMAT, PTOB(total)));
 	return (((anon + cache) * 10000 + (total >> 1)) / total);
 }
+#endif
 
 /*
  * SWAP_PAGER_INIT() -	initialize the swap pager!
@@ -366,6 +371,7 @@ collect_swap_callback(int n)
  *
  * Called from the low level boot code only.
  */
+#ifdef ENABLE_KCOLLECT
 static void
 swap_pager_init(void *arg __unused)
 {
@@ -377,6 +383,7 @@ swap_pager_init(void *arg __unused)
 			  KCOLLECT_SCALE(KCOLLECT_SWAPCAC_FORMAT, 0));
 }
 SYSINIT(vm_mem, SI_BOOT1_VM, SI_ORDER_THIRD, swap_pager_init, NULL);
+#endif
 
 /*
  * SWAP_PAGER_SWAP_INIT() - swap pager initialization from pageout process

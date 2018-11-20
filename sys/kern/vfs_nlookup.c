@@ -49,6 +49,7 @@
  * these issues.
  */
 
+#include "opt_kcollect.h"
 #include "opt_ktrace.h"
 
 #include <sys/param.h>
@@ -64,7 +65,9 @@
 #include <sys/stat.h>
 #include <sys/objcache.h>
 #include <sys/file.h>
+#ifdef ENABLE_KCOLLECT
 #include <sys/kcollect.h>
+#endif
 
 #ifdef KTRACE
 #include <sys/ktrace.h>
@@ -1496,6 +1499,7 @@ naccess_va(struct vattr *va, int nflags, struct ucred *cred)
     return(0);
 }
 
+#ifdef ENABLE_KCOLLECT
 /*
  * Long-term (10-second interval) statistics collection
  */
@@ -1530,3 +1534,4 @@ nlookup_collect_init(void *dummy __unused)
 			  KCOLLECT_SCALE(KCOLLECT_NLOOKUP_FORMAT, 0));
 }
 SYSINIT(collect_nlookup, SI_SUB_PROP, SI_ORDER_ANY, nlookup_collect_init, 0);
+#endif

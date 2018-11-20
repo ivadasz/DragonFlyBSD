@@ -33,13 +33,16 @@
  * $DragonFly: src/sys/vm/vm_meter.c,v 1.15 2008/04/28 18:04:08 dillon Exp $
  */
 
+#include "opt_kcollect.h"
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/resource.h>
 #include <sys/vmmeter.h>
+#ifdef ENABLE_KCOLLECT
 #include <sys/kcollect.h>
+#endif
 
 #include <vm/vm.h>
 #include <vm/vm_page.h>
@@ -443,6 +446,7 @@ do_vmmeter_pcpu(SYSCTL_HANDLER_ARGS)
 	return (sysctl_handle_opaque(oidp, &vmm, sizeof(vmm), req));
 }
 
+#ifdef ENABLE_KCOLLECT
 /*
  * Callback for long-term slow data collection on 10-second interval.
  *
@@ -512,6 +516,7 @@ collect_vmstats_callback(int n)
 
 	return total;
 }
+#endif
 
 /*
  * Called from the low level boot code only.
@@ -540,6 +545,7 @@ vmmeter_init(void *dummy __unused)
 				gd, sizeof(struct vmmeter), do_vmmeter_pcpu,
 				"S,vmmeter", "System per-cpu statistics");
 	}
+#ifdef ENABLE_KCOLLECT
 	kcollect_register(KCOLLECT_VMFAULT, "fault", collect_vmstats_callback,
 			  KCOLLECT_SCALE(KCOLLECT_VMFAULT_FORMAT, 0));
 	kcollect_register(KCOLLECT_COWFAULT, "cow", NULL,
@@ -572,6 +578,7 @@ vmmeter_init(void *dummy __unused)
 			  KCOLLECT_SCALE(KCOLLECT_IPI_FORMAT, 0));
 	kcollect_register(KCOLLECT_TIMER, "timer", NULL,
 			  KCOLLECT_SCALE(KCOLLECT_TIMER_FORMAT, 0));
+#endif
 }
 SYSINIT(vmmeter, SI_SUB_PSEUDO, SI_ORDER_ANY, vmmeter_init, 0);
 

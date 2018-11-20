@@ -68,6 +68,7 @@
  * $FreeBSD: src/sys/kern/kern_clock.c,v 1.105.2.10 2002/10/17 13:19:40 maxim Exp $
  */
 
+#include "opt_kcollect.h"
 #include "opt_ntp.h"
 #include "opt_pctrack.h"
 
@@ -87,7 +88,9 @@
 #include <sys/upmap.h>
 #include <sys/lock.h>
 #include <sys/sysctl.h>
+#ifdef ENABLE_KCOLLECT
 #include <sys/kcollect.h>
+#endif
 
 #include <vm/vm.h>
 #include <vm/pmap.h>
@@ -384,12 +387,14 @@ collect_cputime_callback(int n)
 	if (acc == 0)		/* prevent degenerate divide by 0 */
 		acc = 1;
 	lsb = acc / (10000 * 2);
+#ifdef ENABLE_KCOLLECT
 	kcollect_setvalue(KCOLLECT_SYSTPCT,
 			  (cpu_states[CP_SYS] + lsb) * 10000 / acc);
 	kcollect_setvalue(KCOLLECT_IDLEPCT,
 			  (cpu_states[CP_IDLE] + lsb) * 10000 / acc);
 	kcollect_setvalue(KCOLLECT_INTRPCT,
 			  (cpu_states[CP_INTR] + lsb) * 10000 / acc);
+#endif
 	return((cpu_states[CP_USER] + cpu_states[CP_NICE] + lsb) * 10000 / acc);
 }
 
@@ -431,6 +436,7 @@ initclocks_other(void *dummy)
 	}
 	lwkt_setcpu_self(ogd);
 
+#ifdef ENABLE_KCOLLECT
 	/*
 	 * Regular data collection
 	 */
@@ -440,6 +446,7 @@ initclocks_other(void *dummy)
 			  KCOLLECT_SCALE(KCOLLECT_SYSTPCT_FORMAT, 0));
 	kcollect_register(KCOLLECT_IDLEPCT, "idle", NULL,
 			  KCOLLECT_SCALE(KCOLLECT_IDLEPCT_FORMAT, 0));
+#endif
 }
 SYSINIT(clocks2, SI_BOOT2_POST_SMP, SI_ORDER_ANY, initclocks_other, NULL);
 

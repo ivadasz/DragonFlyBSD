@@ -64,6 +64,9 @@ dfly_kernel_lib(
         # pty driver
         "tty_pty.c",
 
+        # kcollect
+        "kern_collect.c",
+
         # sensors
         "kern_sensors.c",
     ]) + [
