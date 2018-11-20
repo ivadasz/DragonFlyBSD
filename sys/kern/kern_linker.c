@@ -58,6 +58,7 @@ int kld_debug = 1;
 
 /* Metadata from the static kernel */
 SET_DECLARE(modmetadata_set, struct mod_metadata);
+#if 0
 MALLOC_DEFINE(M_LINKER, "kld", "kernel linker");
 
 linker_file_t linker_current_file;
@@ -758,6 +759,8 @@ linker_ddb_symbol_values(c_linker_sym_t sym, linker_symval_t *symval)
 
 #endif
 
+#endif
+
 /*
  * Syscalls.
  *
@@ -766,6 +769,7 @@ linker_ddb_symbol_values(c_linker_sym_t sym, linker_symval_t *symval)
 int
 sys_kldload(struct kldload_args *uap)
 {
+#if 0
     struct thread *td = curthread;
     char *file;
     char *kldname, *modname;
@@ -810,6 +814,9 @@ out:
     if (file)
 	kfree(file, M_TEMP);
     return error;
+#else
+    return ENOENT;
+#endif
 }
 
 /*
@@ -818,6 +825,7 @@ out:
 int
 sys_kldunload(struct kldunload_args *uap)
 {
+#if 0
     struct thread *td = curthread;
     linker_file_t lf;
     int error = 0;
@@ -848,6 +856,9 @@ out:
     lockmgr(&kld_lock, LK_RELEASE);
 
     return error;
+#else
+    return ENOENT;
+#endif
 }
 
 /*
@@ -856,6 +867,7 @@ out:
 int
 sys_kldfind(struct kldfind_args *uap)
 {
+#if 0
     char *filename = NULL, *modulename;
     linker_file_t lf;
     int error;
@@ -882,6 +894,9 @@ out:
     if (filename)
 	kfree(filename, M_TEMP);
     return error;
+#else
+    return ENOENT;
+#endif
 }
 
 /*
@@ -890,6 +905,7 @@ out:
 int
 sys_kldnext(struct kldnext_args *uap)
 {
+#if 0
     linker_file_t lf;
     int error = 0;
 
@@ -919,6 +935,9 @@ out:
     lockmgr(&kld_lock, LK_RELEASE);
 
     return error;
+#else
+    return ENOENT;
+#endif
 }
 
 /*
@@ -927,6 +946,7 @@ out:
 int
 sys_kldstat(struct kldstat_args *uap)
 {
+#if 0
     linker_file_t lf;
     int error = 0;
     int version;
@@ -972,6 +992,9 @@ out:
     lockmgr(&kld_lock, LK_RELEASE);
 
     return error;
+#else
+    return ENOENT;
+#endif
 }
 
 /*
@@ -980,6 +1003,7 @@ out:
 int
 sys_kldfirstmod(struct kldfirstmod_args *uap)
 {
+#if 0
     linker_file_t lf;
     int error = 0;
 
@@ -996,6 +1020,9 @@ sys_kldfirstmod(struct kldfirstmod_args *uap)
     lockmgr(&kld_lock, LK_RELEASE);
 
     return error;
+#else
+    return ENOENT;
+#endif
 }
 
 /*
@@ -1004,6 +1031,7 @@ sys_kldfirstmod(struct kldfirstmod_args *uap)
 int
 sys_kldsym(struct kldsym_args *uap)
 {
+#if 0
     char *symstr = NULL;
     c_linker_sym_t sym;
     linker_symval_t symval;
@@ -1055,8 +1083,12 @@ out:
 	kfree(symstr, M_TEMP);
 
     return error;
+#else
+    return ENOENT;
+#endif
 }
 
+#if 0
 /*
  * Preloaded module support
  */
@@ -1617,3 +1649,4 @@ linker_load_dependencies(linker_file_t lf)
     linker_addmodules(lf, start, stop, 0);
     return (error);
 }
+#endif

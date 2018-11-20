@@ -301,6 +301,7 @@ sys_mount(struct mount_args *uap)
 			vput(vp);
 			goto done;
 		}
+#if 0
 		error = linker_load_file(fstypename, &lf);
 		if (error || lf == NULL) {
 			cache_drop(&nch);
@@ -309,12 +310,19 @@ sys_mount(struct mount_args *uap)
 				error = ENODEV;
 			goto done;
 		}
+#else
+		panic("No module support");
+#endif
 		lf->userrefs++;
 		/* lookup again, see if the VFS was loaded */
 		vfsp = vfsconf_find_by_name(fstypename);
 		if (vfsp == NULL) {
 			lf->userrefs--;
+#if 0
 			linker_file_unload(lf);
+#else
+			panic("No module support");
+#endif
 			cache_drop(&nch);
 			vput(vp);
 			error = ENODEV;

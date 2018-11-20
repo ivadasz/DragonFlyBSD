@@ -99,7 +99,7 @@ module_register_init(const void *arg)
 	panic("module_register_init: module named %s not found", data->name);
 #else
 	/* temporary kludge until kernel `file' attachment registers modules */
-	error = module_register(data, linker_kernel_file);
+	error = module_register(data, NULL);
 	if (error)
 	    panic("module_register_init: register of module failed! %d", error);
 	mod = module_lookupbyname(data->name);
@@ -140,8 +140,10 @@ module_register(const moduledata_t *data, linker_file_t container)
     bzero(&newmod->data, sizeof(newmod->data));
     TAILQ_INSERT_TAIL(&modules, newmod, link);
 
+#if 0
     if (container == NULL)
 	container = linker_current_file;
+#endif
     if (container)
 	TAILQ_INSERT_TAIL(&container->modules, newmod, flink);
     newmod->file = container;
@@ -246,6 +248,7 @@ module_setspecific(module_t mod, modspecific_t *datap)
 int
 sys_modnext(struct modnext_args *uap)
 {
+#if 0
     module_t mod;
     int error;
 
@@ -275,6 +278,9 @@ done:
     lwkt_reltoken(&mod_token);
 
     return error;
+#else
+    return ENOENT;
+#endif
 }
 
 /*
@@ -283,6 +289,7 @@ done:
 int
 sys_modfnext(struct modfnext_args *uap)
 {
+#if 0
     module_t mod;
     int error;
 
@@ -304,6 +311,9 @@ done:
     lwkt_reltoken(&mod_token);
 
     return error;
+#else
+    return ENOENT;
+#endif
 }
 
 struct module_stat_v1 {
@@ -319,6 +329,7 @@ struct module_stat_v1 {
 int
 sys_modstat(struct modstat_args *uap)
 {
+#if 0
     module_t mod;
     int error;
     int namelen;
@@ -370,6 +381,9 @@ out:
     lwkt_reltoken(&mod_token);
 
     return error;
+#else
+    return ENOENT;
+#endif
 }
 
 /*
@@ -378,6 +392,7 @@ out:
 int
 sys_modfind(struct modfind_args *uap)
 {
+#if 0
     int error;
     char name[MAXMODNAME];
     module_t mod;
@@ -396,4 +411,7 @@ out:
     lwkt_reltoken(&mod_token);
 
     return error;
+#else
+    return ENOENT;
+#endif
 }

@@ -252,6 +252,7 @@ firmware_unregister(const char *imagename)
 static void
 loadimage(void *arg, int npending)
 {
+#if 0
 #ifdef notyet
 	struct thread *td = curthread;
 #endif
@@ -292,6 +293,9 @@ loadimage(void *arg, int npending)
 	lockmgr(&firmware_lock, LK_RELEASE);
 done:
 	wakeup_one(imagename);		/* we're done */
+#else
+	panic("no module support");
+#endif
 }
 
 /*
@@ -458,9 +462,13 @@ unloadentry(void *unused1, int unused2)
 		limit = i + FIRMWARE_MAX;	/* make another full round */
 		fp->flags &= ~FW_UNLOAD;	/* do not try again */
 
+#if 0
 		lockmgr(&firmware_lock, LK_RELEASE);
 		err = linker_release_module(NULL, NULL, fp->file);
 		lockmgr(&firmware_lock, LK_EXCLUSIVE);
+#else
+		panic("No module support");
+#endif
 
 		/*
 		 * We rely on the module to call firmware_unregister()

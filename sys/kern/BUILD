@@ -64,6 +64,10 @@ dfly_kernel_lib(
         # Optional cpu topology support
         "subr_cpu_topology.c",
 
+        # Only include when dynamic linking is enabled
+        "link_elf.c",
+        "link_elf_obj.c",
+
         # pty driver
         "tty_pty.c",
 
