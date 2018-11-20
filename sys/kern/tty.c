@@ -72,6 +72,7 @@
  */
 
 #include "opt_uconsole.h"
+#include "opt_constty.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -247,8 +248,10 @@ ttyclose(struct tty *tp)
 {
 	lwkt_gettoken(&tp->t_token);
 	funsetown(&tp->t_sigio);
+#ifdef ENABLE_CONSTTY
 	if (constty == tp)
 		constty = NULL;
+#endif
 
 	ttyflush(tp, FREAD | FWRITE);
 	clist_free_cblocks(&tp->t_canq);
@@ -958,6 +961,7 @@ ttioctl(struct tty *tp, u_long cmd, void *data, int flag)
 		break;
 	}
 	case TIOCCONS:			/* become virtual console */
+#ifdef ENABLE_CONSTTY
 		if (*(int *)data) {
 			if (constty && constty != tp &&
 			    ISSET(constty->t_state, TS_CONNECTED)) {
@@ -975,6 +979,9 @@ ttioctl(struct tty *tp, u_long cmd, void *data, int flag)
 			constty = tp;
 		} else if (tp == constty)
 			constty = NULL;
+#else
+		return (EBUSY);
+#endif
 		break;
 	case TIOCDRAIN:			/* wait till output drained */
 		error = ttywait(tp);

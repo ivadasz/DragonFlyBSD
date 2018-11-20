@@ -35,6 +35,7 @@
  * $FreeBSD: src/sys/kern/subr_prf.c,v 1.61.2.5 2002/08/31 18:22:08 dwmalone Exp $
  */
 
+#include "opt_constty.h"
 #include "opt_ddb.h"
 
 #include <sys/param.h>
@@ -93,7 +94,9 @@ struct snprintf_arg {
 
 extern	int log_open;
 
+#ifdef ENABLE_CONSTTY
 struct	tty *constty;			/* pointer to console "window" tty */
+#endif
 
 static void  msglogchar(int c, int pri);
 static void  msgaddchar(int c, void *dummy);
@@ -105,7 +108,9 @@ static void  snprintf_func (int ch, void *arg);
 static int consintr = 1;		/* Ok to handle console interrupts? */
 static int msgbufmapped;		/* Set when safe to use msgbuf */
 static struct spinlock cons_spin = SPINLOCK_INITIALIZER(cons_spin, "cons_spin");
+#ifdef ENABLE_CONSTTY
 static thread_t constty_td = NULL;
+#endif
 
 int msgbuftrigger;
 
@@ -382,18 +387,22 @@ kputchar(int c, void *arg)
 	int flags = ap->flags;
 	struct tty *tp = ap->tty;
 
+#ifdef ENABLE_CONSTTY
 	if (panicstr)
 		constty = NULL;
 	if ((flags & TOCONS) && tp == NULL && constty)
 		flags |= TOLOG | TOWAKEUP;
+#endif
 	if ((flags & TOTTY) && tputchar(c, tp) < 0)
 		ap->flags &= ~TOTTY;
 	if ((flags & TOLOG))
 		msglogchar(c, ap->pri);
 	if ((flags & TOCONS) && c)
 		cnputc(c);
+#ifdef ENABLE_CONSTTY
 	if (flags & TOWAKEUP)
 		wakeup(constty_td);
+#endif
 }
 
 /*
@@ -900,6 +909,7 @@ kvcreinitspin(void)
 	atomic_clear_long(&mycpu->gd_flags, GDF_KPRINTF);
 }
 
+#ifdef ENABLE_CONSTTY
 /*
  * Console support thread for constty intercepts.  This is needed because
  * console tty intercepts can block.  Instead of having kputchar() attempt
@@ -988,6 +998,7 @@ static struct kproc_desc constty_kp = {
 };
 SYSINIT(bufdaemon, SI_SUB_KTHREAD_UPDATE, SI_ORDER_ANY,
         kproc_start, &constty_kp);
+#endif
 
 /*
  * Put character in log buffer with a particular priority.

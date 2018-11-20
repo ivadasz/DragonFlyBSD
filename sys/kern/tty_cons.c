@@ -37,6 +37,7 @@
 
 #include "opt_ddb.h"
 #include "opt_comconsole.h"
+#include "opt_constty.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -456,9 +457,11 @@ cnwrite(struct dev_write_args *ap)
 		uio->uio_resid = 0; /* dump the data */
 		return (0);
 	}
+#ifdef ENABLE_CONSTTY
 	if (constty)
 		dev = constty->t_dev;
 	else
+#endif
 		dev = cn_tab->cn_dev;
 	log_console(uio);
 	ap->a_head.a_dev = dev;
@@ -477,6 +480,7 @@ cnioctl(struct dev_ioctl_args *ap)
 	 * Superuser can always use this to wrest control of console
 	 * output from the "virtual" console.
 	 */
+#ifdef ENABLE_CONSTTY
 	if (ap->a_cmd == TIOCCONS && constty) {
 		if (ap->a_cred) {
 			error = priv_check_cred(ap->a_cred, PRIV_ROOT, 0);
@@ -486,6 +490,7 @@ cnioctl(struct dev_ioctl_args *ap)
 		constty = NULL;
 		return (0);
 	}
+#endif
 	ap->a_head.a_dev = cn_tab->cn_dev;
 	return (dev_doperate(&ap->a_head));
 }

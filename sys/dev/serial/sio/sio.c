@@ -34,6 +34,7 @@
  */
 
 #include "opt_comconsole.h"
+#include "opt_constty.h"
 #include "opt_ddb.h"
 #include "opt_sio.h"
 #include "use_pci.h"
@@ -1588,8 +1589,10 @@ siowrite(struct dev_write_args *ap)
 	 * is not the console.  In that situation we don't need/want the X
 	 * server taking over the console.
 	 */
+#ifdef ENABLE_CONSTTY
 	if (constty != NULL && unit == comconsole)
 		constty = NULL;
+#endif
 	ret = ((*linesw[com->tp->t_line].l_write)(com->tp, ap->a_uio, ap->a_ioflag));
 	lwkt_reltoken(&tty_token);
 	return ret;
