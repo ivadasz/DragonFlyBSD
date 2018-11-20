@@ -68,6 +68,9 @@ dfly_kernel_lib(
         "link_elf.c",
         "link_elf_obj.c",
 
+        # Firmware handling
+        "subr_firmware.c",
+
         # pty driver
         "tty_pty.c",
 
