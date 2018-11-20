@@ -61,6 +61,9 @@ dfly_kernel_lib(
         # Not used by core kernel parts
         "subr_cpuhelper.c",
 
+        # pty driver
+        "tty_pty.c",
+
         # sensors
         "kern_sensors.c",
     ]) + [
