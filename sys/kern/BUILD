@@ -82,6 +82,12 @@ dfly_kernel_lib(
 
         # sensors
         "kern_sensors.c",
+
+        # /dev/{null,mem,kmem,io,random,urandom,upmap,kpmap,...}
+        "kern_memio.c",
+
+        # /dev/klog support
+        "subr_log.c",
     ]) + [
         ":core_ifs_srcs",
     ],

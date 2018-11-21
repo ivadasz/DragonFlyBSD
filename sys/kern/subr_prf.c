@@ -92,7 +92,7 @@ struct snprintf_arg {
 	size_t	remain;
 };
 
-extern	int log_open;
+int log_open;
 
 #ifdef ENABLE_CONSTTY
 struct	tty *constty;			/* pointer to console "window" tty */

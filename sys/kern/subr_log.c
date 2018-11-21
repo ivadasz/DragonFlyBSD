@@ -80,7 +80,7 @@ static struct logsoftc {
 	struct	callout sc_callout;	/* callout to wakeup syslog  */
 } logsoftc;
 
-int	log_open;			/* also used in log() */
+extern int	log_open;			/* also used in log() */
 
 /* Times per second to check for a pending syslog wakeup. */
 static int	log_wakeups_per_second = 5;

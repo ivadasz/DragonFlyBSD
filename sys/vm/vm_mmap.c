@@ -301,12 +301,14 @@ kern_mmap(struct vmspace *vms, caddr_t uaddr, size_t ulen,
 		 * XXX hack to handle use of /dev/zero to map anon memory (ala
 		 * SunOS).
 		 */
+#if 0
 		if (vp->v_type == VCHR && iszerodev(vp->v_rdev)) {
 			handle = NULL;
 			maxprot = VM_PROT_ALL;
 			flags |= MAP_ANON;
 			pos = 0;
 		} else {
+#endif
 			/*
 			 * cdevs does not provide private mappings of any kind.
 			 */
@@ -375,7 +377,9 @@ kern_mmap(struct vmspace *vms, caddr_t uaddr, size_t ulen,
 			}
 			handle = (void *)vp;
 		}
+#if 0
 	}
+#endif
 
 	lwkt_gettoken(&vms->vm_map.token);
 

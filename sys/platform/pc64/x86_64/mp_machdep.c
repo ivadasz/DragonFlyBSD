@@ -1485,7 +1485,7 @@ ap_init(void)
 	cpu_invltlb();
 
 	/* Set memory range attributes for this CPU to match the BSP */
-	mem_range_AP_init();
+	//mem_range_AP_init();
 
 	/*
 	 * Once we go active we must process any IPIQ messages that may

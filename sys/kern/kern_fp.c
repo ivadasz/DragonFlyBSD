@@ -484,12 +484,14 @@ fp_mmap(void *addr_arg, size_t size, int prot, int flags, struct file *fp,
      * XXX hack to handle use of /dev/zero to map anon memory (ala
      * SunOS).
      */
+#if 0
     if (vp->v_type == VCHR && iszerodev(vp->v_rdev)) {
 	handle = NULL;
 	maxprot = VM_PROT_ALL;
 	flags |= MAP_ANON;
 	pos = 0;
     } else {
+#endif
 	/*
 	 * cdevs does not provide private mappings of any kind.
 	 */
@@ -544,7 +546,9 @@ fp_mmap(void *addr_arg, size_t size, int prot, int flags, struct file *fp,
 	    maxprot |= VM_PROT_WRITE;
 	}
 	handle = (void *)vp;
+#if 0
     }
+#endif
     error = vm_mmap(&vms->vm_map, &addr, size, prot, 
 		    maxprot, flags, handle, pos);
     if (error == 0 && addr_arg)

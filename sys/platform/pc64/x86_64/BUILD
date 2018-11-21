@@ -39,7 +39,9 @@ dfly_kernel_headers(
 dfly_kernel_lib(
     name = "x86_64",
     srcs = [
-        "amd64_mem.c",
+        # MTRR support or so
+        #"amd64_mem.c",
+
         "exception.S",
         "mp_machdep.c",
         "sigtramp.s",
