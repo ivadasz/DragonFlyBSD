@@ -92,6 +92,7 @@ def _dfly_kernel_object_impl(ctx):
                 # TODO(ivadasz): Fix these cases where -fno-common breaks stuff.
                 if i.basename in ["genassym.c", "vmx_genassym.c"]:
                   comp_flags.remove("-fno-common")
+                  #comp_flags.remove("-flto")
                 objname = i.basename.rstrip("c") + "o"
                 obj = ctx.actions.declare_file(objname)
                 set = depset(direct = [obj], transitive = [set])
@@ -217,12 +218,14 @@ def _dfly_kernel_binary_impl(ctx):
         "-nostdlib",
         # -ffreestanding causes linking to fail
         #"-ffreestanding",
-        "--hash-style=sysv",
-        "-Bdynamic",
-        "-T",
+        "-Wl,--hash-style=sysv",
+        "-Wl,-Bdynamic",
+        "-Wl,-T",
+        #"-flto",
+        #"-fwhole-program",
         ldscript[0].path,
-        "--export-dynamic",
-        "--dynamic-linker=/red/herring",
+        "-Wl,--export-dynamic",
+        "-Wl,--dynamic-linker=/red/herring",
     ]
     bin = ctx.actions.declare_file("kernel")
     depfiles = depset(transitive = [ctx.attr.ldscript.files])
@@ -236,7 +239,8 @@ def _dfly_kernel_binary_impl(ctx):
                 depfiles = depset(direct = [h], transitive = [depfiles])
     args.add("-o", bin.path)
     ctx.actions.run(outputs = [bin], inputs = depset(transitive = [depfiles]),
-                    executable = info.linker_path,
+                    executable = info.compiler_path,
+                    env = {"COMPILER_PATH": "/usr/bin"},
                     arguments = [args], mnemonic = "CLink",
                     progress_message = "Linking %s" % bin.basename)
     return [

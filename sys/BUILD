@@ -30,6 +30,7 @@ dfly_toolchain(
         # TODO(ivadasz): Only set -g flag when compiling for debugging.
         #"-g",
 
+        #"-flto",
         "-ffreestanding",
         "-fno-builtin-log",
         "-fno-builtin-bcmp",
