@@ -59,6 +59,9 @@ dfly_kernel_lib(
         "ioconf.c",
 
         # Not used by core kernel parts
+        "subr_sglist.c",
+
+        # Not used by core kernel parts
         "subr_cpuhelper.c",
 
         # Optional cpu topology support
