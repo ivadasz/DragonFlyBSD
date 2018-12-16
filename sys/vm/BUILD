@@ -7,7 +7,10 @@ filegroup(
 
 dfly_kernel_lib(
     name = "vm",
-    srcs = glob(["*.c"]),
+    srcs = select({
+        "//sys:userspace": [],
+        "//sys:metal": glob(["*.c"]),
+    }),
     deps = [
         "//sys/sys:options",
         "//sys/sys",

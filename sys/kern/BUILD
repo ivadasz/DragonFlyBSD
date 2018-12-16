@@ -44,56 +44,84 @@ dfly_kernel_lib(
     ],
 )
 
+always_excludes = [
+    "subr_input.c",
+    "kern_sched.c",
+    "uipc_accf.c",
+    "kern_ktr.c",
+    "imgact_gzip.c",
+    "inflate.c",
+
+    # built separately
+    "ioconf.c",
+
+    # Not used by core kernel parts
+    "subr_sglist.c",
+
+    # Not used by core kernel parts
+    "subr_cpuhelper.c",
+
+    # Optional cpu topology support
+    "subr_cpu_topology.c",
+
+    # Only include when dynamic linking is enabled
+    "link_elf.c",
+    "link_elf_obj.c",
+
+    # Firmware handling
+    "subr_firmware.c",
+
+    # pty driver
+    "tty_pty.c",
+
+    # watchdog support
+    "kern_wdog.c",
+
+    # kcollect
+    "kern_collect.c",
+
+    # sensors
+    "kern_sensors.c",
+
+    # /dev/{null,mem,kmem,io,random,urandom,upmap,kpmap,...}
+    "kern_memio.c",
+
+    # /dev/klog support
+    "subr_log.c",
+]
+
+rump_excludes = always_excludes + [
+    "imgact_aout.c",
+    "imgact_elf.c",
+    "imgact_shell.c",
+    "imgact_resident.c",
+    "init_sysent.c",
+    "kern_checkpoint.c",
+    "kern_exec.c",
+    "kern_exit.c",
+    "kern_fork.c",
+    "kern_proc.c",
+    "kern_resource.c",
+    "kern_sig.c",
+    "kern_umtx.c",
+    "kern_usched.c",
+    "subr_busdma.c",
+    "sysv_shm.c",
+    "sys_process.c",
+    "sys_vmm.c",
+]
+
 dfly_kernel_lib(
     name = "kern",
     # TODO(ivadasz): kern_sched.c depends on _kposix_priority_scheduling feature
-    srcs = glob(["*.c"], exclude = [
-        "subr_input.c",
-        "kern_sched.c",
-        "uipc_accf.c",
-        "kern_ktr.c",
-        "imgact_gzip.c",
-        "inflate.c",
-
-        # built separately
-        "ioconf.c",
-
-        # Not used by core kernel parts
-        "subr_sglist.c",
-
-        # Not used by core kernel parts
-        "subr_cpuhelper.c",
-
-        # Optional cpu topology support
-        "subr_cpu_topology.c",
-
-        # Only include when dynamic linking is enabled
-        "link_elf.c",
-        "link_elf_obj.c",
-
-        # Firmware handling
-        "subr_firmware.c",
-
-        # pty driver
-        "tty_pty.c",
-
-        # watchdog support
-        "kern_wdog.c",
-
-        # kcollect
-        "kern_collect.c",
-
-        # sensors
-        "kern_sensors.c",
-
-        # /dev/{null,mem,kmem,io,random,urandom,upmap,kpmap,...}
-        "kern_memio.c",
-
-        # /dev/klog support
-        "subr_log.c",
-    ]) + [
-        ":core_ifs_srcs",
-    ],
+    srcs = select({
+        "//sys:metal": glob(["*.c"], exclude = always_excludes) + [
+            ":core_ifs_srcs",
+        ],
+        "//sys:userspace": glob(["*.c"], exclude = rump_excludes) + [
+            ":core_ifs_srcs",
+        ]
+    }),
     deps = [
         "//sys/sys:options",
         "//sys/sys",

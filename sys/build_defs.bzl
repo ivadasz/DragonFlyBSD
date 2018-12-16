@@ -1,6 +1,6 @@
 CompilerInfo = provider(
     doc = "Information about how to invoke gcc for the DragonFly kernel.",
-    fields = ["compiler_path", "linker_path", "assembler_path", "arch_flags", "asm_flags", "conly_flags"],
+    fields = ["compiler_path", "linker_path", "assembler_path", "arch_flags", "asm_flags", "conly_flags", "linker_flags"],
 )
 
 def _dfly_toolchain_impl(ctx):
@@ -12,6 +12,7 @@ def _dfly_toolchain_impl(ctx):
             arch_flags = ctx.attr.arch_flags,
             asm_flags = ctx.attr.asm_flags,
             conly_flags = ctx.attr.conly_flags,
+            linker_flags = ctx.attr.linker_flags,
         ),
     )
     return [toolchain_info]
@@ -25,6 +26,7 @@ dfly_toolchain = rule(
         "arch_flags": attr.string_list(),
         "asm_flags": attr.string_list(),
         "conly_flags": attr.string_list(),
+        "linker_flags": attr.string_list(),
     },
 )
 
@@ -211,24 +213,18 @@ def map_depfile(itm):
 def _dfly_kernel_binary_impl(ctx):
     trans_objs = get_transitive_objects(ctx.attr.deps)
     info = ctx.toolchains["//sys:toolchain_type"].compilerinfo
-    ldscript = ctx.attr.ldscript.files.to_list()
-    if len(ldscript) != 1:
-        fail("Exactly one ldscript needed")
-    ldflags = [
-        "-nostdlib",
-        # -ffreestanding causes linking to fail
-        #"-ffreestanding",
-        "-Wl,--hash-style=sysv",
-        "-Wl,-Bdynamic",
-        "-Wl,-T",
-        #"-flto",
-        #"-fwhole-program",
-        ldscript[0].path,
-        "-Wl,--export-dynamic",
-        "-Wl,--dynamic-linker=/red/herring",
-    ]
+    ldscript_flag = []
+    if ctx.attr.ldscript != None:
+        ldscript = ctx.attr.ldscript.files.to_list()
+        if len(ldscript) == 1:
+            ldscript_flag = ["-Wl,-T%s" % ldscript[0].path]
+        elif len(ldscript) > 1:
+            fail("Exactly one or no ldscript needed")
+    ldflags = info.linker_flags + ldscript_flag
     bin = ctx.actions.declare_file("kernel")
-    depfiles = depset(transitive = [ctx.attr.ldscript.files])
+    depfiles = depset(transitive = [])
+    if ctx.attr.ldscript != None:
+        depfiles = depset(transitive = [ctx.attr.ldscript.files])
     args = ctx.actions.args()
     for f in ldflags:
         args.add(f)

@@ -105,6 +105,7 @@ SYSCTL_PROC(_kern, OID_AUTO, gettimeofday_quick, CTLTYPE_INT | CTLFLAG_RW,
 
 static struct lock masterclock_lock = LOCK_INITIALIZER("mstrclk", 0, 0);
 
+#ifndef _RUMPKERNEL
 static int
 settime(struct timeval *tv)
 {
@@ -435,6 +436,7 @@ sys_getcpuclockid(struct getcpuclockid_args *uap)
 
 	return (error);
 }
+#endif
 
 /*
  * nanosleep1()
@@ -503,7 +505,11 @@ nanosleep1(struct timespec *rqt, struct timespec *rmt)
 				lwkt_switch();
 				systimer_del(&info); /* make sure it's gone */
 			}
+#ifndef _RUMPKERNEL
 			error = iscaught(td->td_lwp);
+#else
+                        error = 0;
+#endif
 		} else if (tv.tv_sec == 0) {
 			error = tsleep(&nanowait, PCATCH, "nanslp", ticks);
 		} else {
@@ -588,6 +594,7 @@ sys_gettimeofday(struct gettimeofday_args *uap)
 	return (error);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * MPALMOSTSAFE
  */
@@ -631,6 +638,7 @@ sys_settimeofday(struct settimeofday_args *uap)
 		tz = atz;
 	return (0);
 }
+#endif
 
 /*
  * WARNING! Run with ntp_spin held
