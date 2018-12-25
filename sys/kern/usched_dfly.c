@@ -358,7 +358,9 @@ static int usched_dfly_fast_resched = PPQ / 2; /* delta priority / resched */
 static int usched_dfly_swmask = ~PPQMASK; /* allow pulls */
 static int usched_dfly_rrinterval = (ESTCPUFREQ + 9) / 10;
 static int usched_dfly_decay = 8;
+#ifdef ENABLE_TOPOLOGY
 static long usched_dfly_node_mem;
+#endif
 
 /* KTR debug printings */
 

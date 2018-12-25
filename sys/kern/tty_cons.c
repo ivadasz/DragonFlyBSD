@@ -471,7 +471,9 @@ cnwrite(struct dev_write_args *ap)
 static int
 cnioctl(struct dev_ioctl_args *ap)
 {
+#ifdef ENABLE_CONSTTY
 	int error;
+#endif
 
 	if (cn_tab == NULL || cn_fwd_ops == NULL)
 		return (0);

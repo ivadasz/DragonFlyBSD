@@ -383,8 +383,10 @@ mmwrite(struct dev_write_args *ap)
 * instead of going through read/write			*
 \*******************************************************/
 
+#ifdef ENABLE_UPMAP
 static int user_kernel_mapping(int num, vm_ooffset_t offset,
 				vm_ooffset_t *resultp);
+#endif
 
 #if 0
 
@@ -434,7 +436,9 @@ memmmap(struct dev_mmap_args *ap)
 static int
 memuksmap(cdev_t dev, vm_page_t fake)
 {
+#ifdef ENABLE_UPMAP
 	vm_ooffset_t result;
+#endif
 	int error;
 
 	switch (minor(dev)) {

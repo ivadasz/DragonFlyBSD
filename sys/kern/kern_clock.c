@@ -358,6 +358,7 @@ initclocks_pcpu(void)
 	crit_exit();
 }
 
+#ifdef ENABLE_KCOLLECT
 /*
  * Called on a 10-second interval after the system is operational.
  * Return the collection data for USERPCT and install the data for
@@ -402,6 +403,7 @@ collect_cputime_callback(int n)
 #endif
 	return((cpu_states[CP_USER] + cpu_states[CP_NICE] + lsb) * 10000 / acc);
 }
+#endif
 
 /*
  * This routine is called on just the BSP, just after SMP initialization

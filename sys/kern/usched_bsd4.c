@@ -104,11 +104,11 @@ static void bsd4_exiting(struct lwp *lp, struct proc *);
 static void bsd4_uload_update(struct lwp *lp);
 static void bsd4_yield(struct lwp *lp);
 static void bsd4_need_user_resched_remote(void *dummy);
-static int bsd4_batchy_looser_pri_test(struct lwp* lp);
 #ifdef ENABLE_TOPOLOGY
+static int bsd4_batchy_looser_pri_test(struct lwp* lp);
 static struct lwp *bsd4_chooseproc_locked_cache_coherent(struct lwp *chklp);
-#endif
 static void bsd4_kick_helper(struct lwp *lp);
+#endif
 static struct lwp *bsd4_chooseproc_locked(struct lwp *chklp);
 static void bsd4_remrunqueue_locked(struct lwp *lp);
 static void bsd4_setrunqueue_locked(struct lwp *lp);
@@ -195,10 +195,10 @@ SYSCTL_INT(_debug, OID_AUTO, bsd4_pid_debug, CTLFLAG_RW,
 #ifdef ENABLE_TOPOLOGY
 static int usched_bsd4_smt = 0;
 static int usched_bsd4_cache_coherent = 0;
-#endif
 static int usched_bsd4_upri_affinity = 16; /* 32 queues - half-way */
 static int usched_bsd4_queue_checks = 5;
 static int usched_bsd4_stick_to_level = 0;
+#endif
 static long usched_bsd4_kicks;
 static int usched_bsd4_rrinterval = (ESTCPUFREQ + 9) / 10;
 static int usched_bsd4_decay = 8;
@@ -239,6 +239,7 @@ KTR_INFO(KTR_USCHED_BSD4, usched, bsd4_select_curproc, 0,
     "cpuid %d, old_pid %d, old_cpuid %d, curr_cpuid %d)",
     pid_t pid, int cpuid, pid_t old_pid, int old_cpuid, int curr);
 
+#ifdef ENABLE_TOPOLOGY
 KTR_INFO(KTR_USCHED_BSD4, usched, batchy_test_false, 0,
     "USCHED_BSD4(batchy_looser_pri_test false: pid %d, "
     "cpuid %d, verify_mask %lu)",
@@ -247,6 +248,7 @@ KTR_INFO(KTR_USCHED_BSD4, usched, batchy_test_true, 0,
     "USCHED_BSD4(batchy_looser_pri_test true: pid %d, "
     "cpuid %d, verify_mask %lu)",
     pid_t pid, int cpuid, unsigned long mask);
+#endif
 
 KTR_INFO(KTR_USCHED_BSD4, usched, bsd4_setrunqueue_fc_smt, 0,
     "USCHED_BSD4(bsd4_setrunqueue free cpus smt: pid %d, cpuid %d, "
@@ -580,6 +582,7 @@ bsd4_select_curproc(globaldata_t gd)
 	crit_exit_gd(gd);
 }
 
+#ifdef ENABLE_TOPOLOGY
 /*
  * batchy_looser_pri_test() - determine if a process is batchy or not
  * relative to the other processes running in the system
@@ -620,6 +623,7 @@ bsd4_batchy_looser_pri_test(struct lwp* lp)
 
 	return 1;
 }
+#endif
 
 /*
  *
@@ -1593,7 +1597,6 @@ found:
 
 	return lp;
 }
-#endif
 
 /*
  * If we aren't willing to schedule a ready process on our cpu, give it's
@@ -1629,6 +1632,7 @@ bsd4_kick_helper(struct lwp *lp)
 		wakeup(dd->helper_thread);
 	}
 }
+#endif
 
 static
 void

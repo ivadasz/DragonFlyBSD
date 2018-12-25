@@ -1652,6 +1652,7 @@ mp_bsp_simple_setup(void)
 		tsc0_offset = rdtsc();
 }
 
+#ifdef ENABLE_TOPOLOGY
 
 /*
  * CPU TOPOLOGY DETECTION FUNCTIONS
@@ -1875,7 +1876,6 @@ detect_amd_topology(int count_htt_cores)
 	}
 }
 
-#ifdef ENABLE_TOPOLOGY
 static void
 amd_get_compute_unit_id(void *arg)
 {
