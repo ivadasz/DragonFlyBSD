@@ -7,6 +7,7 @@ dfly_kernel_lib(
             # TODO(ivadasz): Compile atomic with -fomit-frame-pointer (except
             # when building a profiling kernel, apparently).
             "atomic.c",
+            "cputimer_tsc.c",
             "lwbuf.c",
             "bzeront.s",
         ],
@@ -14,6 +15,7 @@ dfly_kernel_lib(
             # TODO(ivadasz): Compile atomic with -fomit-frame-pointer (except when
             # building a profiling kernel, apparently).
             "atomic.c",
+            "cputimer_tsc.c",
             "lwbuf.c",
             "elf_machdep.c",
             "bzeront.s",
