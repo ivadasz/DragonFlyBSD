@@ -58,7 +58,7 @@ int kld_debug = 1;
 
 /* Metadata from the static kernel */
 SET_DECLARE(modmetadata_set, struct mod_metadata);
-#if 0
+#ifndef _KERNEL_BAZEL
 MALLOC_DEFINE(M_LINKER, "kld", "kernel linker");
 
 linker_file_t linker_current_file;
@@ -769,7 +769,7 @@ linker_ddb_symbol_values(c_linker_sym_t sym, linker_symval_t *symval)
 int
 sys_kldload(struct kldload_args *uap)
 {
-#if 0
+#ifndef _KERNEL_BAZEL
     struct thread *td = curthread;
     char *file;
     char *kldname, *modname;
@@ -825,7 +825,7 @@ out:
 int
 sys_kldunload(struct kldunload_args *uap)
 {
-#if 0
+#ifndef _KERNEL_BAZEL
     struct thread *td = curthread;
     linker_file_t lf;
     int error = 0;
@@ -867,7 +867,7 @@ out:
 int
 sys_kldfind(struct kldfind_args *uap)
 {
-#if 0
+#ifndef _KERNEL_BAZEL
     char *filename = NULL, *modulename;
     linker_file_t lf;
     int error;
@@ -905,7 +905,7 @@ out:
 int
 sys_kldnext(struct kldnext_args *uap)
 {
-#if 0
+#ifndef _KERNEL_BAZEL
     linker_file_t lf;
     int error = 0;
 
@@ -946,7 +946,7 @@ out:
 int
 sys_kldstat(struct kldstat_args *uap)
 {
-#if 0
+#ifndef _KERNEL_BAZEL
     linker_file_t lf;
     int error = 0;
     int version;
@@ -1003,7 +1003,7 @@ out:
 int
 sys_kldfirstmod(struct kldfirstmod_args *uap)
 {
-#if 0
+#ifndef _KERNEL_BAZEL
     linker_file_t lf;
     int error = 0;
 
@@ -1031,7 +1031,7 @@ sys_kldfirstmod(struct kldfirstmod_args *uap)
 int
 sys_kldsym(struct kldsym_args *uap)
 {
-#if 0
+#ifndef _KERNEL_BAZEL
     char *symstr = NULL;
     c_linker_sym_t sym;
     linker_symval_t symval;
@@ -1088,7 +1088,7 @@ out:
 #endif
 }
 
-#if 0
+#ifndef _KERNEL_BAZEL
 /*
  * Preloaded module support
  */

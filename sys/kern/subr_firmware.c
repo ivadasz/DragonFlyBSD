@@ -252,7 +252,7 @@ firmware_unregister(const char *imagename)
 static void
 loadimage(void *arg, int npending)
 {
-#if 0
+#ifndef _KERNEL_BAZEL
 #ifdef notyet
 	struct thread *td = curthread;
 #endif
@@ -462,7 +462,7 @@ unloadentry(void *unused1, int unused2)
 		limit = i + FIRMWARE_MAX;	/* make another full round */
 		fp->flags &= ~FW_UNLOAD;	/* do not try again */
 
-#if 0
+#ifndef _KERNEL_BAZEL
 		lockmgr(&firmware_lock, LK_RELEASE);
 		err = linker_release_module(NULL, NULL, fp->file);
 		lockmgr(&firmware_lock, LK_EXCLUSIVE);

@@ -57,7 +57,6 @@
 #include <nfs/rpcv2.h>
 #include <nfs/nfs.h>
 #include <nfs/nfsnode.h>
-#include <sys/devfs.h>
 
 #include <vm/vm.h>
 #include <vm/vm_map.h>
@@ -82,6 +81,10 @@
 #include <string.h>
 #include <unistd.h>
 #include <netdb.h>
+
+#include <stdbool.h>
+/* Needs bool type to be defined */
+#include <sys/devfs.h>
 
 #include "fstat.h"
 

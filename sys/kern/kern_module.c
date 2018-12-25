@@ -95,7 +95,7 @@ module_register_init(const void *arg)
 
     mod = module_lookupbyname(data->name);
     if (mod == NULL) {
-#if 0
+#ifndef _KERNEL_BAZEL
 	panic("module_register_init: module named %s not found", data->name);
 #else
 	/* temporary kludge until kernel `file' attachment registers modules */
@@ -140,7 +140,7 @@ module_register(const moduledata_t *data, linker_file_t container)
     bzero(&newmod->data, sizeof(newmod->data));
     TAILQ_INSERT_TAIL(&modules, newmod, link);
 
-#if 0
+#ifndef _KERNEL_BAZEL
     if (container == NULL)
 	container = linker_current_file;
 #endif
@@ -248,7 +248,7 @@ module_setspecific(module_t mod, modspecific_t *datap)
 int
 sys_modnext(struct modnext_args *uap)
 {
-#if 0
+#ifndef _KERNEL_BAZEL
     module_t mod;
     int error;
 
@@ -289,7 +289,7 @@ done:
 int
 sys_modfnext(struct modfnext_args *uap)
 {
-#if 0
+#ifndef _KERNEL_BAZEL
     module_t mod;
     int error;
 
@@ -329,7 +329,7 @@ struct module_stat_v1 {
 int
 sys_modstat(struct modstat_args *uap)
 {
-#if 0
+#ifndef _KERNEL_BAZEL
     module_t mod;
     int error;
     int namelen;
@@ -392,7 +392,7 @@ out:
 int
 sys_modfind(struct modfind_args *uap)
 {
-#if 0
+#ifndef _KERNEL_BAZEL
     int error;
     char name[MAXMODNAME];
     module_t mod;

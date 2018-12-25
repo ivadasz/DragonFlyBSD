@@ -107,6 +107,7 @@ dfly_toolchain(
         "-pipe",
         "-O2",
         "-D_KERNEL",
+        "-D_KERNEL_BAZEL",
     ],
     asm_flags = [
         "-DLOCORE",

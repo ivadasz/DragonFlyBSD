@@ -673,6 +673,12 @@ PANIC_REBOOT_WAIT_TIME	opt_panic.h
 EVDEV_SUPPORT		opt_evdev.h
 EVDEV_DEBUG		opt_evdev.h
 
+ENABLE_CONSTTY		opt_constty.h
+ENABLE_KCOLLECT		opt_kcollect.h
+ENABLE_SENSORS		opt_sensors.h
+ENABLE_TOPOLOGY		opt_topology.h
+ENABLE_UPMAP		opt_upmap.h
+
 # Obsolete options (will be removed in the future)
 #
 FFS_ROOT		opt_dontuse.h

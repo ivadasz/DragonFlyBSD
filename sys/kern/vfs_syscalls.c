@@ -301,7 +301,7 @@ sys_mount(struct mount_args *uap)
 			vput(vp);
 			goto done;
 		}
-#if 0
+#ifndef _KERNEL_BAZEL
 		error = linker_load_file(fstypename, &lf);
 		if (error || lf == NULL) {
 			cache_drop(&nch);
@@ -318,7 +318,7 @@ sys_mount(struct mount_args *uap)
 		vfsp = vfsconf_find_by_name(fstypename);
 		if (vfsp == NULL) {
 			lf->userrefs--;
-#if 0
+#ifndef _KERNEL_BAZEL
 			linker_file_unload(lf);
 #else
 			panic("No module support");

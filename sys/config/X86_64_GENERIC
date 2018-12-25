@@ -11,6 +11,8 @@ cpu		HAMMER_CPU
 ident		X86_64_GENERIC
 maxusers	0
 #options	CPU_DISABLE_AVX
+options		ENABLE_TOPOLOGY
+options		ENABLE_CONSTTY
 
 makeoptions	DEBUG=-g		#Build kernel with gdb(1) debug symbols
 
