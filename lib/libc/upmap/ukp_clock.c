@@ -84,7 +84,7 @@ __clock_gettime(clockid_t clock_id, struct timespec *ts)
 		__kpmap_map(&ts_uptime, &fast_clock, KPTYPE_TS_UPTIME);
 		__kpmap_map(&ts_realtime, &fast_clock, KPTYPE_TS_REALTIME);
 		__kpmap_map(&tsc_freq, &fast_clock, KPTYPE_TSC_FREQ);
-		if (*version >= 2) {
+		if (fast_clock >= 0 && *version >= 2) {
 			__kpmap_map(&tsc_shift, &fast_clock, KPTYPE_TSC_SHIFT);
 			__kpmap_map(&timer_base, &fast_clock, KPTYPE_TIMER_BASE);
 			__kpmap_map(&freq64_nsec, &fast_clock, KPTYPE_FREQ_NSEC);
@@ -93,7 +93,7 @@ __clock_gettime(clockid_t clock_id, struct timespec *ts)
 			__kpmap_map(&ts_basetime, &fast_clock, KPTYPE_TS_BASETIME);
 		}
 		__kpmap_map(NULL, &fast_clock, 0);
-		if (*version >= 2) {
+		if (fast_clock > 0 && *version >= 2) {
 			cputimer_freq = *tsc_freq >> *tsc_shift;
 			/* XXX Check whether TSC is mpsafe and invariant. */
 		}
@@ -227,7 +227,7 @@ __gettimeofday(struct timeval *tp, struct timezone *tzp)
 		__kpmap_map(&ts_uptime, &fast_clock, KPTYPE_TS_UPTIME);
 		__kpmap_map(&ts_realtime, &fast_clock, KPTYPE_TS_REALTIME);
 		__kpmap_map(&tsc_freq, &fast_clock, KPTYPE_TSC_FREQ);
-		if (*version >= 2) {
+		if (fast_clock >= 0 && *version >= 2) {
 			__kpmap_map(&tsc_shift, &fast_clock, KPTYPE_TSC_SHIFT);
 			__kpmap_map(&timer_base, &fast_clock, KPTYPE_TIMER_BASE);
 			__kpmap_map(&freq64_nsec, &fast_clock, KPTYPE_FREQ_NSEC);
@@ -236,7 +236,7 @@ __gettimeofday(struct timeval *tp, struct timezone *tzp)
 			__kpmap_map(&ts_basetime, &fast_clock, KPTYPE_TS_BASETIME);
 		}
 		__kpmap_map(NULL, &fast_clock, 0);
-		if (*version >= 2) {
+		if (fast_clock > 0 && *version >= 2) {
 			cputimer_freq = *tsc_freq >> *tsc_shift;
 			/* XXX Check whether TSC is mpsafe and invariant. */
 		}
