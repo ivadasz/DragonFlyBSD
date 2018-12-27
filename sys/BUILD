@@ -296,6 +296,7 @@ dfly_kernel_binary(
         "//sys/crypto/chacha",
         "//sys/crypto/sha2",
         "//sys/platform/rump/mi",
+        "//sys/platform/rump/x86_64",
         "//sys/cpu/x86_64/misc",
         #"//sys/libkern",
 

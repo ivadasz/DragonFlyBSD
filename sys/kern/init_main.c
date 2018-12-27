@@ -340,6 +340,7 @@ endofcoldboot(void *dummy __unused)
 }
 SYSINIT(endofcoldboot, SI_SUB_ISWARM, SI_ORDER_ANY, endofcoldboot, NULL);
 
+#ifndef _KERNEL_RUMP
 /*
  ***************************************************************************
  ****
@@ -722,6 +723,7 @@ kick_init(const void *udata __unused)
 	start_forked_proc(&lwp0, initproc);
 }
 SYSINIT(kickinit, SI_SUB_KTHREAD_INIT, SI_ORDER_FIRST, kick_init, NULL);
+#endif
 
 #ifdef ENABLE_UPMAP
 static void

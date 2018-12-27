@@ -1,9 +1,9 @@
 load("//sys:build_defs.bzl", "dfly_kernel_lib")
 
 dfly_kernel_lib(
-    name = "mi",
+    name = "x86_64",
     srcs = [
-        "main.c",
+        "cpu.c",
     ],
     deps = [
         "//sys/sys:options",
