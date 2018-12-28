@@ -35,7 +35,9 @@
  * $FreeBSD: src/sys/kern/tty_cons.c,v 1.81.2.4 2001/12/17 18:44:41 guido Exp $
  */
 
+#ifndef _RUMPKERNEL
 #include "opt_ddb.h"
+#endif
 #include "opt_comconsole.h"
 #include "opt_constty.h"
 

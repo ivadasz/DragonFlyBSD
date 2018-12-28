@@ -37,7 +37,9 @@
  * message processing.
  */
 
+#ifndef _RUMPKERNEL
 #include "opt_ddb.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,6 +54,7 @@
 #include <machine/cpu.h>
 #include <sys/lock.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_param.h>
 #include <vm/vm_kern.h>
@@ -61,6 +64,7 @@
 #include <vm/vm_pager.h>
 #include <vm/vm_extern.h>
 #include <vm/vm_zone.h>
+#endif
 
 #include <machine/stdarg.h>
 #include <machine/smp.h>

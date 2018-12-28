@@ -43,8 +43,10 @@
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/sysctl.h>
+#ifndef _RUMPKERNEL
 #include <vm/pmap.h>
 #include <machine/vmparam.h>
+#endif
 
 /*
  * System parameter formulae.

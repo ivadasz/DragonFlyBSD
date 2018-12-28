@@ -8,8 +8,6 @@ dfly_kernel_lib(
             # when building a profiling kernel, apparently).
             "atomic.c",
             "cputimer_tsc.c",
-            "lwbuf.c",
-            "bzeront.s",
         ],
         "//sys:metal": [
             # TODO(ivadasz): Compile atomic with -fomit-frame-pointer (except when
@@ -26,13 +24,21 @@ dfly_kernel_lib(
             #"x86_64-gdbstub.c",
         ],
     }),
-    deps = [
-        "//sys/sys:options",
-        "//sys/sys",
-        "//sys/vm",
-        "//sys/platform/pc64/x86_64:assym",
-        # For db_disasm.c
-        #"//sys/ddb:ddb_all",
-    ],
+    deps = select({
+        "//sys:userspace": [
+            "//sys/sys:options",
+            "//sys/sys",
+            # For db_disasm.c
+            #"//sys/ddb:ddb_all",
+        ],
+        "//sys:metal": [
+            "//sys/sys:options",
+            "//sys/sys",
+            "//sys/vm",
+            "//sys/platform/pc64/x86_64:assym",
+            # For db_disasm.c
+            #"//sys/ddb:ddb_all",
+        ],
+    }),
     visibility = ["//visibility:public"],
 )

@@ -59,7 +59,9 @@
 #include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <sys/syslog.h>
+#ifndef _RUMPKERNEL
 #include <sys/vmmeter.h>
+#endif
 #include <sys/vnode.h>
 #include <sys/vfsops.h>
 #include <sys/sysmsg.h>
@@ -67,6 +69,7 @@
 
 #include <machine/limits.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_object.h>
 #include <vm/vm_extern.h>
@@ -77,6 +80,7 @@
 #include <vm/vm_pager.h>
 #include <vm/vnode_pager.h>
 #include <vm/vm_zone.h>
+#endif
 
 #include <sys/buf2.h>
 #include <sys/thread2.h>
@@ -992,6 +996,7 @@ vop_reallocblks(struct vop_ops *ops, struct vnode *vp,
 	return(error);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * MPSAFE
  */
@@ -1043,6 +1048,7 @@ vop_putpages(struct vop_ops *ops, struct vnode *vp, vm_page_t *m, int count,
 	VFS_MPUNLOCK(vp->v_mount);
 	return(error);
 }
+#endif
 
 /*
  * MPSAFE

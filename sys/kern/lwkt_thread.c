@@ -60,6 +60,9 @@
 
 #include <sys/dsched.h>
 
+#ifdef _RUMPKERNEL
+#include <vm/vm_extern.h>
+#else
 #include <vm/vm.h>
 #include <vm/vm_param.h>
 #include <vm/vm_kern.h>
@@ -68,6 +71,7 @@
 #include <vm/vm_map.h>
 #include <vm/vm_pager.h>
 #include <vm/vm_extern.h>
+#endif
 
 #include <machine/stdarg.h>
 #include <machine/smp.h>

@@ -48,16 +48,6 @@
 #include <machine/cpu.h>
 #include <sys/lock.h>
 
-#include <vm/vm.h>
-#include <vm/vm_param.h>
-#include <vm/vm_kern.h>
-#include <vm/vm_object.h>
-#include <vm/vm_page.h>
-#include <vm/vm_map.h>
-#include <vm/vm_pager.h>
-#include <vm/vm_extern.h>
-#include <vm/vm_zone.h>
-
 #include <sys/thread2.h>
 #include <sys/msgport2.h>
 #include <sys/spinlock2.h>

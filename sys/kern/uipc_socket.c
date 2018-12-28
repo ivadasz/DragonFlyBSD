@@ -84,8 +84,10 @@
 #include <sys/sysctl.h>
 #include <sys/uio.h>
 #include <sys/jail.h>
+#ifndef _RUMPKERNEL
 #include <vm/vm_zone.h>
 #include <vm/pmap.h>
+#endif
 #include <net/netmsg2.h>
 #include <net/netisr2.h>
 

@@ -40,7 +40,9 @@
 #include <sys/proc.h>
 #include <sys/rtprio.h>
 #include <sys/queue.h>
+#ifndef _RUMPKERNEL
 #include <machine/cpu.h>
+#endif
 #include <sys/spinlock.h>
 #include <sys/iosched.h>
 #include <sys/sysctl.h>
@@ -50,10 +52,12 @@
 #include <sys/thread2.h>
 #include <sys/spinlock2.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_param.h>
 #include <vm/vm_kern.h>
 #include <vm/vm_extern.h>
+#endif
 
 SYSCTL_NODE(, OID_AUTO, iosched, CTLFLAG_RW, 0, "I/O Scheduler");
 

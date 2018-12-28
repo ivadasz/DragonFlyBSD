@@ -59,8 +59,14 @@
 #ifndef _SYS_VNODE_H_
 #include <sys/vnode.h>
 #endif
+#ifdef _RUMPKERNEL
+#define ACT_MAX 64
+#define ACT_ADVANCE 3
+#define ACT_DECLINE 1
+#else
 #ifndef _VM_VM_PAGE_H_
 #include <vm/vm_page.h>
+#endif
 #endif
 
 /*

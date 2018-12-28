@@ -36,7 +36,9 @@
  */
 
 #include "opt_constty.h"
+#ifndef _RUMPKERNEL
 #include "opt_ddb.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>

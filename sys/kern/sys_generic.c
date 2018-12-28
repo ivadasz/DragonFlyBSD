@@ -63,8 +63,6 @@
 #ifdef KTRACE
 #include <sys/ktrace.h>
 #endif
-#include <vm/vm.h>
-#include <vm/vm_page.h>
 
 #include <sys/file2.h>
 #include <sys/spinlock2.h>

@@ -178,6 +178,7 @@ dfly_kernel_headers(
             ":upmap_options",
         ],
         "//sys:userspace": [
+            ":constty_options",
             ":cpu_options",
             ":global_options",
             ":kcollect_options",

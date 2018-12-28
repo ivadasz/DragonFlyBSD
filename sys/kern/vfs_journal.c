@@ -1393,6 +1393,7 @@ jrecord_write_vnode_link(struct jrecord *jrec, struct vnode *vp,
     }
 }
 
+#ifndef _RUMPKERNEL
 /*
  * Write out the data represented by a pagelist
  */
@@ -1445,6 +1446,7 @@ jrecord_write_pagelist(struct jrecord *jrec, int16_t rectype,
 	}
     }
 }
+#endif
 
 /*
  * Write out the data represented by a UIO.

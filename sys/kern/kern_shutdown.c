@@ -35,10 +35,14 @@
  * $FreeBSD: src/sys/kern/kern_shutdown.c,v 1.72.2.12 2002/02/21 19:15:10 dillon Exp $
  */
 
+#ifndef _RUMPKERNEL
 #include "opt_ddb.h"
 #include "opt_ddb_trace.h"
+#endif
 #include "opt_panic.h"
+#ifndef _RUMPKERNEL
 #include "use_gpio.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,7 +57,9 @@
 #include <sys/stat.h>		/* S_IFCHR	*/
 #include <sys/vnode.h>
 #include <sys/kernel.h>
+#ifndef _RUMPKERNEL
 #include <sys/kerneldump.h>
+#endif
 #include <sys/kthread.h>
 #include <sys/malloc.h>
 #include <sys/mount.h>
@@ -67,8 +73,10 @@
 #include <sys/kbio.h>
 #include <sys/shm.h>
 #include <sys/kern_syscall.h>
+#ifndef _RUMPKERNEL
 #include <vm/vm_map.h>
 #include <vm/pmap.h>
+#endif
 
 #include <sys/thread2.h>
 #include <sys/buf2.h>
@@ -78,7 +86,9 @@
 #include <machine/clock.h>
 #include <machine/md_var.h>
 #include <machine/smp.h>		/* smp_active_mask, cpuid */
+#ifndef _RUMPKERNEL
 #include <machine/vmparam.h>
+#endif
 #include <machine/thread.h>
 
 #include <sys/signalvar.h>
@@ -86,7 +96,9 @@
 #if defined(WDOG_DISABLE_ON_PANIC)
 #include <sys/wdog.h>
 #endif
+#ifndef _RUMPKERNEL
 #include <dev/acpica/acpi_pvpanic/panic_notifier.h>
+#endif
 #if (NGPIO > 0) && defined(ERROR_LED_ON_PANIC)
 #include <dev/misc/gpio/gpio.h>
 #endif
@@ -149,15 +161,21 @@ int dumplo;				/* OBSOLETE - savecore compat */
 u_int64_t dumplo64;
 
 static void boot (int) __dead2;
+#ifndef _RUMPKERNEL
 static int setdumpdev (cdev_t dev);
+#endif
 static void poweroff_wait (void *, int);
 static void print_uptime (void);
 static void shutdown_halt (void *junk, int howto);
 static void shutdown_panic (void *junk, int howto);
+#ifndef _RUMPKERNEL
 static void shutdown_reset (void *junk, int howto);
+#endif
 static int shutdown_busycount1(struct buf *bp, void *info);
 static int shutdown_busycount2(struct buf *bp, void *info);
+#ifndef _RUMPKERNEL
 static void shutdown_cleanup_proc(struct proc *p);
+#endif
 
 /* register various local shutdown events */
 static void 
@@ -166,7 +184,9 @@ shutdown_conf(void *unused)
 	EVENTHANDLER_REGISTER(shutdown_final, poweroff_wait, NULL, SHUTDOWN_PRI_FIRST);
 	EVENTHANDLER_REGISTER(shutdown_final, shutdown_halt, NULL, SHUTDOWN_PRI_LAST + 100);
 	EVENTHANDLER_REGISTER(shutdown_final, shutdown_panic, NULL, SHUTDOWN_PRI_LAST + 100);
+#ifndef _RUMPKERNEL
 	EVENTHANDLER_REGISTER(shutdown_final, shutdown_reset, NULL, SHUTDOWN_PRI_LAST + 200);
+#endif
 }
 
 SYSINIT(shutdown_conf, SI_BOOT2_MACHDEP, SI_ORDER_ANY, shutdown_conf, NULL);
@@ -289,6 +309,7 @@ boot(int howto)
 	 * process is stopped.
 	 */
 	if (panicstr == NULL) {
+#ifndef _RUMPKERNEL
 		shutdown_cleanup_proc(curproc);
 		shutdown_cleanup_proc(&proc0);
 		if (initproc) {
@@ -298,6 +319,7 @@ boot(int howto)
 			}
 			shutdown_cleanup_proc(initproc);
 		}
+#endif
 		vfs_cache_setroot(NULL, NULL);
 	}
 
@@ -391,9 +413,11 @@ boot(int howto)
 	 * Dump before doing post_sync shutdown ops
 	 */
 	crit_enter();
+#ifndef _RUMPKERNEL
 	if ((howto & (RB_HALT|RB_DUMP)) == RB_DUMP && !cold) {
 		dumpsys();
 	}
+#endif
 
 	/*
 	 * Ok, now do things that assume all filesystem activity has
@@ -546,6 +570,7 @@ shutdown_panic(void *junk, int howto)
 	}
 }
 
+#ifndef _RUMPKERNEL
 /*
  * Everything done, now reset
  */
@@ -724,7 +749,9 @@ sysctl_kern_dumpdev(SYSCTL_HANDLER_ARGS)
 
 SYSCTL_PROC(_kern, KERN_DUMPDEV, dumpdev, CTLTYPE_OPAQUE|CTLFLAG_RW,
 	0, sizeof dumpdev, sysctl_kern_dumpdev, "T,udev_t", "");
+#endif
 
+#ifndef _RUMPKERNEL
 static struct panicerinfo *panic_notifier;
 
 int
@@ -739,6 +766,7 @@ set_panic_notifier(struct panicerinfo *info)
 
 	return 0;
 }
+#endif
 
 /*
  * Panic is called on unresolvable fatal errors.  It prints "panic: mesg",
@@ -843,8 +871,10 @@ panic(const char *fmt, ...)
 	if (panicstr == fmt)
 		panicstr = buf;
 	__va_end(ap);
+#ifndef _RUMPKERNEL
 	if (panic_notifier != NULL)
 		panic_notifier->notifier(panic_notifier->arg);
+#endif
 	kprintf("panic: %s\n", buf);
 	/* two separate prints in case of an unmapped page and trap */
 	kprintf("cpuid = %d\n", mycpu->gd_cpuid);
@@ -861,7 +891,9 @@ panic(const char *fmt, ...)
 	 * Make sure kgdb knows who we are, there won't be a stoppcbs[]
 	 * entry since our cpu wasn't stopped.
 	 */
+#ifndef _RUMPKERNEL
 	savectx(&dumppcb);
+#endif
 	dumpthread = curthread;
 
 	/*
@@ -949,6 +981,7 @@ shutdown_kproc(void *arg, int howto)
 		kprintf("stopped\n");
 }
 
+#ifndef _RUMPKERNEL
 /* Registration of dumpers */
 int
 set_dumper(struct dumperinfo *di)
@@ -1015,3 +1048,4 @@ dump_reactivate_cpus(void)
 
 	restart_cpus(stopped_cpus);
 }
+#endif

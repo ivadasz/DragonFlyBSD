@@ -51,9 +51,11 @@
 #include <sys/malloc.h>
 #include <sys/stat.h>
 #include <sys/reg.h>
+#ifndef _RUMPKERNEL
 #include <vm/vm_pager.h>
 #include <vm/vm_zone.h>
 #include <vm/vm_object.h>
+#endif
 #include <sys/filio.h>
 #include <sys/ttycom.h>
 #include <sys/tty.h>
@@ -66,7 +68,9 @@
 #include <machine/limits.h>
 
 #include <sys/buf2.h>
+#ifndef _RUMPKERNEL
 #include <vm/vm_page2.h>
+#endif
 
 #ifndef SPEC_CHAIN_DEBUG
 #define SPEC_CHAIN_DEBUG 0
@@ -105,8 +109,10 @@ static void devfs_spec_strategy_done(struct bio *);
 static int devfs_spec_freeblks(struct vop_freeblks_args *);
 static int devfs_spec_bmap(struct vop_bmap_args *);
 static int devfs_spec_advlock(struct vop_advlock_args *);
+#ifndef _RUMPKERNEL
 static void devfs_spec_getpages_iodone(struct bio *);
 static int devfs_spec_getpages(struct vop_getpages_args *);
+#endif
 
 static int devfs_fo_close(struct file *);
 static int devfs_fo_read(struct file *, struct uio *, struct ucred *, int);
@@ -165,7 +171,9 @@ struct vop_ops devfs_vnode_dev_vops = {
 	.vop_freeblks =		devfs_spec_freeblks,
 	.vop_fsync =		devfs_spec_fsync,
 	.vop_getattr =		devfs_vop_getattr,
+#ifndef _RUMPKERNEL
 	.vop_getpages =		devfs_spec_getpages,
+#endif
 	.vop_inactive =		devfs_vop_inactive,
 	.vop_open =		devfs_spec_open,
 	.vop_pathconf =		vop_stdpathconf,
@@ -2004,6 +2012,7 @@ devfs_spec_advlock(struct vop_advlock_args *ap)
 	return ((ap->a_flags & F_POSIX) ? EINVAL : EOPNOTSUPP);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * NOTE: MPSAFE callback.
  */
@@ -2191,6 +2200,7 @@ devfs_spec_getpages(struct vop_getpages_args *ap)
 		nanotime(&DEVFS_NODE(ap->a_vp)->mtime);
 	return VM_PAGER_OK;
 }
+#endif
 
 static __inline
 int

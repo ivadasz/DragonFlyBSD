@@ -89,10 +89,6 @@
 #include <machine/atomic.h>
 #include <machine/limits.h>
 
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
-#include <vm/vm_extern.h>
-
 #ifdef INVARIANTS
 #include <machine/cpu.h>
 #endif

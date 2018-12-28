@@ -96,17 +96,22 @@ rump_excludes = always_excludes + [
     "imgact_shell.c",
     "imgact_resident.c",
     "init_sysent.c",
+    "kern_acct.c",
     "kern_checkpoint.c",
     "kern_exec.c",
     "kern_exit.c",
     "kern_fork.c",
     "kern_jail.c",
+    "kern_module.c",
     "kern_proc.c",
     "kern_prot.c",
     "kern_resource.c",
+    "kern_sfbuf.c",
     "kern_sig.c",
     "kern_umtx.c",
     "kern_usched.c",
+    "kern_xio.c",
+    "subr_alist.c",
     "subr_busdma.c",
     "sysv_ipc.c",
     "sysv_msg.c",
@@ -114,6 +119,13 @@ rump_excludes = always_excludes + [
     "sysv_shm.c",
     "sys_process.c",
     "sys_vmm.c",
+    "usched_bsd4.c",
+    "usched_dfly.c",
+    "usched_dummy.c",
+    "vfs_aio.c",
+    "vfs_cluster.c",
+    "vfs_lock.c",
+    "vfs_mount.c",
 ]
 
 dfly_kernel_lib(
@@ -127,29 +139,54 @@ dfly_kernel_lib(
             ":core_ifs_srcs",
         ]
     }),
-    deps = [
-        "//sys/sys:options",
-        "//sys/sys",
-        "//sys/ddb",
-        "//sys/vm",
-        "//sys/crypto/sha2",
-        "//sys/crypto/chacha",
-        "//sys/net",
-        "//sys/netinet",
-        "//sys/netinet6",
-        "//sys/net/altq:net_altq",
-        # kobj headers
-        ":core_ifs",
-        # very specific includes
-        "//sys/net:radix",
-        "//sys/vfs/ufs:dinode",
-        "//sys/vfs/ufs:fs",
-        "//sys/vfs/procfs",
-        "//crypto/libressl/include/openssl:md5",
-        "//sys/dev/acpica/acpi_pvpanic",
+    deps = select({
+        "//sys:metal": [
+            "//sys/sys:options",
+            "//sys/sys",
+            "//sys/ddb",
+            "//sys/vm",
+            "//sys/crypto/sha2",
+            "//sys/crypto/chacha",
+            "//sys/net",
+            "//sys/netinet",
+            "//sys/netinet6",
+            "//sys/net/altq:net_altq",
+            # kobj headers
+            ":core_ifs",
+            # very specific includes
+            "//sys/net:radix",
+            "//sys/vfs/ufs:dinode",
+            "//sys/vfs/ufs:fs",
+            "//sys/vfs/procfs",
+            "//crypto/libressl/include/openssl:md5",
+            "//sys/dev/acpica/acpi_pvpanic",
 
-        # ioconf
-        ":ioconf",
-    ],
+            # ioconf
+            ":ioconf",
+        ],
+        "//sys:userspace": [
+            "//sys/sys:options",
+            "//sys/sys",
+            "//sys/ddb",
+            "//sys/platform/rump/vm",
+            "//sys/crypto/sha2",
+            "//sys/crypto/chacha",
+            "//sys/net",
+            "//sys/netinet",
+            "//sys/netinet6",
+            "//sys/net/altq:net_altq",
+            # kobj headers
+            ":core_ifs",
+            # very specific includes
+            "//sys/net:radix",
+            "//sys/vfs/ufs:dinode",
+            "//sys/vfs/ufs:fs",
+            "//sys/vfs/procfs",
+            "//crypto/libressl/include/openssl:md5",
+
+            # ioconf
+            ":ioconf",
+        ]
+    }),
     visibility = ["//visibility:public"],
 )

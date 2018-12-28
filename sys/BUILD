@@ -25,6 +25,7 @@ config_setting(
     constraint_values = [
         ":rump",
     ],
+    visibility = ["//visibility:public"],
 )
 
 config_setting(
@@ -32,6 +33,7 @@ config_setting(
     constraint_values = [
         ":generic",
     ],
+    visibility = ["//visibility:public"],
 )
 
 platform(
@@ -309,9 +311,6 @@ dfly_kernel_binary(
 
         # Drivers
         #"//sys/dev/disk/md",
-
-        # DDB support
-        #"//sys/ddb:ddb_obj",
     ],
     #ldscript = "//sys/platform/pc64/conf:ldscript.x86_64",
     #toolchains = [":dragonfly_kernel_rump_toolchain"],

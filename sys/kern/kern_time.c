@@ -30,7 +30,9 @@
  * $FreeBSD: src/sys/kern/kern_time.c,v 1.68.2.1 2002/10/01 08:00:41 bde Exp $
  */
 
+#ifndef _RUMPKERNEL
 #include "opt_upmap.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,8 +52,6 @@
 #ifdef ENABLE_UPMAP
 #include <sys/upmap.h>
 #endif
-#include <vm/vm.h>
-#include <vm/vm_extern.h>
 
 #include <sys/msgport2.h>
 #include <sys/spinlock2.h>

@@ -96,15 +96,19 @@
 #include <sys/sysctl.h>
 #include <sys/thread2.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <sys/lock.h>
 #include <vm/pmap.h>
 #include <vm/vm_map.h>
 #include <vm/vm_extern.h>
+#endif
 
 MALLOC_DEFINE(M_TTYS, "ttys", "tty data structures");
 
+#ifndef _RUMPKERNEL
 static int	proc_compare (struct proc *p1, struct proc *p2);
+#endif
 static int	ttnread (struct tty *tp);
 static void	ttyecho (int c, struct tty *tp);
 static int	ttyoutput (int c, struct tty *tp);
@@ -2494,6 +2498,7 @@ ttsetwater(struct tty *tp)
 
 #undef	CLAMP
 
+#ifndef _RUMPKERNEL
 /*
  * Report on state of foreground process group.
  */
@@ -2764,6 +2769,7 @@ done:
 	lwkt_reltoken(&p1->p_token);
 	return (res);
 }
+#endif
 
 /*
  * Output char to tty; console putchar style.

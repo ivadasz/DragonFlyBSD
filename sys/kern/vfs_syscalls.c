@@ -48,7 +48,9 @@
 #include <sys/kernel.h>
 #include <sys/fcntl.h>
 #include <sys/file.h>
+#ifndef _RUMPKERNEL
 #include <sys/linker.h>
+#endif
 #include <sys/stat.h>
 #include <sys/unistd.h>
 #include <sys/vnode.h>
@@ -293,6 +295,7 @@ sys_mount(struct mount_args *uap)
 	}
 	vfsp = vfsconf_find_by_name(fstypename);
 	if (vfsp == NULL) {
+#ifndef _RUMPKERNEL
 		linker_file_t lf;
 
 		/* Only load modules for root (very important!) */
@@ -328,6 +331,12 @@ sys_mount(struct mount_args *uap)
 			error = ENODEV;
 			goto done;
 		}
+#else
+		cache_drop(&nch);
+		vput(vp);
+		error = ENODEV;
+		goto done;
+#endif
 	}
 	if (hasmount) {
 		cache_drop(&nch);
