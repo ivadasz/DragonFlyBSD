@@ -103,10 +103,16 @@ nlookup_init(struct nlookupdata *nd,
     bzero(nd, sizeof(struct nlookupdata));
     nd->nl_path = objcache_get(namei_oc, M_WAITOK);
     nd->nl_flags |= NLC_HASBUF;
-    if (seg == UIO_SYSSPACE) 
+    if (seg == UIO_SYSSPACE) {
 	error = copystr(path, nd->nl_path, MAXPATHLEN, &pathlen);
-    else
+    } else {
+#ifdef _RUMPKERNEL
+        /* Not supported at the moment. */
+        error = ENOENT;
+#else
 	error = copyinstr(path, nd->nl_path, MAXPATHLEN, &pathlen);
+#endif
+    }
 
     /*
      * Don't allow empty pathnames.
@@ -212,10 +218,16 @@ nlookup_init_raw(struct nlookupdata *nd,
     bzero(nd, sizeof(struct nlookupdata));
     nd->nl_path = objcache_get(namei_oc, M_WAITOK);
     nd->nl_flags |= NLC_HASBUF;
-    if (seg == UIO_SYSSPACE) 
+    if (seg == UIO_SYSSPACE) {
 	error = copystr(path, nd->nl_path, MAXPATHLEN, &pathlen);
-    else
+    } else {
+#ifdef _RUMPKERNEL
+        /* Not supported at the moment. */
+        error = ENOENT;
+#else
 	error = copyinstr(path, nd->nl_path, MAXPATHLEN, &pathlen);
+#endif
+    }
 
     /*
      * Don't allow empty pathnames.
@@ -256,10 +268,16 @@ nlookup_init_root(struct nlookupdata *nd,
     bzero(nd, sizeof(struct nlookupdata));
     nd->nl_path = objcache_get(namei_oc, M_WAITOK);
     nd->nl_flags |= NLC_HASBUF;
-    if (seg == UIO_SYSSPACE) 
+    if (seg == UIO_SYSSPACE) {
 	error = copystr(path, nd->nl_path, MAXPATHLEN, &pathlen);
-    else
+    } else {
+#ifdef _RUMPKERNEL
+        /* Not supported at the moment. */
+        error = ENOENT;
+#else
 	error = copyinstr(path, nd->nl_path, MAXPATHLEN, &pathlen);
+#endif
+    }
 
     /*
      * Don't allow empty pathnames.

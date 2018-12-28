@@ -100,6 +100,7 @@ rump_excludes = always_excludes + [
     "kern_exec.c",
     "kern_exit.c",
     "kern_fork.c",
+    "kern_jail.c",
     "kern_proc.c",
     "kern_prot.c",
     "kern_resource.c",

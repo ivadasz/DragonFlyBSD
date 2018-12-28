@@ -393,14 +393,12 @@ collect_cputime_callback(int n)
 	if (acc == 0)		/* prevent degenerate divide by 0 */
 		acc = 1;
 	lsb = acc / (10000 * 2);
-#ifdef ENABLE_KCOLLECT
 	kcollect_setvalue(KCOLLECT_SYSTPCT,
 			  (cpu_states[CP_SYS] + lsb) * 10000 / acc);
 	kcollect_setvalue(KCOLLECT_IDLEPCT,
 			  (cpu_states[CP_IDLE] + lsb) * 10000 / acc);
 	kcollect_setvalue(KCOLLECT_INTRPCT,
 			  (cpu_states[CP_INTR] + lsb) * 10000 / acc);
-#endif
 	return((cpu_states[CP_USER] + cpu_states[CP_NICE] + lsb) * 10000 / acc);
 }
 #endif
@@ -457,6 +455,7 @@ initclocks_other(void *dummy)
 }
 SYSINIT(clocks2, SI_BOOT2_POST_SMP, SI_ORDER_ANY, initclocks_other, NULL);
 
+#ifndef _RUMPKERNEL
 /*
  * This method is called on just the BSP, after all the usched implementations
  * are initialized. This avoids races between usched initialization functions
@@ -481,6 +480,7 @@ initclocks_usched(void *dummy)
 	lwkt_setcpu_self(ogd);
 }
 SYSINIT(clocks3, SI_BOOT2_USCHED, SI_ORDER_ANY, initclocks_usched, NULL);
+#endif
 
 /*
  * This sets the current real time of day.  Timespecs are in seconds and
@@ -1050,6 +1050,7 @@ SYSCTL_PROC(_kern, OID_AUTO, pctrack, (CTLTYPE_OPAQUE|CTLFLAG_RD), 0, 0,
 
 #endif
 
+#ifndef _RUMPKERNEL
 /*
  * The scheduler clock typically runs at a 50Hz rate.  NOTE! systimer,
  * the MP lock might not be held.  We can safely manipulate parts of curproc
@@ -1097,6 +1098,7 @@ schedclock(systimer_t info, int in_ipi __unused, struct intrframe *frame)
 	if (mycpu->gd_cpuid == 0)
 		++sched_ticks;
 }
+#endif
 
 /*
  * Compute number of ticks for the specified amount of time.  The 

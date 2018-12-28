@@ -23,16 +23,20 @@ dfly_kernel_headers(
 
 dfly_kernel_headers(
     name = "machine_cpu_core",
-    # TODO(ivadasz): Do a select on the cpu architecture
-    hdrs = ["//sys/cpu/x86_64/include:cpu_headers_core"],
+    hdrs = select({
+        "//sys:metal": ["//sys/cpu/x86_64/include:cpu_headers_core"],
+        "//sys:userspace": ["//sys/cpu/x86_64/include:cpu_headers_core"],
+    }),
     include_prefix = "cpu",
     visibility = ["//visibility:public"],
 )
 
 dfly_kernel_headers(
     name = "machine_cpu",
-    # TODO(ivadasz): Do a select on the cpu architecture
-    hdrs = ["//sys/cpu/x86_64/include:cpu_headers"],
+    hdrs = select({
+        "//sys:metal": ["//sys/cpu/x86_64/include:cpu_headers_core"],
+        "//sys:userspace": ["//sys/cpu/x86_64/include:cpu_headers_core"],
+    }),
     deps = [":machine_cpu_core"],
     include_prefix = "cpu",
     visibility = ["//visibility:public"],
@@ -40,16 +44,26 @@ dfly_kernel_headers(
 
 dfly_kernel_headers(
     name = "platform",
-    # TODO(ivadasz): Do a select on the dragonfly platform
-    hdrs = [
-        "//sys/platform/pc64/include:platform_headers",
-        "//sys/cpu/x86_64/include:machine_headers",
-    ],
+    hdrs = select({
+        "//sys:metal": [
+            "//sys/platform/pc64/include:platform_headers",
+            "//sys/cpu/x86_64/include:machine_headers",
+        ],
+        "//sys:userspace": [
+            "//sys/platform/rump/include:platform_headers",
+            "//sys/cpu/x86_64/include:machine_headers",
+        ],
+    }),
     include_prefix = "machine",
-    deps = [
-        "//sys/platform/pc64/apic:apicreg",
-        ":machine_cpu_core",
-    ],
+    deps = select({
+        "//sys:metal": [
+            "//sys/platform/pc64/apic:apicreg",
+            ":machine_cpu_core",
+        ],
+        "//sys:userspace": [
+            ":machine_cpu_core",
+        ],
+    }),
     visibility = ["//visibility:public"],
 )
 
@@ -147,20 +161,31 @@ filegroup(
 
 dfly_kernel_headers(
     name = "options",
-    hdrs = [
-        ":opt_dummy_targets",
-        ":use_dummy_targets",
-        ":maxusers_options",
-        ":global_options",
-        ":cpu_options",
-        ":use_options",
-        ":ddb_options",
-        ":md_options",
-        ":kcollect_options",
-        ":sensors_options",
-        ":constty_options",
-        ":topology_options",
-        ":upmap_options",
-    ],
+    hdrs = select({
+        "//sys:metal": [
+            ":opt_dummy_targets",
+            ":use_dummy_targets",
+            ":maxusers_options",
+            ":global_options",
+            ":cpu_options",
+            ":use_options",
+            ":ddb_options",
+            ":md_options",
+            ":kcollect_options",
+            ":sensors_options",
+            ":constty_options",
+            ":topology_options",
+            ":upmap_options",
+        ],
+        "//sys:userspace": [
+            ":cpu_options",
+            ":global_options",
+            ":kcollect_options",
+            ":maxusers_options",
+            ":opt_dummy_targets",
+            ":sensors_options",
+            ":topology_options",
+        ],
+    }),
     visibility = ["//visibility:public"],
 )

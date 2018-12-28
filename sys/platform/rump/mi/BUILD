@@ -3,6 +3,7 @@ load("//sys:build_defs.bzl", "dfly_kernel_lib")
 dfly_kernel_lib(
     name = "mi",
     srcs = [
+        "copyio.c",
         "main.c",
     ],
     deps = [

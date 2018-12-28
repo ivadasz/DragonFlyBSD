@@ -156,6 +156,7 @@ sysinit_add(struct sysinit **set, struct sysinit **set_end)
 	newsysinit_end = newset + count;
 }
 
+#ifndef _RUMPKERNEL
 /*
  * Callbacks from machine-dependant startup code (e.g. init386) to set
  * up low level entities related to cpu #0's globaldata.
@@ -186,6 +187,7 @@ mi_proc0init(struct globaldata *gd, struct user *proc0paddr)
 	thread0.td_switch = cpu_lwkt_switch;
 	lwkt_schedule_self(curthread);
 }
+#endif
 
 /*
  * System startup; initialize the world, create process 0, mount root
