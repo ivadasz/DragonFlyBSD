@@ -235,7 +235,7 @@ lwkt_send_ipiq3(globaldata_t target, ipifunc3_t func, void *arg1, int arg2)
 
     if (ip->ip_windex - ip->ip_rindex > level1) {
 #ifndef _KERNEL_VIRTUAL
-	uint64_t tsc_base = rdtsc();
+	uint64_t tsc_target = tsc_get_target(1000000000);
 #endif
 	int repeating = 0;
 	int olimit;
@@ -259,7 +259,7 @@ lwkt_send_ipiq3(globaldata_t target, ipifunc3_t func, void *arg1, int arg2)
 	    if (repeating++ > 10)
 		    pthread_yield();
 #else
-	    if (rdtsc() - tsc_base > tsc_frequency) {
+	    if (tsc_test_target(tsc_target) != 0) {
 		++repeating;
 		if (repeating > 10) {
 			kprintf("send_ipiq %d->%d tgt not draining (%d) sniff=%p,%p\n",
@@ -275,7 +275,7 @@ lwkt_send_ipiq3(globaldata_t target, ipifunc3_t func, void *arg1, int arg2)
 				gd->gd_cpuid, target->gd_cpuid, repeating);
 			smp_sniff();
 		}
-		tsc_base = rdtsc();
+		tsc_target = tsc_get_target(1000000000);
 	    }
 #endif
 	}
