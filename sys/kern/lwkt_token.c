@@ -62,6 +62,7 @@
 #include <sys/spinlock2.h>
 #include <sys/mplock2.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_param.h>
 #include <vm/vm_kern.h>
@@ -71,11 +72,14 @@
 #include <vm/vm_pager.h>
 #include <vm/vm_extern.h>
 #include <vm/vm_zone.h>
+#endif
 
 #include <machine/stdarg.h>
 #include <machine/smp.h>
 
+#ifndef _RUMPKERNEL
 #include "opt_ddb.h"
+#endif
 #ifdef DDB
 #include <ddb/ddb.h>
 #endif

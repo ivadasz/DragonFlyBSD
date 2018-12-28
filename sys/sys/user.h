@@ -70,6 +70,7 @@
 #ifndef _SYS_LOCK_H_
 #include <sys/lock.h>		/* XXX */
 #endif
+#ifndef _RUMPKERNEL
 #ifndef _VM_VM_H_
 #include <vm/vm.h>		/* XXX */
 #endif
@@ -81,6 +82,7 @@
 #endif
 #ifndef _VM_VM_MAP_H_
 #include <vm/vm_map.h>		/* XXX */
+#endif
 #endif
 #ifndef _SYS_RESOURCEVAR_H_
 #include <sys/resourcevar.h>

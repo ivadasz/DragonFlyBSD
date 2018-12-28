@@ -64,6 +64,7 @@
 
 #include <machine/limits.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_object.h>
 #include <vm/vm_extern.h>
@@ -73,6 +74,7 @@
 #include <vm/vm_page.h>
 #include <vm/vm_pager.h>
 #include <vm/vnode_pager.h>
+#endif
 
 #include <sys/buf2.h>
 #include <sys/thread2.h>

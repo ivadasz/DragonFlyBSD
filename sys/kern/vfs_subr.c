@@ -38,7 +38,9 @@
 /*
  * External virtual filesystem routines
  */
+#ifndef _RUMPKERNEL
 #include "opt_ddb.h"
+#endif
 #include "opt_inet.h"
 #include "opt_inet6.h"
 
@@ -67,6 +69,7 @@
 
 #include <machine/limits.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_object.h>
 #include <vm/vm_extern.h>
@@ -77,9 +80,12 @@
 #include <vm/vm_pager.h>
 #include <vm/vnode_pager.h>
 #include <vm/vm_zone.h>
+#endif
 
 #include <sys/buf2.h>
+#ifndef _RUMPKERNEL
 #include <vm/vm_page2.h>
+#endif
 
 #include <netinet/in.h>
 

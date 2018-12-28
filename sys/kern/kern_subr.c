@@ -48,15 +48,20 @@
 #include <sys/thread2.h>
 #include <machine/limits.h>
 
+#ifndef _RUMPKERNEL
 #include <cpu/lwbuf.h>
 
 #include <vm/vm.h>
 #include <vm/vm_page.h>
 #include <vm/vm_map.h>
+#endif
 
 SYSCTL_INT(_kern, KERN_IOV_MAX, iov_max, CTLFLAG_RD, NULL, UIO_MAXIOV,
 	"Maximum number of elements in an I/O vector; sysconf(_SC_IOV_MAX)");
 
+#ifdef _RUMPKERNEL
+/* XXX uiomove can directly copy the data. */
+#else
 int
 copyin_nofault(const void *udaddr, void *kaddr, size_t len)
 {
@@ -616,4 +621,4 @@ out:
 	}
 	return (error);
 }
-
+#endif

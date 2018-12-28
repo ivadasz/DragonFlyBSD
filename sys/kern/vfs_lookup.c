@@ -51,7 +51,9 @@
 #include <sys/ktrace.h>
 #endif
 
+#ifndef _RUMPKERNEL
 #include <vm/vm_zone.h>
+#endif
 
 int varsym_enable = 0;
 SYSCTL_INT(_vfs, OID_AUTO, varsym_enable, CTLFLAG_RW, &varsym_enable, 0,

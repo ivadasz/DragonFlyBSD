@@ -88,6 +88,7 @@ long	nbuf;
 long	nswbuf_mem;
 long	nswbuf_kva;
 long	nswbuf_raw;
+#ifndef _RUMPKERNEL
 long	maxswzone;			/* max swmeta KVA storage */
 long	maxbcache;			/* max buffer cache KVA storage */
 enum vmm_guest_type vmm_guest = VMM_GUEST_NONE;	/* Running as VM guest? */
@@ -186,6 +187,7 @@ detect_virtual(void)
 	}
 	return (VMM_GUEST_NONE);
 }
+#endif
 
 /*
  * Boot time overrides that are not scaled against main memory
@@ -202,6 +204,7 @@ init_param1(void)
 	/* can adjust 30ms in 60s */
 	ntp_default_tick_delta = howmany(30000000, 60 * hz);
 
+#ifndef _RUMPKERNEL
 #ifdef VM_SWZONE_SIZE_MAX
 	maxswzone = VM_SWZONE_SIZE_MAX;
 #endif
@@ -222,6 +225,7 @@ init_param1(void)
 	TUNABLE_QUAD_FETCH("kern.maxssiz", &maxssiz);
 	sgrowsiz = SGROWSIZ;
 	TUNABLE_QUAD_FETCH("kern.sgrowsiz", &sgrowsiz);
+#endif
 }
 
 /*
@@ -230,6 +234,7 @@ init_param1(void)
 void
 init_param2(int physpages)
 {
+#ifndef _RUMPKERNEL
 	size_t limsize;
 
 	/*
@@ -243,9 +248,11 @@ init_param2(int physpages)
 		maxswzone = limsize / 2;
 
 	limsize /= 1024 * 1024;		/* smaller of KVM or physmem in MB */
+#endif
 
 	/* Base parameters */
 	maxusers = MAXUSERS;
+#ifndef _RUMPKERNEL
 	TUNABLE_INT_FETCH("kern.maxusers", &maxusers);
 	if (maxusers == 0) {
 		maxusers = limsize / 8;		/* ~384 per 3G */
@@ -253,6 +260,7 @@ init_param2(int physpages)
 			maxusers = 32;
 		/* no upper limit */
 	}
+#endif
 
 	/*
 	 * The following can be overridden after boot via sysctl.  Note:

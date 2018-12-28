@@ -71,7 +71,9 @@
 #include "opt_kcollect.h"
 #include "opt_ntp.h"
 #include "opt_pctrack.h"
+#ifndef _RUMPKERNEL
 #include "opt_upmap.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>

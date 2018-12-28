@@ -26,7 +26,9 @@
 #include <sys/device.h>
 #include <sys/thread2.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
+#endif
 #include <vm/vm_extern.h>
 
 static int

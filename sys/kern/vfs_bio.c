@@ -46,6 +46,7 @@
 #include <sys/vmmeter.h>
 #include <sys/vnode.h>
 #include <sys/dsched.h>
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_param.h>
 #include <vm/vm_kern.h>
@@ -56,13 +57,18 @@
 #include <vm/vm_map.h>
 #include <vm/vm_pager.h>
 #include <vm/swap_pager.h>
+#endif
 
 #include <sys/buf2.h>
 #include <sys/thread2.h>
 #include <sys/spinlock2.h>
+#ifndef _RUMPKERNEL
 #include <vm/vm_page2.h>
+#endif
 
+#ifndef _RUMPKERNEL
 #include "opt_ddb.h"
+#endif
 #ifdef DDB
 #include <ddb/ddb.h>
 #endif
@@ -99,15 +105,19 @@ static MALLOC_DEFINE(M_BIOBUF, "BIO buffer", "BIO buffer");
 
 struct buf *buf;		/* buffer header pool */
 
+#ifndef _RUMPKERNEL
 static void vfs_clean_pages(struct buf *bp);
 static void vfs_clean_one_page(struct buf *bp, int pageno, vm_page_t m);
 #if 0
 static void vfs_dirty_one_page(struct buf *bp, int pageno, vm_page_t m);
 #endif
 static void vfs_vmio_release(struct buf *bp);
+#endif
 static int flushbufqueues(struct buf *marker, bufq_type_t q);
+#ifndef _RUMPKERNEL
 static vm_page_t bio_page_alloc(struct buf *bp, vm_object_t obj,
 				vm_pindex_t pg, int deficit);
+#endif
 
 static void bd_signal(long totalspace);
 static void buf_daemon(void);
@@ -4041,6 +4051,7 @@ vfs_clean_pages(struct buf *bp)
 	}
 }
 
+#ifndef _RUMPKERNEL
 /*
  * vfs_clean_one_page:
  *
@@ -4156,6 +4167,7 @@ vfs_clean_one_page(struct buf *bp, int pageno, vm_page_t m)
 	 */
 	vm_page_set_validclean(m, soff & PAGE_MASK, eoff - soff);
 }
+#endif
 
 #if 0
 /*

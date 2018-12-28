@@ -65,7 +65,9 @@
 #include <sys/devfs.h>
 #include <sys/sysctl.h>
 
+#ifndef _RUMPKERNEL
 #include "opt_ddb.h"
+#endif
 #ifdef DDB
 #include <ddb/ddb.h>
 #endif

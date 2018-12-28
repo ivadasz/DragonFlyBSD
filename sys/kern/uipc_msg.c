@@ -45,7 +45,6 @@
 #include <sys/spinlock2.h>
 #include <sys/sysctl.h>
 #include <sys/mbuf.h>
-#include <vm/pmap.h>
 
 #include <net/netmsg2.h>
 #include <net/netisr2.h>

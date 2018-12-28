@@ -466,7 +466,9 @@ lwkt_init_thread(thread_t td, void *stack, int stksize, int flags,
     } else {
 	lwkt_initport_thread(&td->td_msgport, td);
     }
+#ifndef _RUMPKERNEL
     pmap_init_thread(td);
+#endif
     /*
      * Normally initializing a thread for a remote cpu requires sending an
      * IPI.  However, the idlethread is setup before the other cpus are

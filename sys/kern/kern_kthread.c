@@ -30,7 +30,6 @@
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/kthread.h>
-#include <sys/ptrace.h>
 #include <sys/resourcevar.h>
 #include <sys/signalvar.h>
 #include <sys/unistd.h>

@@ -63,9 +63,12 @@
 #include <sys/event.h>
 #include <sys/mman.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_param.h>
+#endif
 #include <sys/lock.h>
+#ifndef _RUMPKERNEL
 #include <vm/pmap.h>
 #include <vm/vm_map.h>
 #include <vm/vm_object.h>
@@ -74,6 +77,7 @@
 #include <vm/vm_pageout.h>
 #include <vm/vm_extern.h>
 #include <vm/vm_kern.h>
+#endif
 
 #include <sys/file2.h>
 #include <machine/limits.h>
@@ -382,6 +386,7 @@ fp_stat(file_t fp, struct stat *ub)
     return(error);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * non-anonymous, non-stack descriptor mappings only!
  *
@@ -556,6 +561,7 @@ fp_mmap(void *addr_arg, size_t size, int prot, int flags, struct file *fp,
 done:
     return (error);
 }
+#endif
 
 int
 fp_close(file_t fp)

@@ -65,17 +65,6 @@
 
 #include <machine/limits.h>
 
-#include <vm/vm.h>
-#include <vm/vm_object.h>
-#include <vm/vm_extern.h>
-#include <vm/vm_kern.h>
-#include <vm/pmap.h>
-#include <vm/vm_map.h>
-#include <vm/vm_page.h>
-#include <vm/vm_pager.h>
-#include <vm/vnode_pager.h>
-#include <vm/vm_zone.h>
-
 #include <sys/buf2.h>
 #include <sys/thread2.h>
 #include <sys/mplock2.h>

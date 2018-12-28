@@ -48,6 +48,8 @@
 #include <sys/lock.h>
 #include <sys/sbuf.h>
 
+#include <machine/limits.h>
+
 #ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_extern.h>

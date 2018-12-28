@@ -70,9 +70,11 @@
 #include <sys/file2.h>
 #include <sys/spinlock2.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_object.h>
 #include <vm/vm_page.h>
+#endif
 
 #include <machine/limits.h>
 #include <machine/stdarg.h>
@@ -3972,19 +3974,23 @@ sys_fsync(struct fsync_args *uap)
 	struct thread *td = curthread;
 	struct vnode *vp;
 	struct file *fp;
+#ifndef _RUMPKERNEL
 	vm_object_t obj;
+#endif
 	int error;
 
 	if ((error = holdvnode(td, uap->fd, &fp)) != 0)
 		return (error);
 	vp = (struct vnode *)fp->f_data;
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+#ifndef _RUMPKERNEL
 	if ((obj = vp->v_object) != NULL) {
 		if (vp->v_mount == NULL ||
 		    (vp->v_mount->mnt_kern_flag & MNTK_NOMSYNC) == 0) {
 			vm_object_page_clean(obj, 0, 0, 0);
 		}
 	}
+#endif
 	error = VOP_FSYNC(vp, MNT_WAIT, VOP_FSYNC_SYSCALL);
 	if (error == 0 && vp->v_mount)
 		error = buf_fsync(vp);

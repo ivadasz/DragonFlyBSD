@@ -93,8 +93,12 @@
 #include <sys/un.h>
 #include <sys/objcache.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_extern.h>
+#endif
+
+#include <machine/limits.h>
 
 #include <sys/thread2.h>
 #include <sys/file2.h>

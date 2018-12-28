@@ -39,7 +39,9 @@
  */
 
 #include "opt_init_path.h"
+#ifndef _RUMPKERNEL
 #include "opt_upmap.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/file.h>
@@ -67,12 +69,16 @@
 
 #include <machine/cpu.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_param.h>
+#endif
 #include <sys/lock.h>
+#ifndef _RUMPKERNEL
 #include <vm/pmap.h>
 #include <vm/vm_map.h>
 #include <vm/vm_extern.h>
+#endif
 #include <sys/user.h>
 #include <sys/copyright.h>
 

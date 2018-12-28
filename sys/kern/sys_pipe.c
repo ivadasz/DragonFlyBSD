@@ -52,15 +52,19 @@
 #include <sys/lock.h>
 #include <sys/mutex.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_param.h>
 #include <vm/vm_object.h>
 #include <vm/vm_kern.h>
+#endif
 #include <vm/vm_extern.h>
+#ifndef _RUMPKERNEL
 #include <vm/pmap.h>
 #include <vm/vm_map.h>
 #include <vm/vm_page.h>
 #include <vm/vm_zone.h>
+#endif
 
 #include <sys/file2.h>
 #include <sys/signal2.h>
@@ -330,6 +334,7 @@ kern_pipe(long *fds, int flags)
 	return (0);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * [re]allocates KVA for the pipe's circular buffer.  The space is
  * pageable.  Called twice to setup full-duplex communications.
@@ -385,6 +390,7 @@ pipespace(struct pipe *pipe, struct pipebuf *pb, size_t size)
 
 	return (0);
 }
+#endif
 
 /*
  * Initialize and allocate VM and memory for pipe, pulling the pipe from

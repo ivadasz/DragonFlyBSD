@@ -145,8 +145,10 @@ SYSCTL_NODE(_kern, OID_AUTO, shutdown, CTLFLAG_RW, 0, "Shutdown environment");
  */
 const char *panicstr;
 
+#ifndef _RUMPKERNEL
 int dumping;				/* system is dumping */
 static struct dumperinfo dumper;	/* selected dumper */
+#endif
 
 globaldata_t panic_cpu_gd;		/* which cpu took the panic */
 struct lwkt_tokref panic_tokens[LWKT_MAXTOKENS];
@@ -233,7 +235,9 @@ shutdown_nice(int howto)
 	return;
 }
 static int	waittime = -1;
+#ifndef _RUMPKERNEL
 struct pcb	dumppcb;
+#endif
 struct thread	*dumpthread;
 
 static void

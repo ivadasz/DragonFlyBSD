@@ -49,7 +49,9 @@
 #include <sys/kern_syscall.h>
 #include <sys/mbuf.h>
 #include <sys/protosw.h>
+#ifndef _RUMPKERNEL
 #include <sys/sfbuf.h>
+#endif
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 #include <sys/socketops.h>
@@ -60,12 +62,14 @@
 #ifdef KTRACE
 #include <sys/ktrace.h>
 #endif
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_object.h>
 #include <vm/vm_page.h>
 #include <vm/vm_pageout.h>
 #include <vm/vm_kern.h>
 #include <vm/vm_extern.h>
+#endif
 #include <sys/file2.h>
 #include <sys/signalvar.h>
 #include <sys/serialize.h>
@@ -74,7 +78,9 @@
 #include <sys/msgport2.h>
 #include <sys/socketvar2.h>
 #include <net/netmsg2.h>
+#ifndef _RUMPKERNEL
 #include <vm/vm_page2.h>
+#endif
 
 extern int use_soaccept_pred_fast;
 extern int use_sendfile_async;
@@ -1492,6 +1498,7 @@ getsockaddr(struct sockaddr **namp, caddr_t uaddr, size_t len)
 	return error;
 }
 
+#ifndef _RUMPKERNEL
 /*
  * Detach a mapped page and release resources back to the system.
  * We must release our wiring and if the object is ripped out
@@ -1940,3 +1947,4 @@ done0:
 		m_freem(mheader);
 	return (error);
 }
+#endif

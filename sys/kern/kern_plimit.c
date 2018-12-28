@@ -73,12 +73,15 @@
 #include <sys/file.h>
 #include <sys/lockf.h>
 #include <sys/kern_syscall.h>
+#include <sys/kernel.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm_param.h>
 #include <vm/vm.h>
 #include <vm/vm_map.h>
 
 #include <machine/pmap.h>
+#endif
 
 #include <sys/spinlock2.h>
 
