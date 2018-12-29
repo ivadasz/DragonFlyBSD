@@ -104,6 +104,10 @@
 #include <vm/vm_extern.h>
 #endif
 
+#ifdef _RUMPKERNEL
+#define pgsignal(a,b,c)
+#endif
+
 MALLOC_DEFINE(M_TTYS, "ttys", "tty data structures");
 
 #ifndef _RUMPKERNEL

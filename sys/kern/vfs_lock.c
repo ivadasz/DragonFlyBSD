@@ -64,8 +64,10 @@
 
 #include <machine/limits.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_object.h>
+#endif
 
 #include <sys/buf2.h>
 #include <sys/thread2.h>
@@ -767,13 +769,17 @@ cleanfreevnode(int maxcount)
 		 * VM pages.  XXX possible SMP races.
 		 */
 		if (vp->v_act > 0) {
+#ifndef _RUMPKERNEL
 			vm_object_t obj;
 			if ((obj = vp->v_object) != NULL &&
 			    obj->resident_page_count >= trigger) {
 				vp->v_act -= 1;
 			} else {
+#endif
 				vp->v_act -= VACT_INC;
+#ifndef _RUMPKERNEL
 			}
+#endif
 			if (vp->v_act < 0)
 				vp->v_act = 0;
 			spin_unlock(&vi->spin);

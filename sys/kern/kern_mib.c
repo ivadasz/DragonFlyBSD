@@ -42,7 +42,9 @@
 #include <sys/sysctl.h>
 #include <sys/proc.h>
 #include <sys/lockf.h>
+#ifndef _RUMPKERNEL
 #include <sys/jail.h>
+#endif
 #include <sys/unistd.h>
 #include <machine/smp.h>
 
@@ -168,6 +170,7 @@ sysctl_hostname(SYSCTL_HANDLER_ARGS)
 		SYSCTL_SUNLOCK();
 		SYSCTL_XLOCK();
 	}
+#ifndef _RUMPKERNEL
 	if (p && p->p_ucred->cr_prison) {
 		if (!jail_set_hostname_allowed && req->newptr)
 			return(EPERM);
@@ -175,9 +178,12 @@ sysctl_hostname(SYSCTL_HANDLER_ARGS)
 		    p->p_ucred->cr_prison->pr_host,
 		    sizeof p->p_ucred->cr_prison->pr_host, req);
 	} else {
+#endif
 		error = sysctl_handle_string(oidp, 
 		    hostname, sizeof hostname, req);
+#ifndef _RUMPKERNEL
 	}
+#endif
 	if (req->newptr) {
 		SYSCTL_XUNLOCK();
 		SYSCTL_SLOCK();

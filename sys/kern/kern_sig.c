@@ -70,6 +70,12 @@
 #include <machine/cpu.h>
 #include <machine/smp.h>
 
+#ifdef _RUMPKERNEL
+#define CANSIGNAL(q, sig, initok) 0
+#define CANSIGIO(ruid, uc, q) 0
+#endif
+
+#ifndef _RUMPKERNEL
 static int	coredump(struct lwp *, int);
 static char	*expand_name(const char *, uid_t, pid_t);
 static int	dokillpg(int sig, int pgid, int all);
@@ -2564,6 +2570,7 @@ sys_nosys(struct nosys_args *args)
 	lwpsignal(curproc, curthread->td_lwp, SIGSYS);
 	return (EINVAL);
 }
+#endif
 
 /*
  * Send a SIGIO or SIGURG signal to a process or process group using
@@ -2586,7 +2593,9 @@ pgsigio(struct sigio *sigio, int sig, int checkctty)
 		/*
 		 * Must interlock all signals against fork
 		 */
+#ifndef _RUMPKERNEL
 		pgref(pg);
+#endif
 		lockmgr(&pg->pg_lock, LK_EXCLUSIVE);
 		LIST_FOREACH(p, &pg->pg_members, p_pglist) {
 			if (CANSIGIO(sigio->sio_ruid, sigio->sio_ucred, p) &&
@@ -2594,10 +2603,13 @@ pgsigio(struct sigio *sigio, int sig, int checkctty)
 				ksignal(p, sig);
 		}
 		lockmgr(&pg->pg_lock, LK_RELEASE);
+#ifndef _RUMPKERNEL
 		pgrel(pg);
+#endif
 	}
 }
 
+#ifndef _RUMPKERNEL
 static int
 filt_sigattach(struct knote *kn)
 {
@@ -2637,3 +2649,4 @@ filt_signal(struct knote *kn, long hint)
 	}
 	return (kn->kn_data != 0);
 }
+#endif

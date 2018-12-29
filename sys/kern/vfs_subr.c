@@ -2373,6 +2373,7 @@ vfs_export_lookup(struct mount *mp, struct netexport *nep,
 	return (np);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * perform msync on all vnodes under a mount point.  The mount point must
  * be locked.  This code is also responsible for lazy-freeing unreferenced
@@ -2386,10 +2387,12 @@ vfs_export_lookup(struct mount *mp, struct netexport *nep,
  */
 static int vfs_msync_scan1(struct mount *mp, struct vnode *vp, void *data);
 static int vfs_msync_scan2(struct mount *mp, struct vnode *vp, void *data);
+#endif
 
 void
 vfs_msync(struct mount *mp, int flags) 
 {
+#ifndef _RUMPKERNEL
 	int vmsc_flags;
 
 	/*
@@ -2418,8 +2421,10 @@ vfs_msync(struct mount *mp, int flags)
 			      vfs_msync_scan1, vfs_msync_scan2,
 			      (void *)(intptr_t)flags);
 	}
+#endif
 }
 
+#ifndef _RUMPKERNEL
 /*
  * scan1 is a fast pre-check.  There could be hundreds of thousands of
  * vnodes, we cannot afford to do anything heavy weight until we have a
@@ -2449,7 +2454,6 @@ vfs_msync_scan1(struct mount *mp, struct vnode *vp, void *data)
 	return(-1);
 }
 
-#ifndef _RUMPKERNEL
 /*
  * This callback is handed a locked vnode.
  */

@@ -334,7 +334,6 @@ kern_pipe(long *fds, int flags)
 	return (0);
 }
 
-#ifndef _RUMPKERNEL
 /*
  * [re]allocates KVA for the pipe's circular buffer.  The space is
  * pageable.  Called twice to setup full-duplex communications.
@@ -346,6 +345,22 @@ kern_pipe(long *fds, int flags)
 static int
 pipespace(struct pipe *pipe, struct pipebuf *pb, size_t size)
 {
+#ifdef _RUMPKERNEL
+#if 0
+	vm_offset_t addr;
+
+	size = (size + PAGE_MASK) & ~(size_t)PAGE_MASK;
+	if (size < 16384)
+		size = 16384;
+	if (size > 1024*1024)
+		size = 1024*1024;
+	addr = kmem_alloc(&kernel_map, size, VM_SUBSYS_GD);
+	XXX
+#endif
+	pb->object = NULL;
+	pb->buffer = NULL;
+	pb->size = size;
+#else
 	struct vm_object *object;
 	caddr_t buffer;
 	vm_pindex_t npages;
@@ -385,12 +400,12 @@ pipespace(struct pipe *pipe, struct pipebuf *pb, size_t size)
 		pb->buffer = buffer;
 		pb->size = size;
 	}
+#endif
 	pb->rindex = 0;
 	pb->windex = 0;
 
 	return (0);
 }
-#endif
 
 /*
  * Initialize and allocate VM and memory for pipe, pulling the pipe from

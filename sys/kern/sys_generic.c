@@ -69,11 +69,14 @@
 
 #include <machine/limits.h>
 
+#ifndef _RUMPKERNEL
 static MALLOC_DEFINE(M_IOCTLOPS, "ioctlops", "ioctl data buffer");
 static MALLOC_DEFINE(M_IOCTLMAP, "ioctlmap", "mapped ioctl handler buffer");
 static MALLOC_DEFINE(M_SELECT, "select", "select() buffer");
+#endif
 MALLOC_DEFINE(M_IOV, "iov", "large iov's");
 
+#ifndef _RUMPKERNEL
 typedef struct kfd_set {
         fd_mask	fds_bits[2];
 } kfd_set;
@@ -1655,3 +1658,4 @@ seltrue(cdev_t dev, int events)
 {
 	return (events & (POLLIN | POLLOUT | POLLRDNORM | POLLWRNORM));
 }
+#endif

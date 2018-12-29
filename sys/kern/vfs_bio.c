@@ -46,7 +46,9 @@
 #include <sys/vmmeter.h>
 #include <sys/vnode.h>
 #include <sys/dsched.h>
-#ifndef _RUMPKERNEL
+#ifdef _RUMPKERNEL
+#include <vm/vm_extern.h>
+#else
 #include <vm/vm.h>
 #include <vm/vm_param.h>
 #include <vm/vm_kern.h>
@@ -652,8 +654,12 @@ bufinit(void *dummy __unused)
 		bp->b_cmd = BUF_CMD_DONE;
 		bp->b_qindex = BQUEUE_EMPTY;
 		bp->b_qcpu = i;
+#ifdef _RUMPKERNEL
+		bp->b_kvabase = NULL;
+#else
 		bp->b_kvabase = (void *)(vm_map_min(&buffer_map) +
 					 MAXBSIZE * n);
+#endif
 		bp->b_kvasize = MAXBSIZE;
 		initbufbio(bp);
 		xio_init(&bp->b_xio);
@@ -718,6 +724,7 @@ bufinit(void *dummy __unused)
 	lodirtybufspace = hidirtybufspace / 2;
 
 	/*
+	 * XXX What code does this reference ???
 	 * Maximum number of async ops initiated per buf_daemon loop.  This is
 	 * somewhat of a hack at the moment, we really need to limit ourselves
 	 * based on the number of bytes of I/O in-transit that were initiated
@@ -726,11 +733,13 @@ bufinit(void *dummy __unused)
 
 	bogus_offset = kmem_alloc_pageable(&kernel_map, PAGE_SIZE,
 					   VM_SUBSYS_BOGUS);
+#ifndef _RUMPKERNEL
 	vm_object_hold(&kernel_object);
 	bogus_page = vm_page_alloc(&kernel_object,
 				   (bogus_offset >> PAGE_SHIFT),
 				   VM_ALLOC_NORMAL);
 	vm_object_drop(&kernel_object);
+#endif
 	vmstats.v_wire_count++;
 
 }
@@ -1164,6 +1173,7 @@ buwrite(struct buf *bp)
 		return;
 	}
 
+#ifndef _RUMPKERNEL
 	/*
 	 * Mark as needing a commit.
 	 */
@@ -1171,6 +1181,7 @@ buwrite(struct buf *bp)
 		m = bp->b_xio.xio_pages[i];
 		vm_page_need_commit(m);
 	}
+#endif
 	bqrelse(bp);
 }
 
@@ -1406,6 +1417,7 @@ brelse(struct buf *bp)
 	 * and should not be destroyed w/ B_INVAL even if the backing store
 	 * is left intact.
 	 */
+#ifndef _RUMPKERNEL
 	if (bp->b_flags & B_VMIO) {
 		/*
 		 * Rundown for VMIO buffers which are not dirty NFS buffers.
@@ -1532,6 +1544,7 @@ brelse(struct buf *bp)
 		if (bp->b_flags & (B_INVAL | B_RELBUF))
 			vfs_vmio_release(bp);
 	} else {
+#endif
 		/*
 		 * Rundown for non-VMIO buffers.
 		 */
@@ -1542,7 +1555,9 @@ brelse(struct buf *bp)
 			if (bp->b_vp)
 				brelvp(bp);
 		}
+#ifndef _RUMPKERNEL
 	}
+#endif
 			
 	if (bp->b_qindex != BQUEUE_NONE)
 		panic("brelse: free buffer onto another queue???");

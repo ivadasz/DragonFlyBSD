@@ -108,6 +108,7 @@
 #include <sys/globaldata.h>
 #include <sys/sysctl.h>
 #include <sys/ktr.h>
+#include <sys/spinlock2.h>
 
 #ifndef _RUMPKERNEL
 #include <vm/vm.h>
@@ -126,6 +127,10 @@
 #include <sys/thread2.h>
 #ifndef _RUMPKERNEL
 #include <vm/vm_page2.h>
+#endif
+
+#ifdef _RUMPKERNEL
+#include <stdlib.h>
 #endif
 
 #define btokup(z)	(&pmap_kvtom((vm_offset_t)(z))->ku_pagecnt)
@@ -155,6 +160,34 @@ KTR_INFO(KTR_MEMORY, memory, free_end, 10, "free end");
 	KTR_LOG(memory_ ## name)
 
 #ifdef _RUMPKERNEL
+#undef kmalloc
+void *
+kmalloc(unsigned long size, struct malloc_type *type, int flags)
+{
+	/* XXX Iprove code */
+	if (flags & M_ZERO)
+		return calloc(size, 1);
+	else
+		return malloc(size);
+}
+
+void *
+krealloc(void *addr, unsigned long size, struct malloc_type *type, int flags)
+{
+	return realloc(addr, size);
+}
+
+void *
+kmalloc_cachealign(unsigned long size, struct malloc_type *type, int flags)
+{
+	return kmalloc(size, type, flags);
+}
+
+void
+kfree(void *addr, struct malloc_type *type)
+{
+	free(addr);
+}
 #else
 
 /*
@@ -166,7 +199,9 @@ static int ZonePageCount;
 static uintptr_t ZoneMask;
 static int ZoneBigAlloc;		/* in KB */
 static int ZoneGenAlloc;		/* in KB */
+#endif
 struct malloc_type *kmemstatistics;	/* exported to vmstat */
+#ifndef _RUMPKERNEL
 #ifdef INVARIANTS
 static int32_t weirdary[16];
 #endif
@@ -201,6 +236,7 @@ static void chunk_mark_free(SLZone *z, void *chunk);
 /*
  * Misc global malloc buckets
  */
+#endif
 
 MALLOC_DEFINE(M_CACHE, "cache", "Various Dynamically allocated caches");
 MALLOC_DEFINE(M_DEVBUF, "devbuf", "device driver memory");
@@ -210,6 +246,7 @@ MALLOC_DEFINE(M_DRM, "m_drm", "DRM memory allocations");
 MALLOC_DEFINE(M_IP6OPT, "ip6opt", "IPv6 options");
 MALLOC_DEFINE(M_IP6NDP, "ip6ndp", "IPv6 Neighbor Discovery");
 
+#ifndef _RUMPKERNEL
 /*
  * Initialize the slab memory allocator.  We have to choose a zone size based
  * on available physical memory.  We choose a zone side which is approximately
@@ -246,10 +283,12 @@ SYSCTL_LONG(_kern, OID_AUTO, slabs_freed, CTLFLAG_RD,
 static int SlabFreeToTail;
 SYSCTL_INT(_kern, OID_AUTO, slab_freetotail, CTLFLAG_RW,
 	    &SlabFreeToTail, 0, "");
+#endif
 
 static struct spinlock kmemstat_spin =
 			SPINLOCK_INITIALIZER(&kmemstat_spin, "malinit");
 
+#ifndef _RUMPKERNEL
 /*
  * Returns the kernel memory size limit for the purposes of initializing
  * various subsystem caches.  The smaller of available memory and the KVM
@@ -336,6 +375,7 @@ slab_gdinit(globaldata_t gd)
 	TAILQ_INIT(&slgd->FreeZones);
 	TAILQ_INIT(&slgd->FreeOvZones);
 }
+#endif
 
 /*
  * Initialize a malloc type tracking structure.
@@ -425,6 +465,7 @@ malloc_uninit(void *data)
     spin_unlock(&kmemstat_spin);
 }
 
+#ifndef _RUMPKERNEL
 extern int naps;
 
 static void
