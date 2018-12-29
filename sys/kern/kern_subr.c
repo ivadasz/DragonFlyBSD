@@ -59,9 +59,6 @@
 SYSCTL_INT(_kern, KERN_IOV_MAX, iov_max, CTLFLAG_RD, NULL, UIO_MAXIOV,
 	"Maximum number of elements in an I/O vector; sysconf(_SC_IOV_MAX)");
 
-#ifdef _RUMPKERNEL
-/* XXX uiomove can directly copy the data. */
-#else
 int
 copyin_nofault(const void *udaddr, void *kaddr, size_t len)
 {
@@ -166,6 +163,7 @@ uiomove(caddr_t cp, size_t n, struct uio *uio)
 	return (error);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * This is the same as uiomove() except (cp, n) is within the bounds of
  * the passed, locked buffer.  Under certain circumstances a VM fault
@@ -198,6 +196,7 @@ uiomovebp(struct buf *bp, caddr_t cp, size_t n, struct uio *uio)
 	}
 	return (uiomove(cp, n, uio));
 }
+#endif
 
 /*
  * uiomove() but fail for non-trivial VM faults, even if the VM fault is
@@ -499,6 +498,7 @@ iovec_copyin(const struct iovec *uiov, struct iovec **kiov, struct iovec *siov,
 }
 
 
+#ifndef _RUMPKERNEL
 /*
  * Copyright (c) 2004 Alan L. Cox <alc@cs.rice.edu>
  * Copyright (c) 1982, 1986, 1991, 1993

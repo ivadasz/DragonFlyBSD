@@ -49,3 +49,23 @@ copystr(const void *kfaddr, void *kdaddr, size_t len, size_t *lencopied)
 	}
 	return (ENAMETOOLONG);
 }
+
+int
+copyin(const void *uaddr, void *kaddr, size_t len)
+{
+	bcopy(uaddr, kaddr, len);
+	return 0;
+}
+
+int
+copyinstr(const void *uaddr, void *kaddr, size_t len, size_t *done)
+{
+	return copystr(uaddr, kaddr, len, done);
+}
+
+int
+copyout(const void *kaddr, void *uaddr, size_t len)
+{
+	bcopy(kaddr, uaddr, len);
+	return 0;
+}
