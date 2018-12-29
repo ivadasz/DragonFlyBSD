@@ -373,9 +373,11 @@ prop_dictionary_sendrecv_ioctl(prop_dictionary_t dict, int fd,
 #include <sys/resource.h>
 #include <sys/objcache.h>
 #include <sys/ioccom.h>
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_extern.h>
 #include <vm/vm_param.h>
+#endif
 
 #include "prop_object_impl.h"
 

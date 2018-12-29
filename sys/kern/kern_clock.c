@@ -97,10 +97,12 @@
 #include <sys/kcollect.h>
 #endif
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/pmap.h>
 #include <vm/vm_map.h>
 #include <vm/vm_extern.h>
+#endif
 
 #include <sys/thread2.h>
 #include <sys/spinlock2.h>
@@ -780,6 +782,7 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 	vfscache_rollup_cpu(gd);
 	mycpu->gd_vmstats = vmstats;
 
+#ifndef _RUMPKERNEL
 	/*
 	 * ITimer handling is per-tick, per-cpu.
 	 *
@@ -812,6 +815,7 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 		crit_exit_hard();
 		lwkt_reltoken(&p->p_token);
 	}
+#endif
 	setdelayed();
 }
 
@@ -885,6 +889,7 @@ statclock(systimer_t info, int in_ipi, struct intrframe *frame)
 	td = curthread;
 	p = td->td_proc;
 
+#ifndef _RUMPKERNEL
 	if (frame && CLKF_USERMODE(frame)) {
 		/*
 		 * Came from userland, handle user time and deal with
@@ -902,6 +907,7 @@ statclock(systimer_t info, int in_ipi, struct intrframe *frame)
 		else
 			cpu_time.cp_user += bump;
 	} else {
+#endif
 		int intr_nest = gd->gd_intr_nesting_level;
 
 		if (in_ipi) {
@@ -1001,7 +1007,9 @@ statclock(systimer_t info, int in_ipi, struct intrframe *frame)
 		}
 
 #undef IS_INTR_RUNNING
+#ifndef _RUMPKERNEL
 	}
+#endif
 }
 
 #ifdef DEBUG_PCTRACK

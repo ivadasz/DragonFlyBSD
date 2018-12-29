@@ -54,12 +54,11 @@
 #include <sys/priv.h>
 #include <sys/jail.h>
 #include <sys/sysctl.h>
+#if defined(LWBUF_IS_OPTIMAL) && !defined(_RUMPKERNEL)
 #include <sys/sfbuf.h>
 #include <vm/vm_extern.h>
 #include <vm/vm_object.h>
 #include <vm/vm_page2.h>
-
-#ifdef LWBUF_IS_OPTIMAL
 
 static int vm_read_shortcut_enable = 1;
 SYSCTL_INT(_vm, OID_AUTO, read_shortcut_enable, CTLFLAG_RW,
@@ -285,7 +284,7 @@ vop_helper_chown(struct vnode *vp, uid_t new_uid, gid_t new_gid,
 	return(0);
 }
 
-#ifdef LWBUF_IS_OPTIMAL
+#if defined(LWBUF_IS_OPTIMAL) && !defined(_RUMPKERNEL)
 
 /*
  * A VFS can call this function to try to dispose of a read request

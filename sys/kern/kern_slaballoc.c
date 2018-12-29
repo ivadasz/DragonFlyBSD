@@ -109,6 +109,7 @@
 #include <sys/sysctl.h>
 #include <sys/ktr.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_param.h>
 #include <vm/vm_kern.h>
@@ -118,11 +119,14 @@
 #include <vm/vm_map.h>
 #include <vm/vm_page.h>
 #include <vm/vm_pageout.h>
+#endif
 
 #include <machine/cpu.h>
 
 #include <sys/thread2.h>
+#ifndef _RUMPKERNEL
 #include <vm/vm_page2.h>
+#endif
 
 #define btokup(z)	(&pmap_kvtom((vm_offset_t)(z))->ku_pagecnt)
 
@@ -149,6 +153,9 @@ KTR_INFO(KTR_MEMORY, memory, free_end, 10, "free end");
 	KTR_LOG(memory_ ## name, ptr, type, size, flags)
 #define logmemory_quick(name)						\
 	KTR_LOG(memory_ ## name)
+
+#ifdef _RUMPKERNEL
+#else
 
 /*
  * Fixed globals (not per-cpu)
@@ -1744,3 +1751,5 @@ kmalloc_cachealign(unsigned long size_alloc, struct malloc_type *type,
 
 #undef CAN_CACHEALIGN
 }
+
+#endif

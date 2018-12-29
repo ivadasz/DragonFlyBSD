@@ -180,12 +180,16 @@ vfs_subr_init(void)
 	 *	     and HAMMER2 will or can be told to cache file data
 	 *	     via the block device instead of excessively in vnodes.
 	 */
+#ifndef _RUMPKERNEL
 	factor1 = 25 * (sizeof(struct vm_object) + sizeof(struct vnode));
 	factor2 = 30 * (sizeof(struct vm_object) + sizeof(struct vnode));
 	maxvnodes = imin((int64_t)vmstats.v_page_count * PAGE_SIZE / factor1,
 			 KvaSize / factor2);
 	maxvnodes = imax(maxvnodes, maxproc * 8);
 	maxvnodes = imin(maxvnodes, 64LL*1024*1024*1024 / factor2);
+#else
+	maxvnodes = 10000;
+#endif
 
 	lwkt_token_init(&spechash_token, "spechash");
 }
@@ -282,7 +286,9 @@ int
 vinvalbuf(struct vnode *vp, int flags, int slpflag, int slptimeo)
 {
 	struct vinvalbuf_bp_info info;
+#ifndef _RUMPKERNEL
 	vm_object_t object;
+#endif
 	int error;
 
 	lwkt_gettoken(&vp->v_token);
@@ -344,8 +350,10 @@ vinvalbuf(struct vnode *vp, int flags, int slpflag, int slptimeo)
 		 * Wait for I/O completion.
 		 */
 		bio_track_wait(&vp->v_track_write, 0, 0);
+#ifndef _RUMPKERNEL
 		if ((object = vp->v_object) != NULL)
 			refcount_wait(&object->paging_in_progress, "vnvlbx");
+#endif
 	} while (bio_track_active(&vp->v_track_write) ||
 		 !RB_EMPTY(&vp->v_rbclean_tree) ||
 		 !RB_EMPTY(&vp->v_rbdirty_tree));
@@ -353,10 +361,12 @@ vinvalbuf(struct vnode *vp, int flags, int slpflag, int slptimeo)
 	/*
 	 * Destroy the copy in the VM cache, too.
 	 */
+#ifndef _RUMPKERNEL
 	if ((object = vp->v_object) != NULL) {
 		vm_object_page_remove(object, 0, 0,
 			(flags & V_SAVE) ? TRUE : FALSE);
 	}
+#endif
 
 	if (!RB_EMPTY(&vp->v_rbdirty_tree) || !RB_EMPTY(&vp->v_rbclean_tree))
 		panic("vinvalbuf: flush failed");
@@ -491,7 +501,9 @@ vtruncbuf(struct vnode *vp, off_t length, int blksize)
 	 * not part of the truncation.  This should not happen if we
 	 * are truncating to 0-length.
 	 */
+#ifndef _RUMPKERNEL
 	vnode_pager_setsize(vp, length);
+#endif
 	bio_track_wait(&vp->v_track_write, 0, 0);
 
 	/*
@@ -1232,7 +1244,9 @@ vclean_vxlocked(struct vnode *vp, int flags)
 {
 	int active;
 	int n;
+#ifndef _RUMPKERNEL
 	vm_object_t object;
+#endif
 	struct namecache *ncp;
 
 	/*
@@ -1315,6 +1329,7 @@ vclean_vxlocked(struct vnode *vp, int flags)
 		vinvalbuf(vp, V_SAVE, 0, 0);
 	}
 
+#ifndef _RUMPKERNEL
 	/*
 	 * If the vnode has an object, destroy it.
 	 */
@@ -1337,6 +1352,7 @@ vclean_vxlocked(struct vnode *vp, int flags)
 			vm_object_drop(object);
 		}
 	}
+#endif
 	KKASSERT((vp->v_flag & VOBJBUF) == 0);
 
 	if (vp->v_flag & VOBJDIRTY)

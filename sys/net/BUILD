@@ -56,12 +56,20 @@ dfly_kernel_lib(
     srcs = [
         "netisr.c",
     ],
-    deps = [
-        "//sys/sys:options",
-        "//sys/sys",
-        "//sys/vm",
-        ":netisr",
-    ],
+    deps = select({
+        "//sys:metal": [
+            "//sys/sys:options",
+            "//sys/sys",
+            "//sys/vm",
+            ":netisr",
+        ],
+        "//sys:userspace": [
+            "//sys/sys:options",
+            "//sys/sys",
+            "//sys/platform/rump/vm",
+            ":netisr",
+        ]
+    }),
     visibility = ["//visibility:public"],
 )
 
@@ -75,17 +83,31 @@ dfly_kernel_lib(
         "raw_cb.c",
         "raw_usrreq.c",
     ],
-    deps = [
-        "//sys/sys:options",
-        "//sys/sys",
-        "//sys/kern:core_ifs",
-        "//sys/net",
-        "//sys/net/altq:net_altq",
-        "//sys/netinet",
-        "//sys/netinet6",
-        "//sys/net/ip_mroute",
-        "//sys/vm",
-        ":netisr",
-    ],
+    deps = select({
+        "//sys:metal": [
+            "//sys/sys:options",
+            "//sys/sys",
+            "//sys/kern:core_ifs",
+            "//sys/net",
+            "//sys/net/altq:net_altq",
+            "//sys/netinet",
+            "//sys/netinet6",
+            "//sys/net/ip_mroute",
+            "//sys/vm",
+            ":netisr",
+        ],
+        "//sys:userspace": [
+            "//sys/sys:options",
+            "//sys/sys",
+            "//sys/kern:core_ifs",
+            "//sys/net",
+            "//sys/net/altq:net_altq",
+            "//sys/netinet",
+            "//sys/netinet6",
+            "//sys/net/ip_mroute",
+            "//sys/platform/rump/vm",
+            ":netisr",
+        ]
+    }),
     visibility = ["//visibility:public"],
 )

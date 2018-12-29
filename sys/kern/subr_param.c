@@ -274,8 +274,10 @@ init_param2(int physpages)
 	TUNABLE_INT_FETCH("kern.maxproc", &maxproc);
 	if (maxproc < 32)
 		maxproc = 32;
+#ifndef _RUMPKERNEL
 	if (maxproc > limsize * 40)
 		maxproc = limsize * 40;
+#endif
 
 	/*
 	 * Maximum number of open files
@@ -307,10 +309,12 @@ init_param2(int physpages)
 	 * Severe hack to try to prevent pipe() descriptors from
 	 * blowing away kernel memory.
 	 */
+#ifndef _RUMPKERNEL
 	if (KvaSize <= (vm_offset_t)(1536LL * 1024 * 1024) &&
 	    maxfilesperuser > 20000) {
 		maxfilesperuser = 20000;
 	}
+#endif
 
 	maxposixlocksperuid = MAXPOSIXLOCKSPERUID;
 	TUNABLE_INT_FETCH("kern.maxposixlocksperuid", &maxposixlocksperuid);
@@ -332,6 +336,7 @@ init_param2(int physpages)
 	TUNABLE_INT_FETCH("kern.ncallout", &ncallout);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * Sysctl stringifying handler for kern.vmm_guest.
  */
@@ -341,3 +346,4 @@ sysctl_kern_vmm_guest(SYSCTL_HANDLER_ARGS)
 	return (SYSCTL_OUT(req, vmm_guest_sysctl_names[vmm_guest], 
 	    strlen(vmm_guest_sysctl_names[vmm_guest])));
 }
+#endif

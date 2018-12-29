@@ -102,6 +102,8 @@ rump_excludes = always_excludes + [
     "kern_exit.c",
     "kern_fork.c",
     "kern_jail.c",
+    "kern_kinfo.c",
+    "kern_linker.c",
     "kern_module.c",
     "kern_plimit.c",
     "kern_proc.c",
@@ -128,6 +130,7 @@ rump_excludes = always_excludes + [
     "vfs_cluster.c",
     "vfs_lock.c",
     "vfs_mount.c",
+    "vfs_vm.c",
 ]
 
 dfly_kernel_lib(

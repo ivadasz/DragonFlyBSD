@@ -45,6 +45,9 @@
 #include <sys/spinlock2.h>
 #include <sys/sysctl.h>
 #include <sys/mbuf.h>
+#ifndef _RUMPKERNEL
+#include <vm/pmap.h>
+#endif
 
 #include <net/netmsg2.h>
 #include <net/netisr2.h>

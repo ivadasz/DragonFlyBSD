@@ -66,11 +66,13 @@
 
 #include <machine/limits.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_object.h>
 #include <vm/vm_page.h>
 #include <vm/vm_pager.h>
 #include <vm/vnode_pager.h>
+#endif
 
 #include <sys/file2.h>
 #include <sys/thread2.h>
@@ -98,7 +100,9 @@ static void jrecord_undo_file(struct jrecord *jrec, struct vnode *vp,
 static int journal_setattr(struct vop_setattr_args *ap);
 static int journal_write(struct vop_write_args *ap);
 static int journal_fsync(struct vop_fsync_args *ap);
+#ifndef _RUMPKERNEL
 static int journal_putpages(struct vop_putpages_args *ap);
+#endif
 static int journal_setacl(struct vop_setacl_args *ap);
 static int journal_setextattr(struct vop_setextattr_args *ap);
 static int journal_ncreate(struct vop_ncreate_args *ap);
@@ -139,7 +143,9 @@ static struct vop_ops journal_vnode_vops = {
     .vop_setattr =	journal_setattr,
     .vop_write =	journal_write,
     .vop_fsync =	journal_fsync,
+#ifndef _RUMPKERNEL
     .vop_putpages =	journal_putpages,
+#endif
     .vop_setacl =	journal_setacl,
     .vop_setextattr =	journal_setextattr,
     .vop_ncreate =	journal_ncreate,
@@ -938,6 +944,7 @@ journal_fsync(struct vop_fsync_args *ap)
     return (error);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * Journal vop_putpages { a_vp, a_m, a_count, a_sync, a_rtvals, a_offset }
  *
@@ -975,6 +982,7 @@ journal_putpages(struct vop_putpages_args *ap)
     jreclist_done(mp, &jreclist, error);
     return (error);
 }
+#endif
 
 /*
  * Journal vop_setacl { a_vp, a_type, a_aclp, a_cred }

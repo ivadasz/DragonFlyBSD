@@ -39,7 +39,9 @@
 #include <sys/socketvar.h>
 #include <sys/socketops.h>
 #include <sys/systm.h>
+#ifndef _RUMPKERNEL
 #include <vm/vm_zone.h>
+#endif
 
 #include <sys/thread2.h>
 

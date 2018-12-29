@@ -55,11 +55,13 @@
 
 #include <machine/limits.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_object.h>
 #include <vm/vm_page.h>
 #include <vm/vm_pager.h>
 #include <vm/vnode_pager.h>
+#endif
 
 static int	vop_nolookup (struct vop_old_lookup_args *);
 static int	vop_nostrategy (struct vop_strategy_args *);
@@ -1213,6 +1215,7 @@ vop_stdclose(struct vop_close_args *ap)
 	return (0);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * Implement standard getpages and putpages.  All filesystems must use
  * the buffer cache to back regular files.
@@ -1248,6 +1251,7 @@ vop_stdputpages(struct vop_putpages_args *ap)
 	}
 	return (error);
 }
+#endif
 
 int
 vop_stdnoread(struct vop_read_args *ap)
