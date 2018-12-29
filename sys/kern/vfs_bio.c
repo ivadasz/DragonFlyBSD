@@ -123,6 +123,7 @@ static void bd_signal(long totalspace);
 static void buf_daemon(void);
 static void buf_daemon_hw(void);
 
+#ifndef _RUMPKERNEL
 /*
  * bogus page -- for I/O to/from partially complete buffers
  * this is a temporary solution to the problem, but it is not
@@ -131,6 +132,7 @@ static void buf_daemon_hw(void);
  * but the code is intricate enough already.
  */
 vm_page_t bogus_page;
+#endif
 
 /*
  * These are all static, but make the ones we export globals so we do
@@ -368,6 +370,7 @@ buf_runningbufspace_severe(void)
 	return (runningbufspace >= hirunningspace * 4 / 6);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * vfs_buf_test_cache:
  *
@@ -391,6 +394,7 @@ vfs_buf_test_cache(struct buf *bp,
 			bp->b_flags &= ~B_CACHE;
 	}
 }
+#endif
 
 /*
  * bd_speedup()

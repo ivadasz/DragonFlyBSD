@@ -918,16 +918,20 @@ vfsync_bp(struct buf *bp, void *data)
 		 */
 		vp->v_lazyw = bp->b_loffset;
 		bremfree(bp);
+#ifndef _RUMPKERNEL
 		if (vm_page_count_min(0)) {
 			/* low memory */
 			info->lazycount += bp->b_bufsize;
 			bwrite(bp);
 		} else {
+#endif
 			/* normal */
 			info->lazycount += cluster_awrite(bp);
 			waitrunningbufspace();
 			/*vm_wait_nominal();*/
+#ifndef _RUMPKERNEL
 		}
+#endif
 		if (info->lazylimit && info->lazycount >= info->lazylimit)
 			error = 1;
 		else
@@ -1619,6 +1623,7 @@ vcount(struct vnode *vp)
 	return(count_dev(vp->v_rdev));
 }
 
+#ifndef _RUMPKERNEL
 /*
  * Initialize VMIO for a vnode.  This routine MUST be called before a
  * VFS can issue buffer cache ops on a vnode.  It is typically called
@@ -1657,6 +1662,7 @@ vinitvmio(struct vnode *vp, off_t filesize, int blksize, int boff)
 
 	return (error);
 }
+#endif
 
 
 /*
@@ -2443,6 +2449,7 @@ vfs_msync_scan1(struct mount *mp, struct vnode *vp, void *data)
 	return(-1);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * This callback is handed a locked vnode.
  */
@@ -2464,6 +2471,7 @@ vfs_msync_scan2(struct mount *mp, struct vnode *vp, void *data)
 	}
 	return(0);
 }
+#endif
 
 /*
  * Wake up anyone interested in vp because it is being revoked.

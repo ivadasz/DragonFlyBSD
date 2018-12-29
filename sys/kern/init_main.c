@@ -90,7 +90,9 @@ static struct pgrp pgrp0;
 static struct sigacts sigacts0;
 static struct filedesc filedesc0;
 static struct plimit limit0;
+#ifndef _RUMPKERNEL
 static struct vmspace vmspace0;
+#endif
 struct proc *initproc;
 struct proc proc0;
 struct lwp lwp0;
@@ -348,7 +350,7 @@ endofcoldboot(void *dummy __unused)
 }
 SYSINIT(endofcoldboot, SI_SUB_ISWARM, SI_ORDER_ANY, endofcoldboot, NULL);
 
-#ifndef _KERNEL_RUMP
+#ifndef _RUMPKERNEL
 /*
  ***************************************************************************
  ****
@@ -774,7 +776,9 @@ mi_gdinit(struct globaldata *gd, int cpuid)
 	gd->gd_cpumask_simple = CPUMASK_SIMPLE(cpuid);
 	gd->gd_cpumask_offset = (uintptr_t)CPUMASK_ADDR(*(cpumask_t *)0, cpuid);
 	lwkt_gdinit(gd);
+#ifndef _RUMPKERNEL
 	vm_map_entry_reserve_cpu_init(gd);
+#endif
 	if (gd->gd_cpuid == 0)
 		sleep_early_gdinit(gd);
 	else
