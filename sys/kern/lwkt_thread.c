@@ -1755,6 +1755,7 @@ crit_panic(void)
     /* NOT REACHED */
 }
 
+#ifndef _RUMPKERNEL
 /*
  * Called from debugger/panic on cpus which have been stopped.  We must still
  * process the IPIQ while stopped.
@@ -1778,3 +1779,4 @@ lwkt_smp_stopped(void)
     }
     cpu_smp_stopped();
 }
+#endif

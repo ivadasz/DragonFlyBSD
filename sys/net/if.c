@@ -2422,9 +2422,11 @@ ifconf(u_long cmd, caddr_t data, struct ucred *cred)
 			if (space <= sizeof ifr)
 				break;
 			sa = ifa->ifa_addr;
+#ifndef _RUMPKERNEL
 			if (cred->cr_prison &&
 			    prison_if(cred, sa))
 				continue;
+#endif
 			addrs++;
 			/*
 			 * Keep a reference on this ifaddr, so that it will

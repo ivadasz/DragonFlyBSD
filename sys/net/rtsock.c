@@ -1345,9 +1345,11 @@ sysctl_iflist(int af, struct walkarg *w)
 
 			if (af && af != ifa->ifa_addr->sa_family)
 				continue;
+#ifndef _RUMPKERNEL
 			if (curproc->p_ucred->cr_prison &&
 			    prison_if(curproc->p_ucred, ifa->ifa_addr))
 				continue;
+#endif
 			rtinfo.rti_ifaaddr = ifa->ifa_addr;
 			rtinfo.rti_netmask = ifa->ifa_netmask;
 			rtinfo.rti_bcastaddr = ifa->ifa_dstaddr;

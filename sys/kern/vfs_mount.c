@@ -85,8 +85,10 @@
 #include <sys/buf2.h>
 #include <sys/thread2.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_object.h>
+#endif
 
 struct mountscan_info {
 	TAILQ_ENTRY(mountscan_info) msi_entry;

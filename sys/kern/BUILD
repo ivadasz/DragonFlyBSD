@@ -131,7 +131,6 @@ rump_excludes = always_excludes + [
     "vfs_aio.c",
     "vfs_bio.c",
     "vfs_cluster.c",
-    "vfs_mount.c",
     "vfs_quota.c",
     "vfs_vm.c",
 ]

@@ -491,6 +491,7 @@ fixup_mtypes(void *dummy __unused)
 }
 
 SYSINIT(mtype_fixup, SI_BOOT2_CPU_TOPOLOGY, SI_ORDER_ANY, fixup_mtypes, NULL);
+#endif
 
 /*
  * Increase the kmalloc pool limit for the specified pool.  No changes
@@ -501,12 +502,15 @@ kmalloc_raise_limit(struct malloc_type *type, size_t bytes)
 {
     if (type->ks_limit == 0)
 	malloc_init(type);
+#ifndef _RUMPKERNEL
     if (bytes == 0)
 	bytes = KvaSize;
+#endif
     if (type->ks_limit < bytes)
 	type->ks_limit = bytes;
 }
 
+#ifndef _RUMPKERNEL
 void
 kmalloc_set_unlimited(struct malloc_type *type)
 {
@@ -1165,6 +1169,7 @@ kmalloc_limit(struct malloc_type *type)
     }
     return(type->ks_limit);
 }
+#endif
 
 /*
  * Allocate a copy of the specified string.
@@ -1212,6 +1217,7 @@ kstrndup(const char *str, size_t maxlen, struct malloc_type *type)
     return(nstr);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * Notify our cpu that a remote cpu has freed some chunks in a zone that
  * we own.  RCount will be bumped so the memory should be good, but validate
