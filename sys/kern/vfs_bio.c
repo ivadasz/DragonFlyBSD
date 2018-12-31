@@ -739,8 +739,8 @@ bufinit(void *dummy __unused)
 				   (bogus_offset >> PAGE_SHIFT),
 				   VM_ALLOC_NORMAL);
 	vm_object_drop(&kernel_object);
-#endif
 	vmstats.v_wire_count++;
+#endif
 
 }
 

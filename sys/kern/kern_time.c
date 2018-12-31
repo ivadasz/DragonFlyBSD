@@ -958,7 +958,9 @@ realitexpire(void *arg)
 	p = (struct proc *)arg;
 	PHOLD(p);
 	lwkt_gettoken(&p->p_token);
+#ifndef _RUMPKERNEL
 	ksignal(p, SIGALRM);
+#endif
 	if (!timevalisset(&p->p_realtimer.it_interval)) {
 		timevalclear(&p->p_realtimer.it_value);
 		goto done;

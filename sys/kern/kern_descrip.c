@@ -604,8 +604,10 @@ readplimits(struct proc *p)
 		limit = p->p_limit;
 		atomic_add_int(&limit->p_refcnt, 1);
 		spin_unlock_shared(&p->p_spin);
+#ifndef _RUMPKERNEL
 		if (td->td_limit)
 			plimit_free(td->td_limit);
+#endif
 		td->td_limit = limit;
 	}
 	return limit;

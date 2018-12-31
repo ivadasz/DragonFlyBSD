@@ -45,6 +45,7 @@
 #define KM_CPU(i) 0
 #define VM_SUBSYS_GD 0
 #define VM_SUBSYS_BOGUS 1
+#define VM_SUBSYS_BUF 2
 
 typedef void *vm_map_t;
 typedef int vm_subsys_t;

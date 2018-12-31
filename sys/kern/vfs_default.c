@@ -1471,14 +1471,18 @@ vfs_stdac_init(struct mount *mp)
 	if (fstype_ok == 0)
 		return (0);
 
+#ifndef _RUMPKERNEL
 	vq_init(mp);
+#endif
 	return (0);
 }
 
 void
 vfs_stdac_done(struct mount *mp)
 {
+#ifndef _RUMPKERNEL
 	vq_done(mp);
+#endif
 }
 
 void

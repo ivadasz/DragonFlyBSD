@@ -307,21 +307,21 @@ schedcpu_resource(struct proc *p, void *data __unused)
 	}
 #endif
 
+#ifndef _RUMPKERNEL
 	switch(plimit_testcpulimit(p, ttime)) {
 	case PLIMIT_TESTCPU_KILL:
 		killproc(p, "exceeded maximum CPU limit");
 		break;
-#ifndef _RUMPKERNEL
 	case PLIMIT_TESTCPU_XCPU:
 		if ((p->p_flags & P_XCPU) == 0) {
 			p->p_flags |= P_XCPU;
 			ksignal(p, SIGXCPU);
 		}
 		break;
-#endif
 	default:
 		break;
 	}
+#endif
 	lwkt_reltoken(&p->p_token);
 	lwkt_yield();
 	PRELE(p);
@@ -1364,8 +1364,10 @@ tstop(void)
 			lwkt_gettoken(&q->p_token);
 			p->p_flags &= ~P_WAITED;
 			wakeup(p->p_pptr);
+#ifndef _RUMPKERNEL
 			if ((q->p_sigacts->ps_flag & PS_NOCLDSTOP) == 0)
 				ksignal(q, SIGCHLD);
+#endif
 			lwkt_reltoken(&q->p_token);
 			PRELE(q);
 		}

@@ -55,9 +55,11 @@
 #include <vm/vm_zone.h>
 #endif
 
+#ifndef _RUMPKERNEL
 int varsym_enable = 0;
 SYSCTL_INT(_vfs, OID_AUTO, varsym_enable, CTLFLAG_RW, &varsym_enable, 0,
 	    "Enable Variant Symlinks");
+#endif
 
 /*
  * OLD API FUNCTION

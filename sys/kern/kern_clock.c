@@ -778,9 +778,13 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 	/*
 	 * Rollup accumulated vmstats, copy-back for critical path checks.
 	 */
+#ifndef _RUMPKERNEL
 	vmstats_rollup_cpu(gd);
+#endif
 	vfscache_rollup_cpu(gd);
+#ifndef _RUMPKERNEL
 	mycpu->gd_vmstats = vmstats;
+#endif
 
 #ifndef _RUMPKERNEL
 	/*

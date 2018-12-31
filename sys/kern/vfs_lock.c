@@ -726,7 +726,9 @@ cleanfreevnode(int maxcount)
 	struct vnode_index *vi;
 	struct vnode *vp;
 	int count;
+#ifndef _RUMPKERNEL
 	int trigger = (long)vmstats.v_page_count / (activevnodes * 2 + 1);
+#endif
 	int ri;
 	int cpu_count;
 

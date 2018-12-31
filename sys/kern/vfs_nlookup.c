@@ -1121,6 +1121,7 @@ nreadsymlink(struct nlookupdata *nd, struct nchandle *nch,
     if (error)
 	goto fail;
     linklen = MAXPATHLEN - 1 - auio.uio_resid;
+#ifndef _RUMPKERNEL
     if (varsym_enable) {
 	linklen = varsymreplace(cp, linklen, MAXPATHLEN - 1);
 	if (linklen < 0) {
@@ -1128,6 +1129,7 @@ nreadsymlink(struct nlookupdata *nd, struct nchandle *nch,
 	    goto fail;
 	}
     }
+#endif
     cp[linklen] = 0;
     nlc->nlc_nameptr = cp;
     nlc->nlc_namelen = linklen;

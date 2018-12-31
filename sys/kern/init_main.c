@@ -784,7 +784,9 @@ mi_gdinit(struct globaldata *gd, int cpuid)
 	else
 		sleep_gdinit(gd);
 	slab_gdinit(gd);
+#ifndef _RUMPKERNEL
 	ATOMIC_CPUMASK_ORBIT(usched_global_cpumask, cpuid);
 	gd->gd_vmstats = vmstats;
+#endif
 }
 

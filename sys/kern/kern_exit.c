@@ -62,6 +62,7 @@
 #include <sys/eventhandler.h>
 #include <sys/dsched.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_param.h>
 #include <sys/lock.h>
@@ -69,12 +70,14 @@
 #include <vm/vm_map.h>
 #include <vm/vm_extern.h>
 #include <sys/user.h>
+#endif
 
 #include <sys/refcount.h>
 #include <sys/thread2.h>
 #include <sys/spinlock2.h>
 #include <sys/mplock2.h>
 
+#ifndef _RUMPKERNEL
 #include <machine/vmm.h>
 
 static void reaplwps(void *context, int dummy);
@@ -646,6 +649,7 @@ exit1(int rv)
 	 */
 	lwp_exit(1, pp);
 }
+#endif
 
 /*
  * Eventually called by every exiting LWP
@@ -660,11 +664,13 @@ lwp_exit(int masterexit, void *waddr)
 	struct proc *p = lp->lwp_proc;
 	int dowake = 0;
 
+#ifndef _RUMPKERNEL
 	/*
 	 * Release the current user process designation on the process so
 	 * the userland scheduler can work in someone else.
 	 */
 	p->p_usched->release_curproc(lp);
+#endif
 
 	/*
 	 * lwp_exit() may be called without setting LWP_MP_WEXIT, so
@@ -673,6 +679,7 @@ lwp_exit(int masterexit, void *waddr)
 	ASSERT_LWKT_TOKEN_HELD(&p->p_token);
 	atomic_set_int(&lp->lwp_mpflags, LWP_MP_WEXIT);
 
+#ifndef _RUMPKERNEL
 	/*
 	 * Clean up any virtualization
 	 */
@@ -681,6 +688,7 @@ lwp_exit(int masterexit, void *waddr)
 
 	if (td->td_vmm)
 		vmm_vmdestroy();
+#endif
 
 	/*
 	 * Clean up select/poll support
@@ -694,6 +702,7 @@ lwp_exit(int masterexit, void *waddr)
 		crfree(td->td_ucred);
 		td->td_ucred = NULL;
 	}
+#ifndef _RUMPKERNEL
 	if (td->td_limit) {
 		struct plimit *rlimit;
 
@@ -701,6 +710,7 @@ lwp_exit(int masterexit, void *waddr)
 		td->td_limit = NULL;
 		plimit_free(rlimit);
         }
+#endif
 
 	/*
 	 * Cleanup any cached descriptors for this thread
@@ -730,7 +740,9 @@ lwp_exit(int masterexit, void *waddr)
 	 * coded such that further blocking is ok after decrementing
 	 * p_nthreads but don't take the chance.
 	 */
+#ifndef _RUMPKERNEL
 	dsched_exit_thread(td);
+#endif
 	biosched_done(curthread);
 
 	/*
@@ -767,7 +779,9 @@ lwp_exit(int masterexit, void *waddr)
 	 * Tell the userland scheduler that we are going away
 	 */
 	lwkt_reltoken(&p->p_token);
+#ifndef _RUMPKERNEL
 	p->p_usched->heuristic_exiting(lp, p);
+#endif
 
 	/*
 	 * Issue late wakeups after releasing our token to give us a chance
@@ -779,9 +793,12 @@ lwp_exit(int masterexit, void *waddr)
 	if (waddr)
 		wakeup(waddr);
 
+#ifndef _RUMPKERNEL
 	cpu_lwp_exit();
+#endif
 }
 
+#ifndef _RUMPKERNEL
 /*
  * Wait until a lwp is completely dead.  The final interlock in this drama
  * is when TDF_EXITING is set in cpu_thread_exit() just before the final
@@ -1539,3 +1556,4 @@ deadlwp_init(void)
 }
 
 SYSINIT(deadlwpinit, SI_SUB_CONFIGURE, SI_ORDER_ANY, deadlwp_init, NULL);
+#endif

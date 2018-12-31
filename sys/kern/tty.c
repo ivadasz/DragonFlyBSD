@@ -1629,8 +1629,10 @@ ttymodem(struct tty *tp, int flag)
 		    !ISSET(tp->t_cflag, CLOCAL)) {
 			SET(tp->t_state, TS_ZOMBIE);
 			CLR(tp->t_state, TS_CONNECTED);
+#ifndef _RUMPKERNEL
 			if (tp->t_session && tp->t_session->s_leader)
 				ksignal(tp->t_session->s_leader, SIGHUP);
+#endif
 			ttyflush(tp, FREAD | FWRITE);
 			lwkt_reltoken(&tp->t_token);
 			return (0);
