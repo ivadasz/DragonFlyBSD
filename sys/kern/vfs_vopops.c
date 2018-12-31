@@ -435,6 +435,7 @@ vop_write(struct vop_ops *ops, struct vnode *vp, struct uio *uio, int ioflag,
 
 	/* is this a regular vnode ? */
 	VFS_MPLOCK_FLAG(vp->v_mount, MNTK_WR_MPSAFE);
+#ifndef _RUMPKERNEL
 	if (vfs_quota_enabled && (vp->v_type == VREG)) {
 		if ((error = VOP_GETATTR(vp, &va)) != 0)
 			goto done;
@@ -457,10 +458,13 @@ vop_write(struct vop_ops *ops, struct vnode *vp, struct uio *uio, int ioflag,
 			goto done;
 		}
 	}
+#endif
 	DO_OPS(ops, error, &ap, vop_write);
+#ifndef _RUMPKERNEL
 	if ((error == 0) && do_accounting) {
 		VFS_ACCOUNT(mp, va.va_uid, va.va_gid, size_after - size_before);
 	}
+#endif
 done:
 	VFS_MPUNLOCK(vp->v_mount);
 	return(error);
@@ -1538,9 +1542,11 @@ vop_nremove(struct vop_ops *ops, struct nchandle *nch, struct vnode *dvp,
 	VFS_MPLOCK(dvp->v_mount);
 	DO_OPS(ops, error, &ap, vop_nremove);
 	/* Only update space counters if this is the last hard link */
+#ifndef _RUMPKERNEL
 	if ((error == 0) && (va.va_nlink == 1)) {
 		VFS_ACCOUNT(nch->mount, va.va_uid, va.va_gid, -va.va_size);
 	}
+#endif
 	VFS_MPUNLOCK(dvp->v_mount);
 	return(error);
 }

@@ -34,7 +34,9 @@
 #include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/vnode.h>
+#ifndef _RUMPKERNEL
 #include <sys/jail.h>
+#endif
 #include <sys/filedesc.h>
 #include <sys/tty.h>
 #include <sys/dsched.h>
@@ -43,10 +45,12 @@
 #include <sys/random.h>
 #include <sys/vnode.h>
 #include <sys/exec.h>
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <sys/lock.h>
 #include <vm/pmap.h>
 #include <vm/vm_map.h>
+#endif
 #include <sys/user.h>
 #include <machine/smp.h>
 
@@ -972,10 +976,12 @@ orphanpg(struct pgrp *pg)
 
 	LIST_FOREACH(p, &pg->pg_members, p_pglist) {
 		if (p->p_stat == SSTOP) {
+#ifndef _RUMPKERNEL
 			LIST_FOREACH(p, &pg->pg_members, p_pglist) {
 				ksignal(p, SIGHUP);
 				ksignal(p, SIGCONT);
 			}
+#endif
 			return;
 		}
 	}
@@ -1321,6 +1327,7 @@ allproc_scan(int (*callback)(struct proc *, void *), void *data, int segmented)
 	}
 }
 
+#ifndef _RUMPKERNEL
 /*
  * Scan all lwps of processes on the allproc list.  The lwp is automatically
  * held for the callback.  A return value of -1 terminates the loop.
@@ -1378,6 +1385,7 @@ alllwp_scan(int (*callback)(struct lwp *, void *), void *data, int segmented)
 			break;
 	}
 }
+#endif
 
 /*
  * Scan all processes on the zombproc list.  The process is automatically
@@ -1423,7 +1431,9 @@ zombproc_scan(int (*callback)(struct proc *, void *), void *data)
 	}
 }
 
+#ifndef _RUMPKERNEL
 #include "opt_ddb.h"
+#endif
 #ifdef DDB
 #include <ddb/ddb.h>
 
@@ -1460,6 +1470,7 @@ DB_SHOW_COMMAND(pgrpdump, pgrpdump)
 }
 #endif /* DDB */
 
+#ifndef _RUMPKERNEL
 /*
  * The caller must hold proc_token.
  */
@@ -1995,3 +2006,4 @@ SYSCTL_PROC(_kern_proc, KERN_PROC_SIGTRAMP, sigtramp,
 	CTLFLAG_RD | CTLTYPE_STRUCT | CTLFLAG_NOLOCK,
         0, 0, sysctl_kern_proc_sigtramp, "S,sigtramp",
         "Return sigtramp address range");
+#endif

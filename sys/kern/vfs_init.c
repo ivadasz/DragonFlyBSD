@@ -427,6 +427,7 @@ vfs_register(struct vfsconf *vfc)
 		vfsops->vfs_ncpgen_test = vfs_stdncpgen_test;
 	}
 
+#ifndef _RUMPKERNEL
 	/* VFS quota uid and gid accounting */
 	if (vfs_quota_enabled && vfsops->vfs_acinit == NULL) {
 		vfsops->vfs_acinit = vfs_stdac_init;
@@ -434,6 +435,7 @@ vfs_register(struct vfsconf *vfc)
 	if (vfs_quota_enabled && vfsops->vfs_acdone == NULL) {
 		vfsops->vfs_acdone = vfs_stdac_done;
 	}
+#endif
 
 	/*
 	 * Call init function for this VFS...

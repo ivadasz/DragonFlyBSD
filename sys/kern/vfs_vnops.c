@@ -257,8 +257,10 @@ again:
 		error = VOP_GETATTR(vp, vap);
 		if (error)
 			goto bad;
+#ifndef _RUMPKERNEL
 		mp = vq_vptomp(vp);
 		VFS_ACCOUNT(mp, vap->va_uid, vap->va_gid, -osize);
+#endif
 	}
 
 	/*

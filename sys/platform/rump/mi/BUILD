@@ -5,6 +5,7 @@ dfly_kernel_lib(
     srcs = [
         "copyio.c",
         "main.c",
+        "systimer.c",
     ],
     deps = [
         "//sys/sys:options",

@@ -513,8 +513,10 @@ devctl_queue_data(char *data)
 	lockmgr(&devsoftc.lock, LK_RELEASE);
 	KNOTE(&devsoftc.kq.ki_note, 0);
 	p = devsoftc.async_proc;
+#ifndef _RUMPKERNEL
 	if (p != NULL)
 		ksignal(p, SIGIO);
+#endif
 }
 
 /**

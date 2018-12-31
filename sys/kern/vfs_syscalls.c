@@ -3414,6 +3414,7 @@ setfown(struct mount *mp, struct vnode *vp, uid_t uid, gid_t gid)
 		vput(vp);
 	}
 
+#ifndef _RUMPKERNEL
 	if (error == 0) {
 		if (uid == -1)
 			uid = o_uid;
@@ -3422,6 +3423,7 @@ setfown(struct mount *mp, struct vnode *vp, uid_t uid, gid_t gid)
 		VFS_ACCOUNT(mp, o_uid, o_gid, -size);
 		VFS_ACCOUNT(mp,   uid,   gid,  size);
 	}
+#endif
 
 	return error;
 }
@@ -3852,6 +3854,7 @@ kern_truncate(struct nlookupdata *nd, off_t length)
 		error = EISDIR;
 		goto done;
 	}
+#ifndef _RUMPKERNEL
 	if (vfs_quota_enabled) {
 		error = VOP_GETATTR(vp, &vattr);
 		KASSERT(error == 0, ("kern_truncate(): VOP_GETATTR didn't return 0"));
@@ -3859,12 +3862,15 @@ kern_truncate(struct nlookupdata *nd, off_t length)
 		gid = vattr.va_gid;
 		old_size = vattr.va_size;
 	}
+#endif
 
 	if ((error = vn_writechk(vp, &nd->nl_nch)) == 0) {
 		VATTR_NULL(&vattr);
 		vattr.va_size = length;
 		error = VOP_SETATTR(vp, &vattr, nd->nl_cred);
+#ifndef _RUMPKERNEL
 		VFS_ACCOUNT(nd->nl_nch.mount, uid, gid, length - old_size);
+#endif
 	}
 done:
 	vput(vp);
@@ -3927,6 +3933,7 @@ kern_ftruncate(int fd, off_t length)
 		goto done;
 	}
 
+#ifndef _RUMPKERNEL
 	if (vfs_quota_enabled) {
 		error = VOP_GETATTR(vp, &vattr);
 		KASSERT(error == 0, ("kern_ftruncate(): VOP_GETATTR didn't return 0"));
@@ -3934,13 +3941,16 @@ kern_ftruncate(int fd, off_t length)
 		gid = vattr.va_gid;
 		old_size = vattr.va_size;
 	}
+#endif
 
 	if ((error = vn_writechk(vp, NULL)) == 0) {
 		VATTR_NULL(&vattr);
 		vattr.va_size = length;
 		error = VOP_SETATTR(vp, &vattr, fp->f_cred);
+#ifndef _RUMPKERNEL
 		mp = vq_vptomp(vp);
 		VFS_ACCOUNT(mp, uid, gid, length - old_size);
+#endif
 	}
 	vn_unlock(vp);
 done:

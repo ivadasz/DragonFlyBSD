@@ -36,6 +36,8 @@
 #include <sys/mount.h>
 #include <sys/vnode.h>
 
+#ifndef _RUMPKERNEL
+
 struct plistref;
 
 extern void vq_init(struct mount*);
@@ -53,3 +55,4 @@ int vq_write_ok(struct mount *mp, uid_t uid, gid_t gid, uint64_t delta);
 
 #endif
 
+#endif

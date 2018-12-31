@@ -233,6 +233,7 @@ schedcpu_stats(struct proc *p, void *data __unused)
 	}
 
 	p->p_swtime++;
+#ifndef _RUMPKERNEL
 	FOREACH_LWP_IN_PROC(lp, p) {
 		if (lp->lwp_stat == LSSLEEP) {
 			++lp->lwp_slptime;
@@ -259,6 +260,7 @@ schedcpu_stats(struct proc *p, void *data __unused)
 			lp->lwp_pctcpu = (lp->lwp_pctcpu * (decay - 1)) / decay;
 		}
 	}
+#endif
 	lwkt_reltoken(&p->p_token);
 	lwkt_yield();
 	PRELE(p);
@@ -292,6 +294,7 @@ schedcpu_resource(struct proc *p, void *data __unused)
 	}
 
 	ttime = 0;
+#ifndef _RUMPKERNEL
 	FOREACH_LWP_IN_PROC(lp, p) {
 		/*
 		 * We may have caught an lp in the middle of being
@@ -302,17 +305,20 @@ schedcpu_resource(struct proc *p, void *data __unused)
 			ttime += lp->lwp_thread->td_uticks;
 		}
 	}
+#endif
 
 	switch(plimit_testcpulimit(p, ttime)) {
 	case PLIMIT_TESTCPU_KILL:
 		killproc(p, "exceeded maximum CPU limit");
 		break;
+#ifndef _RUMPKERNEL
 	case PLIMIT_TESTCPU_XCPU:
 		if ((p->p_flags & P_XCPU) == 0) {
 			p->p_flags |= P_XCPU;
 			ksignal(p, SIGXCPU);
 		}
 		break;
+#endif
 	default:
 		break;
 	}
@@ -1400,7 +1406,9 @@ loadav(void *arg)
 	int i, nrun;
 
 	nrun = 0;
+#ifndef _RUMPKERNEL
 	alllwp_scan(loadav_count_runnable, &nrun, 1);
+#endif
 	gd->gd_loadav_nrunnable = nrun;
 	if (gd->gd_cpuid == 0) {
 		avg = &averunnable;

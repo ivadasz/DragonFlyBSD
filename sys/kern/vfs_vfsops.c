@@ -96,11 +96,13 @@ vfs_start(struct mount *mp, int flags)
 
 	VFS_MPLOCK_FLAG(mp, MNTK_ST_MPSAFE);
 	error = (mp->mnt_op->vfs_start)(mp, flags);
+#ifndef _RUMPKERNEL
 	if (error == 0) {
 		/* do not call vfs_acinit on mount updates */
 		if ((mp->mnt_flag & MNT_UPDATE) == 0)
 			VFS_ACINIT(mp,error);
 	}
+#endif
 	VFS_MPUNLOCK(mp);
 	if (error == EMOUNTEXIT)
 		error = 0;
@@ -118,7 +120,9 @@ vfs_unmount(struct mount *mp, int mntflags)
 	int flags;
 
 	VFS_MPLOCK(mp);
+#ifndef _RUMPKERNEL
 	VFS_ACDONE(mp);
+#endif
 	flags = mp->mnt_kern_flag;
 	error = (mp->mnt_op->vfs_unmount)(mp, mntflags);
 	if (error == 0)

@@ -167,8 +167,10 @@ SYSCTL_INT(_kern, OID_AUTO, kq_sleep_threshold, CTLFLAG_RW,
 #define	KN_HASHSIZE		64		/* XXX should be tunable */
 #define KN_HASH(val, mask)	(((val) ^ (val >> 8)) & (mask))
 
+#ifndef _RUMPKERNEL
 extern struct filterops aio_filtops;
 extern struct filterops sig_filtops;
+#endif
 
 /*
  * Table for for all system-defined filters.
@@ -176,10 +178,14 @@ extern struct filterops sig_filtops;
 static struct filterops *sysfilt_ops[] = {
 	&file_filtops,			/* EVFILT_READ */
 	&file_filtops,			/* EVFILT_WRITE */
+#ifndef _RUMPKERNEL
 	&aio_filtops,			/* EVFILT_AIO */
+#endif
 	&file_filtops,			/* EVFILT_VNODE */
 	&proc_filtops,			/* EVFILT_PROC */
+#ifndef _RUMPKERNEL
 	&sig_filtops,			/* EVFILT_SIGNAL */
+#endif
 	&timer_filtops,			/* EVFILT_TIMER */
 	&file_filtops,			/* EVFILT_EXCEPT */
 	&user_filtops,			/* EVFILT_USER */

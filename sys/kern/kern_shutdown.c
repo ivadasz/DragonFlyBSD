@@ -227,7 +227,9 @@ shutdown_nice(int howto)
 	
 	/* Send a signal to init(8) and have it shutdown the world */
 	if (initproc != NULL) {
+#ifndef _RUMPKERNEL
 		ksignal(initproc, SIGINT);
+#endif
 	} else {
 		/* No init(8) running, so simply reboot */
 		boot(RB_NOSYNC);
@@ -290,9 +292,11 @@ boot(int howto)
 	 * We really want to shutdown on the BSP.  Subsystems such as ACPI
 	 * can't power-down the box otherwise.
 	 */
+#ifndef _RUMPKERNEL
 	if (!CPUMASK_ISUP(smp_active_mask)) {
 		kprintf("boot() called on cpu#%d\n", mycpu->gd_cpuid);
 	}
+#endif
 	if (panicstr == NULL && mycpu->gd_cpuid != 0) {
 		kprintf("Switching to cpu #0 for shutdown\n");
 		lwkt_setcpu_self(globaldata_find(0));

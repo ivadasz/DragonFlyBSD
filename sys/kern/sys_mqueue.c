@@ -902,7 +902,9 @@ error:
 		fdrop(fp);
 		/* Send the notify, if needed */
 		/*kpsignal(notify, &ksi, NULL);*/
+#ifndef _RUMPKERNEL
 		ksignal(notify, mq->mq_sig_notify.sigev_signo);
+#endif
 		PRELE(notify);
 	} else {
 		lockmgr(&mq->mq_mtx, LK_RELEASE);

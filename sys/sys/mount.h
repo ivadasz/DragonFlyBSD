@@ -640,6 +640,7 @@ struct vfsops {
 	vfs_checkexp(MP, NAM, EXFLG, CRED)
 #define VFS_EXTATTRCTL(MP, C, FVP, NS, N, CRED)	\
 	vfs_extattrctl(MP, C, FVP, NS, N, CRED)
+#ifndef _RUMPKERNEL
 #define VFS_ACCOUNT(MP, U, G, D) \
 	if ((MP->mnt_op->vfs_account != NULL) && (D != 0)) \
 		MP->mnt_op->vfs_account(MP, U, G, D);
@@ -649,6 +650,7 @@ struct vfsops {
 #define VFS_ACDONE(MP) \
 	if (vfs_quota_enabled && MP->mnt_op->vfs_acdone != NULL) \
 		MP->mnt_op->vfs_acdone(MP);
+#endif
 #define VFS_NCPGEN_SET(MP, NCP) \
 	MP->mnt_op->vfs_ncpgen_set(MP, NCP)
 #define VFS_NCPGEN_TEST(MP, NCP) \

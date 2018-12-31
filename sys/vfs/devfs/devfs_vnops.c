@@ -1038,7 +1038,9 @@ devfs_spec_open(struct vop_open_args *ap)
 	if (vn_isdisk(vp, NULL)) {
 		if (!dev->si_bsize_phys)
 			dev->si_bsize_phys = DEV_BSIZE;
+#ifndef _RUMPKERNEL
 		vinitvmio(vp, IDX_TO_OFF(INT_MAX), PAGE_SIZE, -1);
+#endif
 	}
 
 	vop_stdopen(ap);
