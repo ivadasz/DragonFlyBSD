@@ -294,7 +294,7 @@ dfly_kernel_binary(
         "//sys/net:radix",
         "//sys/net:netisr_obj",
         "//sys/net:net_obj",
-        #"//sys/libprop:libprop_obj",
+        "//sys/libprop:libprop_obj",
         "//sys/crypto/chacha",
         "//sys/crypto/sha2",
         "//sys/platform/rump/mi",

@@ -484,6 +484,10 @@ prop_dictionary_copyin_ioctl(const struct plistref *pref, const u_long cmd,
 					  cmd, (prop_object_t *)dictp));
 }
 
+#ifdef _RUMPKERNEL
+extern void *malloc(size_t);
+#endif
+
 static int
 _prop_object_copyout(struct plistref *pref, prop_object_t obj)
 {
@@ -517,14 +521,19 @@ _prop_object_copyout(struct plistref *pref, prop_object_t obj)
 	uaddr = p->p_emul->e_vm_default_addr(p,
 	    (vaddr_t)p->p_vmspace->vm_daddr, rlen);
 #endif
-	uaddr = round_page((vm_offset_t)p->p_vmspace->vm_daddr + maxdsiz);
 
+#ifdef _RUMPKERNEL
+	/* XXX Should rather mmap() here, that should work better. */
+	uaddr = (vm_offset_t)malloc(rlen);
+#else
+	uaddr = round_page((vm_offset_t)p->p_vmspace->vm_daddr + maxdsiz);
 	error = vm_mmap(&p->p_vmspace->vm_map,
 			 &uaddr, rlen,
 			 VM_PROT_READ|VM_PROT_WRITE,
 			 VM_PROT_READ|VM_PROT_WRITE,
 			 MAP_PRIVATE|MAP_ANON,
 			 NULL, 0);
+#endif
 	if (error == 0) {
 		error = copyout(buf, (char *)uaddr, len);
 		if (error == 0) {
