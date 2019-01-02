@@ -127,7 +127,6 @@ rump_excludes = always_excludes + [
     "usched_dfly.c",
     "usched_dummy.c",
     "vfs_aio.c",
-    "vfs_bio.c",
     "vfs_cluster.c",
     "vfs_quota.c",
     "vfs_vm.c",

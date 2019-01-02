@@ -95,8 +95,10 @@ cpu_startup(void *dummy)
 			nbuf += min((kbytes - 4096) / factor, 65536 / factor);
 		if (kbytes > 65536)
 			nbuf += (kbytes - 65536) * 2 / (factor * 5);
+#ifndef _RUMPKERNEL
 		if (maxbcache && nbuf > maxbcache / NBUFCALCSIZE)
 			nbuf = maxbcache / NBUFCALCSIZE;
+#endif
 	}
 
 	/*

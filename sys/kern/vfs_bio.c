@@ -64,9 +64,7 @@
 #include <sys/buf2.h>
 #include <sys/thread2.h>
 #include <sys/spinlock2.h>
-#ifndef _RUMPKERNEL
 #include <vm/vm_page2.h>
-#endif
 
 #ifndef _RUMPKERNEL
 #include "opt_ddb.h"
@@ -114,18 +112,16 @@ static void vfs_clean_one_page(struct buf *bp, int pageno, vm_page_t m);
 static void vfs_dirty_one_page(struct buf *bp, int pageno, vm_page_t m);
 #endif
 static void vfs_vmio_release(struct buf *bp);
-#endif
 static int flushbufqueues(struct buf *marker, bufq_type_t q);
-#ifndef _RUMPKERNEL
 static vm_page_t bio_page_alloc(struct buf *bp, vm_object_t obj,
 				vm_pindex_t pg, int deficit);
 #endif
 
 static void bd_signal(long totalspace);
+#ifndef _RUMPKERNEL
 static void buf_daemon(void);
 static void buf_daemon_hw(void);
 
-#ifndef _RUMPKERNEL
 /*
  * bogus page -- for I/O to/from partially complete buffers
  * this is a temporary solution to the problem, but it is not
@@ -156,11 +152,14 @@ long lodirtybufspace;
 long hidirtybufspace;
 static int getnewbufcalls;
 static int needsbuffer;			/* atomic */
+#ifndef _RUMPKERNEL
 static int runningbufreq;		/* atomic */
 static int bd_request;			/* atomic */
 static int bd_request_hw;		/* atomic */
+#endif
 static u_int bd_wake_ary[BD_WAKE_SIZE];
 static u_int bd_wake_index;
+#ifndef _RUMPKERNEL
 static u_int vm_cycle_point = 40; /* 23-36 will migrate more act->inact */
 static int debug_commit;
 static int debug_bufbio;
@@ -227,6 +226,7 @@ SYSCTL_INT(_vfs, OID_AUTO, debug_bufbio, CTLFLAG_RW, &debug_bufbio, 0, "");
 SYSCTL_INT(_vfs, OID_AUTO, debug_kvabio, CTLFLAG_RW, &debug_kvabio, 0, "");
 SYSCTL_INT(_debug_sizeof, OID_AUTO, buf, CTLFLAG_RD, 0, sizeof(struct buf),
 	"sizeof(struct buf)");
+#endif
 
 char *buf_wmesg = BUF_WMESG;
 
@@ -263,6 +263,7 @@ bufspacewakeup(void)
 	}
 }
 
+#ifndef _RUMPKERNEL
 /*
  * runningbufwakeup:
  *
@@ -297,6 +298,7 @@ runningbufwakeup(struct buf *bp)
 		bd_signal(totalspace);
 	}
 }
+#endif
 
 /*
  * bufcountwakeup:
@@ -324,6 +326,7 @@ bufcountwakeup(void)
 	}
 }
 
+#ifndef _RUMPKERNEL
 /*
  * waitrunningbufspace()
  *
@@ -505,6 +508,7 @@ bd_wait(long totalspace)
 		totalspace = runningbufspace + dirtykvaspace - hidirtybufspace;
 	}
 }
+#endif
 
 /*
  * bd_signal()
@@ -531,6 +535,7 @@ bd_signal(long totalspace)
 	}
 }
 
+#ifndef _RUMPKERNEL
 /*
  * BIO tracking support routines.
  *
@@ -573,6 +578,7 @@ bio_track_rel(struct bio_track *track)
 		active = track->bk_active;
 	}
 }
+#endif
 
 /*
  * Wait for the tracking count to reach 0.
@@ -795,6 +801,7 @@ uninitbufbio(struct buf *bp)
 	BUF_LOCKFREE(bp);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * Push another BIO layer onto an existing BIO and return it.  The new
  * BIO layer may already exist, holding cached translation data.
@@ -840,6 +847,7 @@ clearbiocache(struct bio *bio)
 		bio = bio->bio_next;
 	}
 }
+#endif
 
 /*
  * Remove the buffer from the appropriate free list.
@@ -882,6 +890,7 @@ bremfree_locked(struct buf *bp)
 	_bremfree(bp);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * This version of bread issues any required I/O asyncnronously and
  * makes a callback on completion.
@@ -979,6 +988,7 @@ breadnx(struct vnode *vp, off_t loffset, int size, int bflags,
 		rv = biowait(&bp->b_bio1, "biord");
 	return (rv);
 }
+#endif
 
 /*
  * bwrite:
@@ -1141,7 +1151,9 @@ bdwrite(struct buf *bp)
 	 * depend on it (NFS that is) until the pages are busied for
 	 * writing later on.
 	 */
+#ifndef _RUMPKERNEL
 	vfs_clean_pages(bp);
+#endif
 	bqrelse(bp);
 
 	/*
@@ -1161,6 +1173,9 @@ bdwrite(struct buf *bp)
 void
 buwrite(struct buf *bp)
 {
+#ifdef _RUMPKERNEL
+	bdwrite(bp);
+#else
 	vm_page_t m;
 	int i;
 
@@ -1173,7 +1188,6 @@ buwrite(struct buf *bp)
 		return;
 	}
 
-#ifndef _RUMPKERNEL
 	/*
 	 * Mark as needing a commit.
 	 */
@@ -1181,10 +1195,11 @@ buwrite(struct buf *bp)
 		m = bp->b_xio.xio_pages[i];
 		vm_page_need_commit(m);
 	}
-#endif
 	bqrelse(bp);
+#endif
 }
 
+#ifndef _RUMPKERNEL
 /*
  * bdirty:
  *
@@ -1293,6 +1308,7 @@ bsetrunningbufspace(struct buf *bp, int bytes)
 		atomic_add_long(&runningbufcount, 1);
 	}
 }
+#endif
 
 /*
  * brelse:
@@ -1753,6 +1769,7 @@ bqrelse(struct buf *bp)
 	BUF_UNLOCK(bp);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * Hold a buffer, preventing it from being reused.  This will prevent
  * normal B_RELBUF operations on the buffer but will not prevent B_INVAL
@@ -4044,6 +4061,7 @@ retry:
 	}
 }
 
+#ifndef _RUMPKERNEL
 /*
  * Tell the VM system that the pages associated with this buffer
  * are clean.  This is used for delayed writes where the data is
@@ -4070,7 +4088,6 @@ vfs_clean_pages(struct buf *bp)
 	}
 }
 
-#ifndef _RUMPKERNEL
 /*
  * vfs_clean_one_page:
  *
@@ -4649,3 +4666,4 @@ DB_SHOW_COMMAND(buffer, db_show_buffer)
 	}
 }
 #endif /* DDB */
+#endif
