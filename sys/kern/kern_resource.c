@@ -48,17 +48,21 @@
 #include <sys/time.h>
 #include <sys/lockf.h>
 
+#ifndef _RUMPKERNEL
 #include <vm/vm.h>
 #include <vm/vm_param.h>
 #include <sys/lock.h>
 #include <vm/pmap.h>
 #include <vm/vm_map.h>
+#endif
 
 #include <sys/thread2.h>
 #include <sys/spinlock2.h>
 
+#ifndef _RUMPKERNEL
 static int donice (struct proc *chgp, int n);
 static int doionice (struct proc *chgp, int n);
+#endif
 
 static MALLOC_DEFINE(M_UIDINFO, "uidinfo", "uidinfo structures");
 #define	UIHASH(uid)	(&uihashtbl[(uid) & uihash])
@@ -68,6 +72,7 @@ static u_long uihash;		/* size of hash table - 1 */
 
 static struct uidinfo	*uilookup (uid_t uid);
 
+#ifndef _RUMPKERNEL
 /*
  * Resource controls and accounting.
  */
@@ -580,12 +585,15 @@ sys_lwp_rtprio(struct lwp_rtprio_args *uap)
 		error = EINVAL;
 		goto done;
 	}
+#ifndef _RUMPKERNEL
 	if (uap->tid == -1) {
+#endif
 		/*
 		 * sadly, tid can be 0 so we can't use 0 here
 		 * like sys_rtprio()
 		 */
 		lp = curthread->td_lwp;
+#ifndef _RUMPKERNEL
 	} else {
 		lp = lwp_rb_tree_RB_LOOKUP(&p->p_lwp_tree, uap->tid);
 		if (lp == NULL) {
@@ -593,6 +601,7 @@ sys_lwp_rtprio(struct lwp_rtprio_args *uap)
 			goto done;
 		}
 	}
+#endif
 
 	/*
 	 * Make sure that this lwp is not ripped if any of the following
@@ -903,6 +912,7 @@ ruadd(struct rusage *ru, struct rusage *ru2)
 	for (i = &ru->ru_last - &ru->ru_first; i >= 0; i--)
 		*ip++ += *ip2++;
 }
+#endif
 
 /*
  * Find the uidinfo structure for a uid.  This structure is used to
@@ -956,7 +966,9 @@ uicreate(uid_t uid)
 	spin_init(&uip->ui_lock, "uicreate");
 	uip->ui_uid = uid;
 	uip->ui_ref = 1;	/* we're returning a ref */
+#ifndef _RUMPKERNEL
 	varsymset_init(&uip->ui_varsymset, NULL);
+#endif
 	uip->ui_pcpu = kmalloc(sizeof(*uip->ui_pcpu) * ncpus,
 			       M_UIDINFO, M_WAITOK | M_ZERO);
 
@@ -971,7 +983,9 @@ uicreate(uid_t uid)
 		spin_unlock(&uihash_lock);
 
 		spin_uninit(&uip->ui_lock);
+#ifndef _RUMPKERNEL
 		varsymset_clean(&uip->ui_varsymset);
+#endif
 		kfree(uip->ui_pcpu, M_UIDINFO);
 		kfree(uip, M_UIDINFO);
 		uip = tmp;
@@ -1048,8 +1062,10 @@ uifree(uid_t uid)
 			kprintf("freeing uidinfo: uid = %d, proccnt = %ld\n",
 			    uip->ui_uid, uip->ui_proccnt);
 
+#ifndef _RUMPKERNEL
 		varsymset_clean(&uip->ui_varsymset);
 		lockuninit(&uip->ui_varsymset.vx_lock);
+#endif
 		spin_uninit(&uip->ui_lock);
 		kfree(uip->ui_pcpu, M_UIDINFO);
 		kfree(uip, M_UIDINFO);

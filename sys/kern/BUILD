@@ -106,8 +106,6 @@ rump_excludes = always_excludes + [
     "kern_linker.c",
     "kern_module.c",
     "kern_plimit.c",
-    "kern_prot.c",
-    "kern_resource.c",
     "kern_sfbuf.c",
     "kern_umtx.c",
     "kern_usched.c",

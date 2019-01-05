@@ -40,7 +40,9 @@
  */
 
 #include <sys/param.h>
+#ifndef _RUMPKERNEL
 #include <sys/acct.h>
+#endif
 #include <sys/systm.h>
 #include <sys/sysproto.h>
 #include <sys/kernel.h>
@@ -50,7 +52,9 @@
 #include <sys/malloc.h>
 #include <sys/pioctl.h>
 #include <sys/resourcevar.h>
+#ifndef _RUMPKERNEL
 #include <sys/jail.h>
+#endif
 #include <sys/lockf.h>
 #include <sys/spinlock.h>
 
@@ -231,6 +235,7 @@ sys_getgroups(struct getgroups_args *uap)
 	return (error);
 }
 
+#ifndef _RUMPKERNEL
 int
 sys_lwp_setname(struct lwp_setname_args *uap)
 {
@@ -268,6 +273,7 @@ sys_lwp_setname(struct lwp_setname_args *uap)
 	lwkt_reltoken(&p->p_token);
 	return error;
 }
+#endif
 
 int
 sys_setsid(struct setsid_args *uap)
@@ -941,9 +947,11 @@ priv_check_cred(struct ucred *cred, int priv, int flags)
 	if (cred->cr_uid != 0) 
 		return (EPERM);
 
+#ifndef _RUMPKERNEL
 	error = prison_priv_check(cred, priv);
 	if (error)
 		return (error);
+#endif
 
 	/* NOTE: accounting for suser access (p_acflag/ASU) removed */
 	return (0);
@@ -1044,8 +1052,10 @@ crfree(struct ucred *cr)
 		/*
 		 * Destroy empty prisons
 		 */
+#ifndef _RUMPKERNEL
 		if (jailed(cr))
 			prison_free(cr->cr_prison);
+#endif
 		cr->cr_prison = NULL;	/* safety */
 
 		kfree((caddr_t)cr, M_CRED);
@@ -1072,8 +1082,10 @@ cratom(struct ucred **pcr)
 	*newcr = *oldcr;
 	uihold(newcr->cr_uidinfo);
 	uihold(newcr->cr_ruidinfo);
+#ifndef _RUMPKERNEL
 	if (jailed(newcr))
 		prison_hold(newcr->cr_prison);
+#endif
 	newcr->cr_ref = 1;
 	crfree(oldcr);
 	*pcr = newcr;
@@ -1104,8 +1116,10 @@ cratom_proc(struct proc *p)
 	*newcr = *oldcr;
 	uihold(newcr->cr_uidinfo);
 	uihold(newcr->cr_ruidinfo);
+#ifndef _RUMPKERNEL
 	if (jailed(newcr))
 		prison_hold(newcr->cr_prison);
+#endif
 	newcr->cr_ref = 1;
 
 	spin_lock(&p->p_spin);
@@ -1128,8 +1142,10 @@ crdup(struct ucred *cr)
 	*newcr = *cr;
 	uihold(newcr->cr_uidinfo);
 	uihold(newcr->cr_ruidinfo);
+#ifndef _RUMPKERNEL
 	if (jailed(newcr))
 		prison_hold(newcr->cr_prison);
+#endif
 	newcr->cr_ref = 1;
 	return (newcr);
 }
