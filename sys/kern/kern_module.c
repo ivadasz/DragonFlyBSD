@@ -34,7 +34,15 @@
 #include <sys/sysproto.h>
 #include <sys/sysent.h>
 #include <sys/module.h>
+#ifdef _RUMPKERNEL
+#include <sys/module.h>
+struct linker_file {
+	int dummy;
+};
+typedef struct linker_file *linker_file_t;
+#else
 #include <sys/linker.h>
+#endif
 #include <sys/proc.h>
 
 MALLOC_DEFINE(M_MODULE, "module", "module data structures");
@@ -95,7 +103,7 @@ module_register_init(const void *arg)
 
     mod = module_lookupbyname(data->name);
     if (mod == NULL) {
-#ifndef _KERNEL_BAZEL
+#if 0
 	panic("module_register_init: module named %s not found", data->name);
 #else
 	/* temporary kludge until kernel `file' attachment registers modules */
@@ -140,12 +148,12 @@ module_register(const moduledata_t *data, linker_file_t container)
     bzero(&newmod->data, sizeof(newmod->data));
     TAILQ_INSERT_TAIL(&modules, newmod, link);
 
-#ifndef _KERNEL_BAZEL
+#if !defined(_KERNEL_BAZEL) && !defined(_RUMPKERNEL)
     if (container == NULL)
 	container = linker_current_file;
-#endif
     if (container)
 	TAILQ_INSERT_TAIL(&container->modules, newmod, flink);
+#endif
     newmod->file = container;
 
     return 0;
@@ -178,9 +186,11 @@ module_release(module_t mod)
     rc = --mod->refs;
     if (rc == 0) {
 	TAILQ_REMOVE(&modules, mod, link);
+#if !defined(_KERNEL_BAZEL) && !defined(_RUMPKERNEL)
 	if (mod->file) {
 	    TAILQ_REMOVE(&mod->file->modules, mod, flink);
 	}
+#endif
 	kfree(mod, M_MODULE);
     }
     return(rc);
