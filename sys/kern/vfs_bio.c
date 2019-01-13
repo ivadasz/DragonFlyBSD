@@ -152,8 +152,8 @@ long lodirtybufspace;
 long hidirtybufspace;
 static int getnewbufcalls;
 static int needsbuffer;			/* atomic */
-#ifndef _RUMPKERNEL
 static int runningbufreq;		/* atomic */
+#ifndef _RUMPKERNEL
 static int bd_request;			/* atomic */
 static int bd_request_hw;		/* atomic */
 #endif
@@ -263,7 +263,6 @@ bufspacewakeup(void)
 	}
 }
 
-#ifndef _RUMPKERNEL
 /*
  * runningbufwakeup:
  *
@@ -298,7 +297,6 @@ runningbufwakeup(struct buf *bp)
 		bd_signal(totalspace);
 	}
 }
-#endif
 
 /*
  * bufcountwakeup:
@@ -535,7 +533,6 @@ bd_signal(long totalspace)
 	}
 }
 
-#ifndef _RUMPKERNEL
 /*
  * BIO tracking support routines.
  *
@@ -578,7 +575,6 @@ bio_track_rel(struct bio_track *track)
 		active = track->bk_active;
 	}
 }
-#endif
 
 /*
  * Wait for the tracking count to reach 0.
@@ -1033,7 +1029,9 @@ bwrite(struct buf *bp)
 	bp->b_error = 0;
 	bp->b_bio1.bio_done = biodone_sync;
 	bp->b_bio1.bio_flags |= BIO_SYNC;
+#ifndef _RUMPKERNEL
 	vfs_busy_pages(bp->b_vp, bp);
+#endif
 
 	/*
 	 * Normal bwrites pipeline writes.  NOTE: b_bufsize is only
@@ -1080,7 +1078,9 @@ bawrite(struct buf *bp)
 	bp->b_cmd = BUF_CMD_WRITE;
 	bp->b_error = 0;
 	KKASSERT(bp->b_bio1.bio_done == NULL);
+#ifndef _RUMPKERNEL
 	vfs_busy_pages(bp->b_vp, bp);
+#endif
 
 	/*
 	 * Normal bwrites pipeline writes.  NOTE: b_bufsize is only
@@ -1294,6 +1294,7 @@ bundirty(struct buf *bp)
 	 */
 	bp->b_flags &= ~B_DEFERRED;
 }
+#endif
 
 /*
  * Set the b_runningbufspace field, used to track how much I/O is
@@ -1308,7 +1309,6 @@ bsetrunningbufspace(struct buf *bp, int bytes)
 		atomic_add_long(&runningbufcount, 1);
 	}
 }
-#endif
 
 /*
  * brelse:
@@ -3370,6 +3370,7 @@ bio_start_transaction(struct bio *bio, struct bio_track *track)
 	bio_track_ref(track);
 	dsched_buf_enter(bio->bio_buf);	/* might stack */
 }
+#endif
 
 /*
  * Initiate I/O on a vnode.
@@ -3413,6 +3414,7 @@ vn_strategy(struct vnode *vp, struct bio *bio)
 	 */
 	bp->b_flags |= B_IOISSUED;
 
+#ifndef _RUMPKERNEL
 	/*
 	 * Handle the swapcache intercept.
 	 *
@@ -3421,6 +3423,7 @@ vn_strategy(struct vnode *vp, struct bio *bio)
 	 */
 	if (vn_cache_strategy(vp, bio))
 		return;
+#endif
 
 	/*
 	 * If the vnode does not support KVABIO and the buffer is using
@@ -3443,6 +3446,7 @@ vn_strategy(struct vnode *vp, struct bio *bio)
         vop_strategy(*vp->v_ops, vp, bio);
 }
 
+#ifndef _RUMPKERNEL
 /*
  * vn_cache_strategy()
  *
@@ -3766,6 +3770,7 @@ bpdone(struct buf *bp, int elseit)
 			bqrelse(bp);
 	}
 }
+#endif
 
 /*
  * Normal biodone.
@@ -3842,6 +3847,7 @@ biodone_sync(struct bio *bio)
 	}
 }
 
+#ifndef _RUMPKERNEL
 /*
  * vfs_unbusy_pages:
  *

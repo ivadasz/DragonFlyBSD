@@ -443,9 +443,27 @@ void	brelse (struct buf *);
 void	bqrelse (struct buf *);
 int	cluster_awrite (struct buf *);
 
+#ifdef _RUMPKERNEL
+static __inline void
+bkvareset(struct buf *bp)
+{
+	/* Nothing */
+}
+static __inline void
+bkvasync(struct buf *bp)
+{
+	/* Nothing */
+}
+static __inline void
+bkvasync_all(struct buf *bp)
+{
+	/* Nothing */
+}
+#else
 void	bkvareset(struct buf *bp);
 void	bkvasync(struct buf *bp);
 void	bkvasync_all(struct buf *bp);
+#endif
 
 struct buf *getpbuf (int *);
 struct buf *getpbuf_mem (int *);

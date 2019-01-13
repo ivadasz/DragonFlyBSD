@@ -888,6 +888,7 @@ disk_dumpcheck(cdev_t dev, u_int64_t *size,
 	return (0);
 }
 
+#ifndef _RUMPKERNEL
 int
 disk_dumpconf(cdev_t dev, u_int onoff)
 {
@@ -914,6 +915,7 @@ disk_dumpconf(cdev_t dev, u_int onoff)
 
 	return set_dumper(&di);
 }
+#endif
 
 void
 disk_unprobe(struct disk *disk)
