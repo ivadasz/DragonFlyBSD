@@ -87,6 +87,7 @@
 	.globl	gd_npoll
 	.globl	gd_cpumask_simple
 	.globl	gd_cpumask_offset
+	.globl	gd_kvmeoi
 
 	.set    gd_cpuid,globaldata + GD_CPUID
 	.set    gd_cpumask,globaldata + GD_CPUMASK
@@ -104,4 +105,5 @@
 	.set	gd_npoll,globaldata + GD_NPOLL
 	.set	gd_cpumask_simple,globaldata + GD_CPUMASK_SIMPLE
 	.set	gd_cpumask_offset,globaldata + GD_CPUMASK_OFFSET
+	.set	gd_kvmeoi,globaldata + GD_KVM_EOI
 
