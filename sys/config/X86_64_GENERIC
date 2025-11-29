@@ -58,6 +58,7 @@ options 	INVARIANTS
 device		isa
 device		acpi
 device		pci
+device		vgapci
 
 # AHCI driver, this will override NATA for AHCI devices,
 # both drivers may be included.
