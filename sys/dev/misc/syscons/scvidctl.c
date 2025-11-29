@@ -34,6 +34,7 @@
  */
 
 #include "opt_syscons.h"
+#include "use_vga.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,10 +52,12 @@
 
 SET_DECLARE(scrndr_set, const sc_renderer_t);
 
+#ifndef SC_NO_MODE_CHANGE
 int
 sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode, int xsize, int ysize,
 		 int fontsize)
 {
+#if NVGA > 0
     video_info_t info;
     u_char *font;
     int prev_ysize;
@@ -181,14 +184,15 @@ sc_set_text_mode(scr_stat *scp, struct tty *tp, int mode, int xsize, int ysize,
     lwkt_reltoken(&vga_token);
 
     return 0;
+#else
+    return ENODEV;
+#endif	/* NVGA > 0 */
 }
 
 int
 sc_set_graphics_mode(scr_stat *scp, struct tty *tp, int mode)
 {
-#ifdef SC_NO_MODE_CHANGE
-    return ENODEV;
-#else
+#if NVGA > 0
     video_info_t info;
     int error;
 
@@ -256,16 +260,18 @@ sc_set_graphics_mode(scr_stat *scp, struct tty *tp, int mode)
     }
 
     return 0;
-#endif /* SC_NO_MODE_CHANGE */
+#else
+    return ENODEV;
+#endif	/* NVGA > 0 */
 }
+#endif /* SC_NO_MODE_CHANGE */
 
+#ifdef SC_PIXEL_MODE
 int
 sc_set_pixel_mode(scr_stat *scp, struct tty *tp, int xsize, int ysize, 
 		  int fontsize)
 {
-#ifndef SC_PIXEL_MODE
-    return ENODEV;
-#else
+#if NVGA > 0
     video_info_t info;
     u_char *font;
     int prev_ysize;
@@ -415,12 +421,17 @@ sc_set_pixel_mode(scr_stat *scp, struct tty *tp, int xsize, int ysize,
     }
 
     return 0;
-#endif /* SC_PIXEL_MODE */
+#else
+    return ENODEV;
+#endif	/* NVGA > 0 */
 }
+#endif /* SC_PIXEL_MODE */
 
+#if NVGA > 0
 #define fb_ioctl(a, c, d)		\
 	(((a) == NULL) ? ENODEV : 	\
 			 (*vidsw[(a)->va_index]->ioctl)((a), (c), (caddr_t)(d)))
+#endif
 
 int
 sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
@@ -449,7 +460,11 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	if (scp->sc->fbi != NULL) {
 	    ret = ENODEV;
 	} else {
+#if NVGA > 0
 	    ret = fb_ioctl(adp, FBIO_ADAPTER, data);
+#else
+	    ret = ENODEV;
+#endif
 	}
 	lwkt_reltoken(&vga_token);
 	return ret;
@@ -459,7 +474,11 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	if (scp->sc->fbi != NULL) {
 	    ret = ENODEV;
 	} else {
+#if NVGA > 0
 	    ret = fb_ioctl(adp, FBIO_ADPTYPE, data);
+#else
+	    ret = ENODEV;
+#endif
 	}
 	lwkt_reltoken(&vga_token);
 	return ret;
@@ -470,6 +489,7 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    lwkt_reltoken(&vga_token);
 	    return ENODEV;
 	}
+#if NVGA > 0
 	if (((video_adapter_info_t *)data)->va_index >= 0) {
 	    adp = vid_get_adapter(((video_adapter_info_t *)data)->va_index);
 	    if (adp == NULL) {
@@ -478,6 +498,9 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    }
 	}
 	ret = fb_ioctl(adp, FBIO_ADPINFO, data);
+#else
+	ret = ENODEV;
+#endif
 	lwkt_reltoken(&vga_token);
 	return ret;
 
@@ -534,7 +557,11 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    vinfo->vi_mem_model = V_INFO_MM_TEXT;
 	    ret = 0;
 	} else {
+#if NVGA > 0
 	    ret = fb_ioctl(adp, FBIO_MODEINFO, data);
+#else
+	    ret = ENODEV;
+#endif
 	}
 	lwkt_reltoken(&vga_token);
 	return ret;
@@ -544,7 +571,11 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	if (scp->sc->fbi != NULL) {
 	    ret = ENODEV;
 	} else {
+#if NVGA > 0
 	    ret = fb_ioctl(adp, FBIO_FINDMODE, data);
+#else
+	    ret = ENODEV;
+#endif
 	}
 	lwkt_reltoken(&vga_token);
 	return ret;
@@ -559,7 +590,11 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	    lwkt_reltoken(&vga_token);
 	    return ENODEV;
 	}
+#if NVGA > 0
 	ret = fb_ioctl(adp, FBIO_SETWINORG, data);
+#else
+	ret = ENODEV;
+#endif
 	lwkt_reltoken(&vga_token);
 	return ret;
 
@@ -571,7 +606,11 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 	if (scp->sc->fbi != NULL) {
 	    ret = ENODEV;
 	} else {
+#if NVGA > 0
 	    ret = fb_ioctl(adp, FBIO_GETWINORG, data);
+#else
+	    ret = ENODEV;
+#endif
 	}
 	lwkt_reltoken(&vga_token);
 	return ret;
@@ -592,7 +631,11 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 		ret = ENODEV;
 	    }
 	} else {
+#if NVGA > 0
 	    ret = fb_ioctl(adp, cmd, data);
+#else
+	    ret = ENODEV;
+#endif
 	}
 	lwkt_reltoken(&vga_token);
 	return ret;
@@ -645,7 +688,11 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 		ret = ENODEV;
 	    }
 	} else {
+#if NVGA > 0
 	    ret = fb_ioctl(adp, cmd, data);
+#else
+	    ret = ENODEV;
+#endif
 	}
 	lwkt_reltoken(&vga_token);
 	return ret;
@@ -680,12 +727,15 @@ sc_vid_ioctl(struct tty *tp, u_long cmd, caddr_t data, int flag)
 #endif /* SC_NO_FONT_LOADING */
 #endif
 
+#if NVGA > 0
 	    if (scp->sc->fbi == NULL)
 		load_palette(adp, scp->sc->palette);
 
 	    /* move hardware cursor out of the way */
-	    if (scp->sc->fbi == NULL)
+	    if (scp->sc->fbi == NULL) {
 		(*vidsw[adp->va_index]->set_hw_cursor)(adp, -1, -1);
+	    }
+#endif
 	    /* FALL THROUGH */
 
 	case KD_TEXT1:  	/* switch to TEXT (known) mode */

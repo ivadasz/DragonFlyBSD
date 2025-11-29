@@ -85,7 +85,9 @@ static vr_draw_mouse_t		vga_pxlmouse_planar;
 static vr_draw_border_t		vga_grborder;
 #endif
 
+#if !defined(SC_NO_MODE_CHANGE) || defined(SC_NO_CUTPASTE)
 static void			vga_nop(scr_stat *scp, ...);
+#endif
 
 static sc_rndr_sw_t txtrndrsw = {
 	vga_txtborder,
@@ -154,10 +156,12 @@ static u_short mouse_or_mask[16] = {
 };
 #endif
 
+#if !defined(SC_NO_MODE_CHANGE) || defined(SC_NO_CUTPASTE)
 static void
 vga_nop(scr_stat *scp, ...)
 {
 }
+#endif
 
 /* text mode renderer */
 
