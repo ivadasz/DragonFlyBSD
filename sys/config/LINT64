@@ -1256,6 +1256,7 @@ options 	ADW_ALLOW_MEMIO
 # configuration mode defined in the PCI specification.
 
 device		pci
+device		vgapci
 
 # AGP GART support
 #
