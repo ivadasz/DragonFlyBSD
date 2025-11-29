@@ -1957,7 +1957,7 @@ bus/pci/pci_if.m		optional pci
 bus/pci/pci_pci.c		optional pci
 bus/pci/pci_user.c		optional pci
 bus/pci/pcib_if.m		optional pci
-bus/pci/vga_pci.c		optional pci
+bus/pci/vga_pci.c		optional vgapci
 kern/kern_posix4_mib.c		standard
 kern/kern_p1003_1b.c		standard
 kern/kern_sched.c		optional _kposix_priority_scheduling
