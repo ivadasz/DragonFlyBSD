@@ -36,6 +36,7 @@
 #include "use_splash.h"
 #include "opt_syscons.h"
 #include "opt_ddb.h"
+#include "use_vga.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -494,6 +495,7 @@ sc_font_scale(scr_stat *scp, int max_cols, int max_rows)
 static int
 scvidprobe(int unit, int flags, int cons)
 {
+#if NVGA > 0
     /*
      * Access the video adapter driver through the back door!
      * Video adapter drivers need to be configured before syscons.
@@ -504,6 +506,9 @@ scvidprobe(int unit, int flags, int cons)
     vid_configure(cons ? VIO_PROBE_ONLY : 0);
 
     return (vid_find_adapter("*", unit) >= 0);
+#else
+	return 0;
+#endif
 }
 
 /* probe the keyboard, return TRUE if found */
@@ -754,8 +759,7 @@ scopen(struct dev_open_args *ap)
 	tp->t_ispeed = tp->t_ospeed = TTYDEF_SPEED;
 	scparam(tp, &tp->t_termios);
 	(*linesw[tp->t_line].l_modem)(tp, 1);
-    }
-    else
+    } else {
 	if ((tp->t_state & TS_XCLUDE) &&
 	    caps_priv_check(ap->a_cred, SYSCAP_RESTRICTEDROOT))
 	{
@@ -763,16 +767,19 @@ scopen(struct dev_open_args *ap)
 	    lwkt_reltoken(&vga_token);
 	    return(EBUSY);
 	}
+    }
 
     error = (*linesw[tp->t_line].l_open)(dev, tp);
 
     scp = SC_STAT(dev);
     if (scp == NULL) {
 	scp = dev->si_drv1 = alloc_scp(sc, SC_VTY(dev));
+#ifdef SC_PIXEL_MODE
 	syscons_lock();
 	if (ISGRAPHSC(scp))
 	    sc_set_pixel_mode(scp, NULL, COL, ROW, 16);
 	syscons_unlock();
+#endif
     }
     if (!tp->t_winsize.ws_col && !tp->t_winsize.ws_row) {
 	tp->t_winsize.ws_col = scp->xsize;
@@ -3102,10 +3109,14 @@ exchange_scr(sc_softc_t *sc)
     sc_move_cursor(scp, scp->xpos, scp->ypos);
     if (!ISGRAPHSC(scp))
 	sc_set_cursor_image(scp);
+    if (sc->fbi == NULL) {
+#if NVGA > 0
     if (sc->fbi == NULL && ISGRAPHSC(sc->old_scp))
 	load_palette(sc->adp, sc->palette);
     if (!ISGRAPHSC(scp) || sc->fbi == NULL)
 	sc_set_border(scp, scp->border);
+#endif
+    }
 
     /* set up the keyboard for the new screen */
     if (sc->old_scp->kbd_mode != scp->kbd_mode)
@@ -3256,7 +3267,9 @@ scinit(int unit, int flags)
 	    sc->fbi_generation++;
 	}
     } else if (sc->adapter >= 0) {
+#if NVGA > 0
 	vid_release(sc->adp, (void *)&sc->adapter);
+#endif
 	adp = sc->adp;
     }
     sc->adp = NULL;
@@ -3271,9 +3284,11 @@ scinit(int unit, int flags)
 	sc->kbd = NULL;
     }
     if (!(flags & SC_EFI_FB)) {
+#if NVGA > 0
 	sc->adapter = vid_allocate("*", unit, (void *)&sc->adapter);
 	sc->adp = vid_get_adapter(sc->adapter);
 	/* assert((sc->adapter >= 0) && (sc->adp != NULL)) */
+#endif
     }
     sc->keyboard = sc_allocate_keyboard(sc, unit);
     DPRINTF(1, ("sc%d: keyboard %d\n", unit, sc->keyboard));
@@ -3307,11 +3322,13 @@ scinit(int unit, int flags)
 	    col = 0;
 	    row = 0;
 	} else {
+#if NVGA > 0
 	    lwkt_gettoken(&vga_token);
 	    /* extract the hw cursor location and hide the cursor for now */
 	    (*vidsw[sc->adapter]->read_hw_cursor)(sc->adp, &col, &row);
 	    (*vidsw[sc->adapter]->set_hw_cursor)(sc->adp, -1, -1);
 	    lwkt_reltoken(&vga_token);
+#endif
 	}
 
 	/* set up the first console */
@@ -3418,8 +3435,10 @@ scinit(int unit, int flags)
 	}
 #endif /* !SC_NO_FONT_LOADING */
 
+#if NVGA > 0
 	if (!(flags & SC_EFI_FB))
 	    save_palette(sc->adp, sc->palette);
+#endif
 
 #if NSPLASH > 0
 	if (!(sc->flags & SC_SPLASH_SCRN) && (flags & SC_KERNEL_CONSOLE)) {
@@ -3470,8 +3489,10 @@ scterm(int unit, int flags)
     /* release the keyboard and the video card */
     if (sc->keyboard >= 0)
 	kbd_release(sc->kbd, &sc->keyboard);
+#if NVGA > 0
     if (sc->adapter >= 0)
 	vid_release(sc->adp, &sc->adapter);
+#endif
 
     /* 
      * Stop the terminal emulator, if any.  If operating on the
@@ -3611,7 +3632,9 @@ alloc_scp(sc_softc_t *sc, int vty)
 static void
 init_scp(sc_softc_t *sc, int vty, scr_stat *scp)
 {
+#if NVGA > 0
     video_info_t info;
+#endif
 
     bzero(scp, sizeof(*scp));
 
@@ -3622,9 +3645,11 @@ init_scp(sc_softc_t *sc, int vty, scr_stat *scp)
     scp->fbi_generation = sc->fbi_generation;
     callout_init_lk(&scp->blink_screen_ch, &syscons_blink_lk);
     if (scp->sc->fbi == NULL) {
+#if NVGA > 0
 	lwkt_gettoken(&vga_token);
 	(*vidsw[sc->adapter]->get_info)(sc->adp, scp->mode, &info);
 	lwkt_reltoken(&vga_token);
+#endif
     }
     if (scp->sc->fbi != NULL) {
 	scp->xpixel = sc->fbi->width;
@@ -3643,7 +3668,9 @@ init_scp(sc_softc_t *sc, int vty, scr_stat *scp)
 #else
 	scp->font = NULL;
 #endif
-    } else if (info.vi_flags & V_INFO_GRAPHICS) {
+    }
+#if NVGA > 0
+    else if (info.vi_flags & V_INFO_GRAPHICS) {
 	scp->status |= GRAPHICS_MODE;
 	scp->xpixel = info.vi_width;
 	scp->ypixel = info.vi_height;
@@ -3681,6 +3708,7 @@ init_scp(sc_softc_t *sc, int vty, scr_stat *scp)
 #endif
 	}
     }
+#endif	/* NVGA > 0 */
     scp->xoff = scp->yoff = 0;
     scp->xpos = scp->ypos = 0;
     sc_vtb_init(&scp->vtb, VTB_MEMORY, 0, 0, NULL, FALSE);
@@ -4092,9 +4120,11 @@ scmmap(struct dev_mmap_args *ap)
 	    ap->a_result = atop(vtophys(scp->sc->fbi->vaddr + ap->a_offset));
 	}
     } else {
+#if NVGA > 0
 	ap->a_result = (*vidsw[scp->sc->adapter]->mmap)(scp->sc->adp,
 							ap->a_offset,
 							ap->a_nprot);
+#endif
     }
     lwkt_reltoken(&vga_token);
     return(0);
@@ -4163,14 +4193,18 @@ update_kbd_leds(scr_stat *scp, int which)
 int
 set_mode(scr_stat *scp)
 {
+#if NVGA > 0
     video_info_t info;
+#endif
 
     lwkt_gettoken(&vga_token);
     /* reject unsupported mode */
+#if NVGA > 0
     if (scp->sc->fbi == NULL && (*vidsw[scp->sc->adapter]->get_info)(scp->sc->adp, scp->mode, &info)) {
         lwkt_reltoken(&vga_token);
 	return 1;
     }
+#endif
 
     /* if this vty is not currently showing, do nothing */
     if (scp != scp->sc->cur_scp) {
@@ -4180,9 +4214,11 @@ set_mode(scr_stat *scp)
 
     /* setup video hardware for the given mode */
     if (scp->sc->fbi == NULL) {
+#if NVGA > 0
 	(*vidsw[scp->sc->adapter]->set_mode)(scp->sc->adp, scp->mode);
 	sc_vtb_init(&scp->scr, VTB_FRAMEBUFFER, scp->xsize, scp->ysize,
 		    (void *)scp->sc->adp->va_window, FALSE);
+#endif
     } else {
 	goto done;
     }
@@ -4266,7 +4302,9 @@ sc_load_font(scr_stat *scp, int page, int size, u_char *buf,
 
     sc = scp->sc;
     sc->font_loading_in_progress = TRUE;
+#if NVGA > 0
     (*vidsw[sc->adapter]->load_font)(sc->adp, page, size, buf, base, count);
+#endif
     sc->font_loading_in_progress = FALSE;
 }
 
@@ -4278,14 +4316,18 @@ sc_save_font(scr_stat *scp, int page, int size, u_char *buf,
 
     sc = scp->sc;
     sc->font_loading_in_progress = TRUE;
+#if NVGA > 0
     (*vidsw[sc->adapter]->save_font)(sc->adp, page, size, buf, base, count);
+#endif
     sc->font_loading_in_progress = FALSE;
 }
 
 void
 sc_show_font(scr_stat *scp, int page)
 {
+#if NVGA > 0
     (*vidsw[scp->sc->adapter]->show_font)(scp->sc->adp, page);
+#endif
 }
 #endif /* !SC_NO_FONT_LOADING */
 
