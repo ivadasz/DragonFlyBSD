@@ -121,13 +121,11 @@ static	char		sc_filled_border = FALSE; /* filled initial VT border */
 static	int		saver_mode = CONS_NO_SAVER; /* LKM/user saver */
 static	int		run_scrn_saver = FALSE;	/* should run the saver? */
 static	long        	scrn_blank_time = 0;    /* screen saver timeout value */
-#if NSPLASH > 0
 static	int     	scrn_blanked;		/* # of blanked screen */
 static	int		sticky_splash = FALSE;
 
 static	void		none_saver(sc_softc_t *sc, int blank) { }
 static	void		(*current_saver)(sc_softc_t *, int) = none_saver;
-#endif
 
 /*
  * Lock for asynchronous screen update thread, needed to safely modify the
@@ -197,20 +195,18 @@ static void scrn_update(scr_stat *scp, int show_cursor, int flags);
 static void scrn_update_thread(void *arg);
 
 static void sc_fb_set_par(void *context, int pending);
-#if NSPLASH > 0
 static void sc_fb_blank(void *context, int pending);
-#endif /* NSPLASH */
 
-#if NSPLASH > 0
 static void scframebuffer_saver(sc_softc_t *sc, int show);
-static int scsplash_callback(int event, void *arg);
-static void scsplash_saver(sc_softc_t *sc, int show);
 static int add_scrn_saver(void (*this_saver)(sc_softc_t *, int));
 static int remove_scrn_saver(void (*this_saver)(sc_softc_t *, int));
-static int set_scrn_saver_mode(scr_stat *scp, int mode, u_char *pal, int border);
-static int restore_scrn_saver_mode(scr_stat *scp, int changemode);
 static void stop_scrn_saver(sc_softc_t *sc, void (*saver)(sc_softc_t *, int));
 static int wait_scrn_saver_stop(sc_softc_t *sc, int need_unlock);
+#if NSPLASH > 0
+static int scsplash_callback(int event, void *arg);
+static void scsplash_saver(sc_softc_t *sc, int show);
+static int set_scrn_saver_mode(scr_stat *scp, int mode, u_char *pal, int border);
+static int restore_scrn_saver_mode(scr_stat *scp, int changemode);
 #define scsplash_stick(stick)		(sticky_splash = (stick))
 #else /* !NSPLASH */
 #define scsplash_stick(stick)
@@ -354,13 +350,11 @@ register_framebuffer(struct fb_info *info)
 		    M_SYSCONS, M_WAITOK | M_ZERO);
 	}
 	TASK_INIT(sc->fb_set_par_task, 0, sc_fb_set_par, sc);
-#if NSPLASH > 0
 	if (sc->fb_blank_task == NULL) {
 		sc->fb_blank_task = kmalloc(sizeof(struct task),
 		    M_SYSCONS, M_WAITOK | M_ZERO);
 	}
 	TASK_INIT(sc->fb_blank_task, 0, sc_fb_blank, sc);
-#endif /* NSPLASH */
 
 	/*
 	 * Make sure that console messages don't interfere too much with
@@ -385,10 +379,8 @@ register_framebuffer(struct fb_info *info)
 	sc->fb_blanked = FALSE;
 	if (sc->unit == sc_console_unit && sc->cur_scp->smode.mode != VT_AUTO)
 		cons_unavail = FALSE;
-#if NSPLASH > 0
 	if (info->fbops.fb_blank != NULL)
 		add_scrn_saver(scframebuffer_saver);
-#endif /* NSPLASH */
 
 	lockmgr(&sc_asynctd_lk, LK_RELEASE);
 	lwkt_reltoken(&vga_token);
@@ -414,21 +406,17 @@ unregister_framebuffer(struct fb_info *info)
 		return;
 	}
 
-#if NSPLASH > 0
 	if (info->fbops.fb_blank != NULL)
 		remove_scrn_saver(scframebuffer_saver);
-#endif /* NSPLASH */
 
 	if (sc->fb_set_par_task != NULL &&
 	    taskqueue_cancel(taskqueue_thread[0], sc->fb_set_par_task, NULL)) {
 		taskqueue_drain(taskqueue_thread[0], sc->fb_set_par_task);
 	}
-#if NSPLASH > 0
 	if (sc->fb_blank_task != NULL &&
 	    taskqueue_cancel(taskqueue_thread[0], sc->fb_blank_task, NULL)) {
 		taskqueue_drain(taskqueue_thread[0], sc->fb_blank_task);
 	}
-#endif /* NSPLASH */
 	sc->fb_blanked = TRUE;
 	if (sc->unit == sc_console_unit)
 		cons_unavail = TRUE;
@@ -1142,13 +1130,11 @@ scioctl(struct dev_ioctl_args *ap)
 	    /* if a LKM screen saver is running, stop it first. */
 	    scsplash_stick(FALSE);
 	    saver_mode = *(int *)data;
-#if NSPLASH > 0
 	    if ((error = wait_scrn_saver_stop(NULL, TRUE))) {
 		syscons_unlock();
 		lwkt_reltoken(&vga_token);
 		return error;
 	    }
-#endif /* NSPLASH */
 	    run_scrn_saver = TRUE;
 	    if (saver_mode == CONS_USR_SAVER)
 		scp->status |= SAVER_RUNNING;
@@ -2095,16 +2081,15 @@ sccnupdate(scr_stat *scp)
 
     if (!run_scrn_saver)
 	scp->sc->flags &= ~SC_SCRN_IDLE;
-#if NSPLASH > 0
     /*
      * This is a hard path, we cannot call stop_scrn_saver() here.
      */
-    if ((saver_mode != CONS_LKM_SAVER) || !(scp->sc->flags & SC_SCRN_IDLE))
+    if ((saver_mode != CONS_LKM_SAVER) || !(scp->sc->flags & SC_SCRN_IDLE)) {
 	if (scp->sc->flags & SC_SCRN_BLANKED) {
 	    sc_touch_scrn_saver();
             /*stop_scrn_saver(scp->sc, current_saver);*/
 	}
-#endif /* NSPLASH */
+    }
 
     if (scp != scp->sc->cur_scp || scp->sc->blink_in_progress
 	|| scp->sc->switch_in_progress) {
@@ -2194,12 +2179,10 @@ scrn_timer(void *arg)
 	if (scrn_blank_time > 0)
 	    run_scrn_saver = TRUE;
     }
-#if NSPLASH > 0
     if ((saver_mode != CONS_LKM_SAVER) || !(sc->flags & SC_SCRN_IDLE)) {
 	if ((sc->flags & SC_SCRN_BLANKED) && !ISGRAPHSC(sc->cur_scp))
             stop_scrn_saver(sc, current_saver);
     }
-#endif /* NSPLASH */
 
     /* should we just return ? */
     if (sc->blink_in_progress || sc->switch_in_progress ||
@@ -2216,12 +2199,10 @@ scrn_timer(void *arg)
     if (!ISGRAPHSC(scp) && !(sc->flags & SC_SCRN_BLANKED))
 	scrn_update(scp, TRUE, SCRN_ASYNCOK);
 
-#if NSPLASH > 0
     /* should we activate the screen saver? */
     if ((saver_mode == CONS_LKM_SAVER) && (sc->flags & SC_SCRN_IDLE))
 	if (!ISGRAPHSC(scp) || (sc->flags & SC_SCRN_BLANKED))
 	    (*current_saver)(sc, TRUE);
-#endif /* NSPLASH */
 
     syscons_unlock();
     if (again)
@@ -2446,7 +2427,6 @@ sc_fb_set_par(void *context, int pending)
 	lwkt_reltoken(&vga_token);
 }
 
-#if NSPLASH > 0
 static void
 sc_fb_blank(void *context, int pending)
 {
@@ -2501,6 +2481,7 @@ scframebuffer_saver(sc_softc_t *sc, int show)
 	taskqueue_enqueue(taskqueue_thread[0], sc->fb_blank_task);
 }
 
+#if NSPLASH > 0
 static int
 scsplash_callback(int event, void *arg)
 {
@@ -2572,6 +2553,7 @@ scsplash_saver(sc_softc_t *sc, int show)
     }
     busy = FALSE;
 }
+#endif /* NSPLASH */
 
 static int
 add_scrn_saver(void (*this_saver)(sc_softc_t *, int))
@@ -2622,6 +2604,7 @@ remove_scrn_saver(void (*this_saver)(sc_softc_t *, int))
     return 0;
 }
 
+#if NSPLASH > 0
 static int
 set_scrn_saver_mode(scr_stat *scp, int mode, u_char *pal, int border)
 {
@@ -2696,6 +2679,7 @@ restore_scrn_saver_mode(scr_stat *scp, int changemode)
     }
     /* NOTREACHED */
 }
+#endif /* NSPLASH */
 
 static void
 stop_scrn_saver(sc_softc_t *sc, void (*saver)(sc_softc_t *, int))
@@ -2739,23 +2723,18 @@ wait_scrn_saver_stop(sc_softc_t *sc, int need_unlock)
     run_scrn_saver = FALSE;
     return error;
 }
-#endif /* NSPLASH */
 
 void
 sc_start_scrn_saver(sc_softc_t *sc)
 {
-#if NSPLASH > 0
     (*current_saver)(sc, TRUE);
-#endif
 }
 
 void
 sc_stop_scrn_saver(sc_softc_t *sc)
 {
-#if NSPLASH > 0
     if (sc->flags & SC_SCRN_BLANKED)
 	stop_scrn_saver(sc, current_saver);
-#endif
 }
 
 void
@@ -3131,11 +3110,9 @@ exchange_scr(sc_softc_t *sc)
 static void
 sc_puts(scr_stat *scp, u_char *buf, int len)
 {
-#if NSPLASH > 0
     /* make screensaver happy */
     if (!sticky_splash && scp == scp->sc->cur_scp)
 	run_scrn_saver = FALSE;
-#endif
 
     if (scp->tsw)
 	(*scp->tsw->te_puts)(scp, buf, len);
@@ -3529,19 +3506,15 @@ scshutdown(void *arg, int howto)
 int
 sc_clean_up(scr_stat *scp, int need_unlock)
 {
-#if NSPLASH > 0
     int error;
-#endif /* NSPLASH */
 
     lwkt_gettoken(&vga_token);
     if (scp->sc->flags & SC_SCRN_BLANKED) {
 	sc_touch_scrn_saver();
-#if NSPLASH > 0
 	if ((error = wait_scrn_saver_stop(scp->sc, need_unlock))) {
 	    lwkt_reltoken(&vga_token);
 	    return error;
 	}
-#endif /* NSPLASH */
     }
     scp->status |= MOUSE_HIDDEN;
     sc_remove_mouse_image(scp);
@@ -3947,7 +3920,6 @@ next_code:
 		break;
 
 	    case SPSC:
-#if NSPLASH > 0
 		/* force activatation/deactivation of the screen saver */
 		if (!(sc->flags & SC_SCRN_BLANKED)) {
 		    run_scrn_saver = TRUE;
@@ -3968,7 +3940,6 @@ next_code:
 			}
 		    }
 		}
-#endif /* NSPLASH */
 		break;
 
 	    case RBT:
