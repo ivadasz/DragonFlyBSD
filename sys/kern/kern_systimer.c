@@ -61,7 +61,7 @@
 /*
  * Execute ready systimers.  Called directly from the platform-specific
  * one-shot timer clock interrupt (e.g. clkintr()) or via an IPI.  May
- * be called simultaniously on multiple cpus and always operations on 
+ * be called simultaneously on multiple cpus and always operates on 
  * the current cpu's queue.  Systimer functions are responsible for calling
  * hardclock, statclock, and other finely-timed routines.
  */
@@ -88,9 +88,9 @@ systimer_intr(sysclock_t *timep, int in_ipi, struct intrframe *frame)
 	}
 
 	/*
-	 * Dequeue and execute, detect a loss of the systimer.  Note
+	 * Dequeue and execute, detect deletion of the systimer.  Note
 	 * that the in-progress systimer pointer can only be used to
-	 * detect a loss of the systimer, it is only useful within
+	 * detect deletion of the systimer, it is only useful within
 	 * this code sequence and becomes stale otherwise.
 	 */
 	info->flags &= ~SYSTF_ONQUEUE;
@@ -121,7 +121,7 @@ systimer_intr(sysclock_t *timep, int in_ipi, struct intrframe *frame)
 	    if ((info->flags & SYSTF_NONQUEUED) &&
 		(ssysclock_t)(info->time - time) <= 0
 	    ) {
-		info->time += roundup(time - info->time, info->periodic);
+		info->time += roundup(time - info->time + 1, info->periodic);
 	    }
 	    systimer_add(info);
 	}
