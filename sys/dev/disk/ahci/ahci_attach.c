@@ -587,7 +587,7 @@ noccc:
 				}
 #else
 			if (ahci_disks_attach(ap) == 0) {
-				ahci_cam_changed(ap, NULL, -1);
+				ahci_port_changed(ap, NULL, -1);
 				ahci_os_unlock_port(ap);
 				/* ahci_disks_attach() is waiting already. */
 #endif

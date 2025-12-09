@@ -634,8 +634,8 @@ void	ahci_cam_detach(struct ahci_port *ap);
 int	ahci_disks_attach(struct ahci_port *ap);
 void	ahci_disks_detach(struct ahci_port *ap);
 #endif
-void	ahci_cam_changed(struct ahci_port *ap, struct ata_port *at, int found);
-int	ahci_cam_probe(struct ahci_port *ap, struct ata_port *at);
+void	ahci_port_changed(struct ahci_port *ap, struct ata_port *at, int found);
+int	ahci_port_probe(struct ahci_port *ap, struct ata_port *at);
 
 struct ata_xfer *ahci_ata_get_xfer(struct ahci_port *ap, struct ata_port *at);
 void	ahci_ata_put_xfer(struct ata_xfer *xa);

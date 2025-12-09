@@ -834,13 +834,13 @@ ahci_port_state_machine(struct ahci_port *ap, int initial)
 		if (ap->ap_probe == ATA_PROBE_NEED_SOFT_RESET)
 			ahci_port_reset(ap, NULL, 0);
 		if (ap->ap_probe == ATA_PROBE_NEED_IDENT)
-			ahci_cam_probe(ap, NULL);
+			ahci_port_probe(ap, NULL);
 	}
 	if (ap->ap_type != ATA_PORT_T_PM) {
 		if (ap->ap_probe == ATA_PROBE_FAILED) {
-			ahci_cam_changed(ap, NULL, 0);
+			ahci_port_changed(ap, NULL, 0);
 		} else if (ap->ap_probe >= ATA_PROBE_NEED_IDENT) {
-			ahci_cam_changed(ap, NULL, 1);
+			ahci_port_changed(ap, NULL, 1);
 		}
 		return;
 	}
@@ -957,7 +957,7 @@ ahci_port_state_machine(struct ahci_port *ap, int initial)
 				if (at->at_probe == ATA_PROBE_NEED_SOFT_RESET)
 					ahci_port_reset(ap, at, 0);
 				if (at->at_probe == ATA_PROBE_NEED_IDENT)
-					ahci_cam_probe(ap, at);
+					ahci_port_probe(ap, at);
 				ahci_end_exclusive_access(ap, at);
 			}
 
@@ -967,9 +967,9 @@ ahci_port_state_machine(struct ahci_port *ap, int initial)
 			if (at->at_features & ATA_PORT_F_RESCAN) {
 				at->at_features &= ~ATA_PORT_F_RESCAN;
 				if (at->at_probe == ATA_PROBE_FAILED) {
-					ahci_cam_changed(ap, at, 0);
+					ahci_port_changed(ap, at, 0);
 				} else if (at->at_probe >= ATA_PROBE_NEED_IDENT) {
-					ahci_cam_changed(ap, at, 1);
+					ahci_port_changed(ap, at, 1);
 				}
 			}
 			data &= ~(1 << target);
@@ -2919,7 +2919,7 @@ finish_error:
 				ahci_pwrite(ap, AHCI_PREG_SERR,
 						AHCI_PREG_SERR_DIAG_N);
 				ahci_pwrite(ap, AHCI_PREG_SNTF, data);
-				ahci_cam_changed(ap, NULL, -1);
+				ahci_port_changed(ap, NULL, -1);
 			}
 		}
 		is &= ~(AHCI_PREG_IS_SDBS | AHCI_PREG_IS_IPMS);
@@ -3292,7 +3292,7 @@ failall:
 		ap->ap_flags |= AP_F_IN_RESET;
 		ap->ap_flags |= AP_F_HARSH_REINIT;
 		ap->ap_probe = ATA_PROBE_NEED_INIT;
-		ahci_cam_changed(ap, NULL, -1);
+		ahci_port_changed(ap, NULL, -1);
 		break;
 	case NEED_HOTPLUG_INSERT:
 		/*
@@ -3306,7 +3306,7 @@ failall:
 			kprintf("%s: HOTPLUG - Device inserted\n",
 				PORTNAME(ap));
 			ap->ap_probe = ATA_PROBE_NEED_INIT;
-			ahci_cam_changed(ap, NULL, -1);
+			ahci_port_changed(ap, NULL, -1);
 		}
 		break;
 	case NEED_HOTPLUG_REMOVE:
@@ -3322,7 +3322,7 @@ failall:
 				PORTNAME(ap));
 			ahci_port_hardstop(ap);
 			/* ap_probe set to failed */
-			ahci_cam_changed(ap, NULL, -1);
+			ahci_port_changed(ap, NULL, -1);
 		}
 		break;
 	default:

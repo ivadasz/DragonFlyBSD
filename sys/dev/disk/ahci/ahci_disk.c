@@ -72,6 +72,9 @@
 
 #include "ahci.h"
 
+// For IOCTL handling
+#include <sys/nata.h>
+
 static void ahci_ata_complete_disk_rw(struct ata_xfer *xa);
 static void ahci_ata_complete_disk_synchronize_cache(struct ata_xfer *xa);
 static void ahci_submit_task(void *context, int pending);
@@ -82,8 +85,8 @@ static void ahci_ata_atapi_sense(struct ata_fis_d2h *rfis,
 		     struct scsi_sense_data *sense_data);
 #endif
 
-static int ahci_cam_probe_disk(struct ahci_port *ap, struct ata_port *at);
-static int ahci_cam_probe_atapi(struct ahci_port *ap, struct ata_port *at);
+static int ahci_port_probe_disk(struct ahci_port *ap, struct ata_port *at);
+static int ahci_port_probe_atapi(struct ahci_port *ap, struct ata_port *at);
 static int ahci_set_xfer(struct ahci_port *ap, struct ata_port *atx);
 static void ahci_ata_dummy_done(struct ata_xfer *xa);
 static void ata_fix_identify(struct ata_identify *id);
@@ -92,6 +95,7 @@ static void ahci_strip_string(const char **basep, int *lenp);
 /* disk routines */
 static d_open_t ahcid_open;
 static d_close_t ahcid_close;
+static d_ioctl_t ahcid_ioctl;
 static d_strategy_t ahcid_strategy;
 static d_dump_t ahcid_dump;
 
@@ -99,6 +103,9 @@ static struct dev_ops ahcid_ops = {
 	{ "ahcid", 0, D_DISK | D_MPSAFE },
 	.d_open = ahcid_open,
 	.d_close = ahcid_close,
+	.d_read = physread,
+	.d_write = physwrite,
+	.d_ioctl = ahcid_ioctl,
 	.d_strategy = ahcid_strategy,
 	.d_dump = ahcid_dump,
 };
@@ -420,7 +427,7 @@ ahci_disks_attach(struct ahci_port *ap)
 	bioq_init(&ap->ap_bioq);
 
 	if (ap->ap_probe == ATA_PROBE_NEED_IDENT)
-		error = ahci_cam_probe(ap, NULL);
+		error = ahci_port_probe(ap, NULL);
 	else
 		error = 0;
 	if (error) {
@@ -446,7 +453,7 @@ ahci_disks_detach(struct ahci_port *ap)
  * which may or may not be a port multiplier.
  */
 int
-ahci_cam_probe(struct ahci_port *ap, struct ata_port *atx)
+ahci_port_probe(struct ahci_port *ap, struct ata_port *atx)
 {
 	struct ata_port	*at;
 	struct ata_xfer	*xa;
@@ -700,10 +707,10 @@ ahci_cam_probe(struct ahci_port *ap, struct ata_port *atx)
 	 */
 	switch(at->at_type) {
 	case ATA_PORT_T_DISK:
-		error = ahci_cam_probe_disk(ap, atx);
+		error = ahci_port_probe_disk(ap, atx);
 		break;
 	case ATA_PORT_T_ATAPI:
-		error = ahci_cam_probe_atapi(ap, atx);
+		error = ahci_port_probe_atapi(ap, atx);
 		break;
 	default:
 		error = EIO;
@@ -755,7 +762,7 @@ err:
 }
 
 void
-ahci_cam_changed(struct ahci_port *ap, struct ata_port *atx, int found)
+ahci_port_changed(struct ahci_port *ap, struct ata_port *atx, int found)
 {
 }
 
@@ -763,7 +770,7 @@ ahci_cam_changed(struct ahci_port *ap, struct ata_port *atx, int found)
  * DISK-specific probe after initial ident
  */
 static int
-ahci_cam_probe_disk(struct ahci_port *ap, struct ata_port *atx)
+ahci_port_probe_disk(struct ahci_port *ap, struct ata_port *atx)
 {
 	struct ata_port *at;
 	struct ata_xfer	*xa;
@@ -859,7 +866,7 @@ ahci_cam_probe_disk(struct ahci_port *ap, struct ata_port *atx)
  * ATAPI-specific probe after initial ident
  */
 static int
-ahci_cam_probe_atapi(struct ahci_port *ap, struct ata_port *atx)
+ahci_port_probe_atapi(struct ahci_port *ap, struct ata_port *atx)
 {
 	ahci_set_xfer(ap, atx);
 	return(0);
@@ -1007,6 +1014,36 @@ ahci_submit_task(void *context, int pending __unused)
 }
 
 static int
+ahcid_ioctl(struct dev_ioctl_args *ap)
+{
+	struct ahci_port *port = (void *)ap->a_head.a_dev->si_drv1;
+	struct ata_ioc_request *ioc_request = (struct ata_ioc_request *)ap->a_data;
+	u_long cmd = ap->a_cmd;
+
+	kprintf("%s: ioctl cmd=%ld\n", PORTNAME(port), cmd);
+	switch (cmd) {
+	case IOCATAREQUEST:
+		kprintf("%s: ATA Request flags: %d\n",
+		    PORTNAME(port), ioc_request->flags);
+		if (ioc_request->flags & ATA_CMD_WRITE) {
+			kprintf("%s: ATA Command data count: %d\n",
+			    PORTNAME(port), ioc_request->count);
+		}
+		if (!(ioc_request->flags & ATA_CMD_ATAPI)) {
+			kprintf("%s: command=%u feature=%u lba=%lu count=%u\n",
+			    PORTNAME(port),
+			    ioc_request->u.ata.command,
+			    ioc_request->u.ata.feature,
+			    ioc_request->u.ata.lba,
+			    ioc_request->u.ata.count);
+		}
+
+		break;
+	}
+	return EIO;
+}
+
+static int
 ahcid_strategy(struct dev_strategy_args *ap)
 {
 	struct ahci_port *port = (void *)ap->a_head.a_dev->si_drv1;
@@ -1052,5 +1089,12 @@ ahcid_strategy(struct dev_strategy_args *ap)
 static int
 ahcid_dump(struct dev_dump_args *ap)
 {
+#if 0
+	struct ahci_port *port = (void *)ap->a_head.a_dev->si_drv1;
+	uint64_t buf_start, buf_len;
+
+	buf_start = ap->a_offset;
+	buf_len = ap->a_length;
+#endif
 	return EIO;
 }
