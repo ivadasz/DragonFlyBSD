@@ -628,6 +628,17 @@ ahci_port_link_pwr_mgmt(struct ahci_port *ap, int link_pwr_mgmt)
 
 		sctl = ahci_pread(ap, AHCI_PREG_SCTL);
 		sctl &= ~(AHCI_PREG_SCTL_IPM);
+#if 0
+		if ((ap->ap_sc->sc_cap2 & AHCI_REG_CAP2_SDS) &&
+		    ap->ap_type != ATA_PORT_T_PM &&
+		    (ap->ap_ata[0]->at_identify.satafsup & SATA_FEATURE_SUP_DEVSLEEP)) {
+			if (ahci_set_feature(ap, NULL, ATA_SATAFT_DEVSLEEP, 1)) {
+				kprintf("%s: Could not enable devsleep "
+				    "link power management.\n",
+				    PORTNAME(ap));
+			}
+		}
+#endif
 		// Disables DevSleep for now.
 		if (ap->ap_sc->sc_cap2 & AHCI_REG_CAP2_SDS)
 			sctl |= AHCI_PREG_SCTL_IPM_NODEVSLP;
