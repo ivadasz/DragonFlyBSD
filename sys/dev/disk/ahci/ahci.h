@@ -444,7 +444,6 @@ struct ahci_port {
 	int			ap_pmcount;
 	int			ap_flags;
 #define AP_F_BUS_REGISTERED	0x0001
-#define AP_F_CAM_ATTACHED	0x0002
 #define AP_F_IN_RESET		0x0004
 #define AP_F_SCAN_RUNNING	0x0008
 #define AP_F_SCAN_REQUESTED	0x0010

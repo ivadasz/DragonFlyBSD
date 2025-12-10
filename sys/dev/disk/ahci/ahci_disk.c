@@ -424,6 +424,7 @@ ahci_disks_attach(struct ahci_port *ap)
 	int error;
 
 	ap->ap_flags |= AP_F_BUS_REGISTERED;
+	kprintf("%s: Initialized bioq\n", PORTNAME(ap));
 	bioq_init(&ap->ap_bioq);
 
 	if (ap->ap_probe == ATA_PROBE_NEED_IDENT)
@@ -434,7 +435,6 @@ ahci_disks_attach(struct ahci_port *ap)
 		ahci_disks_detach(ap);
 		return (EIO);
 	}
-	ap->ap_flags |= AP_F_CAM_ATTACHED;
 
 	return(0);
 }
@@ -744,6 +744,7 @@ ahci_port_probe(struct ahci_port *ap, struct ata_port *atx)
 		ap->ap_cdev = disk_create(device_get_unit(ap->ap_sc->sc_dev), &ap->ap_disk,
 		    &ahcid_ops);
 		ap->ap_cdev->si_drv1 = ap;
+		kprintf("%s si_drv1 set\n", PORTNAME(ap));
 		ap->ap_cdev->si_iosize_max = MAXPHYS;
 
 		disk_setdiskinfo(&ap->ap_disk, &info);
@@ -1060,6 +1061,7 @@ ahcid_strategy(struct dev_strategy_args *ap)
 		return 0;
 	}
 
+	kprintf("%s called strategy\n", PORTNAME(port));
 	lwkt_serialize_enter(&port->ap_slz);
 	bioqdisksort(&port->ap_bioq, bio);
 	do {
