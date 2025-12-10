@@ -208,7 +208,7 @@ static int	re_tx_collect(struct re_softc *);
 static void	re_intr(void *);
 static void	re_tick(void *);
 static void	re_tick_serialized(void *);
-static void	re_disable_aspm(device_t);
+//static void	re_disable_aspm(device_t);
 static void	re_link_up(struct re_softc *);
 static void	re_link_down(struct re_softc *);
 
@@ -766,7 +766,7 @@ re_attach(device_t dev)
 	}
 
 	/* Disable ASPM */
-	re_disable_aspm(dev);
+//	re_disable_aspm(dev);
 
 	rtl_exit_oob(sc);
 	rtl_hw_init(sc);
@@ -2510,6 +2510,7 @@ re_jbuf_ref(void *arg)
 }
 #endif	/* RE_JUMBO */
 
+#if 0
 static void
 re_disable_aspm(device_t dev)
 {
@@ -2532,6 +2533,7 @@ re_disable_aspm(device_t dev)
 	link_ctrl &= ~(PCIEM_LNKCTL_ASPM_L0S | PCIEM_LNKCTL_ASPM_L1);
 	pci_write_config(dev, reg, link_ctrl, 2);
 }
+#endif
 
 static void
 re_start_xmit(struct re_softc *sc)
