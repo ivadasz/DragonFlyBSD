@@ -182,6 +182,14 @@ static struct vop_ops *swapdev_vnode_vops_p = &swapdev_vnode_vops;
 VNODEOP_SET(swapdev_vnode_vops);
 
 /*
+ * TODO: For compressed swap, start by just having a fixed swapdev_vnode_vops.
+ *       Have that code enabled by a kernel build flag.
+ *       Then later, make that code work as a queue, that writes out the oldest
+ *       pages to actual swap space. This can then try to write data out in
+ *       a better ordered way, with subsequent data staying subsequent in swap.
+ */
+
+/*
  * swapon_args(char *name)
  *
  * System call swapon(name) enables swapping on device name,
