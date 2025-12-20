@@ -70,32 +70,122 @@ static struct timespec *ts_basetime;
 
 static int64_t cputimer_freq;
 
+static int
+kpmap_monotonic_time(struct timespec *ts)
+{
+	uint32_t tbase cbase;
+	uint32_t delta, now;
+	uint32_t tsc_ok;
+	uint64_t tsc;
+	int64_t conv;
+
+	/* This does what tsc_cputimer.count() does. */
+	do {
+		w = *upticksp;
+		cpu_lfence();
+		tsc = rdtsc();
+		tbase = *timer_base;
+		ts->tv_sec = clock_secs[w & 1];
+		cbase = clock_base[w & 1];
+		conv = *freq64_nsec;
+		cpu_lfence();
+		tsc_ok = *use_tsc;
+		w = *upticksp - w;
+	} while (w > 1);
+	if (conv == 0 || tsc_ok == 0) {
+		return 1;
+	}
+	/*
+	 * TODO: Pre-compute difference between timer_base and
+	 *       clock_base in the kernel hardclock() method.
+	 */
+	/* Apply computation matching in-kernel code. */
+	now = tsc + tbase;
+	delta = now - cbase;
+	if (delta >= cputimer_freq) {
+		ts->tv_sec += delta / cputimer_freq;
+		delta %= cputimer_freq;
+	}
+	ts->tv_nsec = muldivu64(conv, delta, 1 << 32);
+	return 0;
+}
+
+static int
+kpmap_realtime_time(struct timespec *ts)
+{
+	uint32_t tbase cbase;
+	uint32_t delta, now;
+	uint32_t tsc_ok;
+	uint64_t tsc;
+	int64_t conv;
+	struct timespec bt;
+
+	/* This does what tsc_cputimer.count() does. */
+	do {
+		w = *upticksp;
+		cpu_lfence();
+		tsc = rdtsc();
+		tbase = *timer_base;
+		ts->tv_sec = clock_secs[w & 1];
+		cbase = clock_base[w & 1];
+		bt = ts_basetime[w & 1];
+		conv = *freq64_nsec;
+		cpu_lfence();
+		tsc_ok = *use_tsc;
+		w = *upticksp - w;
+	} while (w > 1);
+	if (conv == 0 || tsc_ok == 0) {
+		return 1;
+	}
+	/*
+	 * TODO: Pre-compute difference between timer_base and
+	 *       clock_base in the kernel hardclock() method.
+	 */
+	/* Apply computation matching in-kernel code. */
+	now = tsc + tbase;
+	delta = now - cbase;
+	if (delta >= cputimer_freq) {
+		ts->tv_sec += delta / cputimer_freq;
+		delta %= cputimer_freq;
+	}
+	ts->tv_nsec = muldivu64(conv, delta, 1 << 32);
+	ts->tv_sec += bt.tv_sec;
+	ts->tv_nsec += bt.tv_nsec;
+	if (ts->tv_nsec > 1000000000) {
+		ts->tv_sec++;
+		ts->tv_nsec -= 1000000000;
+	}
+	return 0;
+}
+
+static void
+prepare_kpmap(void)
+{
+	__kpmap_map(&version, &fast_clock, UKPTYPE_VERSION);
+	__kpmap_map(&upticksp, &fast_clock, KPTYPE_UPTICKS);
+	__kpmap_map(&ts_uptime, &fast_clock, KPTYPE_TS_UPTIME);
+	__kpmap_map(&ts_realtime, &fast_clock, KPTYPE_TS_REALTIME);
+	__kpmap_map(&tsc_freq, &fast_clock, KPTYPE_TSC_FREQ);
+	if (fast_clock >= 0 && *version >= 2) {
+		__kpmap_map(&timer_base, &fast_clock, KPTYPE_TIMER_BASE);
+		__kpmap_map(&freq64_nsec, &fast_clock, KPTYPE_FREQ_NSEC);
+		__kpmap_map(&clock_base, &fast_clock, KPTYPE_CLOCK_BASE);
+		__kpmap_map(&clock_secs, &fast_clock, KPTYPE_CLOCK_SECS);
+		__kpmap_map(&ts_basetime, &fast_clock, KPTYPE_TS_BASETIME);
+		cputimer_freq = *tsc_freq;
+	}
+	__kpmap_map(NULL, &fast_clock, 0);
+}
+
 int
 __clock_gettime(clockid_t clock_id, struct timespec *ts)
 {
 	int res;
 	int w;
 
-	if (fast_clock == 0 && fast_count++ >= 10) {
-		/* XXX Factor out into a function: */
-		__kpmap_map(&version, &fast_clock, UKPTYPE_VERSION);
-		__kpmap_map(&upticksp, &fast_clock, KPTYPE_UPTICKS);
-		__kpmap_map(&ts_uptime, &fast_clock, KPTYPE_TS_UPTIME);
-		__kpmap_map(&ts_realtime, &fast_clock, KPTYPE_TS_REALTIME);
-		__kpmap_map(&tsc_freq, &fast_clock, KPTYPE_TSC_FREQ);
-		if (fast_clock >= 0 && *version >= 2) {
-			__kpmap_map(&timer_base, &fast_clock, KPTYPE_TIMER_BASE);
-			__kpmap_map(&freq64_nsec, &fast_clock, KPTYPE_FREQ_NSEC);
-			__kpmap_map(&clock_base, &fast_clock, KPTYPE_CLOCK_BASE);
-			__kpmap_map(&clock_secs, &fast_clock, KPTYPE_CLOCK_SECS);
-			__kpmap_map(&ts_basetime, &fast_clock, KPTYPE_TS_BASETIME);
-		}
-		__kpmap_map(NULL, &fast_clock, 0);
-		if (fast_clock > 0 && *version >= 2) {
-			cputimer_freq = *tsc_freq;
-			/* XXX Check whether TSC is mpsafe and invariant. */
-		}
-	}
+	if (fast_clock == 0 && fast_count++ >= 10)
+		prepare_kpmap();
+
 	if (fast_clock > 0) {
 		switch(clock_id) {
 		case CLOCK_UPTIME_FAST:
@@ -109,39 +199,15 @@ __clock_gettime(clockid_t clock_id, struct timespec *ts)
 			} while (w > 1);
 			res = 0;
 			break;
+		case CLOCK_UPTIME: {
 		case CLOCK_MONOTONIC: {
-			uint32_t delta, now;
-			uint64_t tsc;
-			int64_t conv1, conv2;
-
-			if (*version < 2) {
+			if (*version < 2 || *use_tsc == 0) {
 				res = __sys_clock_gettime(clock_id, ts);
 				break;
 			}
-
-			conv1 = *freq64_nsec;
-			/* This does what tsc_cputimer.count() does. */
-			do {
-				w = *upticksp;
-				cpu_lfence();
-				tsc = rdtsc();
-				now = tsc + *timer_base;
-				ts->tv_sec = clock_secs[w & 1];
-				delta = now - clock_base[w & 1];
-				cpu_lfence();
-				w = *upticksp - w;
-			} while (w > 1);
-			conv2 = *freq64_nsec;
-			if (conv1 == 0 || conv2 == 0 || cputimer_freq == 0) {
+			res = kpmap_monotonic_time(ts);
+			if (res != 0)
 				res = __sys_clock_gettime(clock_id, ts);
-				break;
-			}
-			if (delta >= cputimer_freq) {
-				ts->tv_sec += delta / cputimer_freq;
-				delta %= cputimer_freq;
-			}
-			ts->tv_nsec = (conv2 * delta) >> 32;
-			res = 0;
 			break; }
 
 		case CLOCK_REALTIME_FAST:
@@ -159,46 +225,13 @@ __clock_gettime(clockid_t clock_id, struct timespec *ts)
 			res = 0;
 			break;
 		case CLOCK_REALTIME: {
-			uint32_t delta, now;
-			uint64_t tsc;
-			int64_t conv1, conv2;
-			struct timespec bt;
-
-			if (*version < 2) {
+			if (*version < 2 || *use_tsc == 0) {
 				res = __sys_clock_gettime(clock_id, ts);
 				break;
 			}
-
-			conv1 = *freq64_nsec;
-			/* This does what tsc_cputimer.count() does. */
-			do {
-				w = *upticksp;
-				cpu_lfence();
-				tsc = rdtsc();
-				now = tsc + *timer_base;
-				ts->tv_sec = clock_secs[w & 1];
-				delta = now - clock_base[w & 1];
-				bt = ts_basetime[w & 1];
-				cpu_lfence();
-				w = *upticksp - w;
-			} while (w > 1);
-			conv2 = *freq64_nsec;
-			if (conv1 == 0 || conv2 == 0 || cputimer_freq == 0) {
+			res = kpmap_realtime_time(ts);
+			if (res != 0)
 				res = __sys_clock_gettime(clock_id, ts);
-				break;
-			}
-			if (delta >= cputimer_freq) {
-				ts->tv_sec += delta / cputimer_freq;
-				delta %= cputimer_freq;
-			}
-			ts->tv_nsec = (conv2 * delta) >> 32;
-			ts->tv_sec += bt.tv_sec;
-			ts->tv_nsec += bt.tv_nsec;
-			if (ts->tv_nsec > 1000000000) {
-				ts->tv_sec++;
-				ts->tv_nsec -= 1000000000;
-			}
-			res = 0;
 			break; }
 		default:
 			res = __sys_clock_gettime(clock_id, ts);
@@ -214,65 +247,23 @@ int
 __gettimeofday(struct timeval *tp, struct timezone *tzp)
 {
 	int res;
-	int w;
 
 	if (fast_clock == 0 && fast_count++ >= 10) {
-		/* XXX Factor out into a function: */
-		__kpmap_map(&version, &fast_clock, UKPTYPE_VERSION);
-		__kpmap_map(&upticksp, &fast_clock, KPTYPE_UPTICKS);
-		__kpmap_map(&ts_uptime, &fast_clock, KPTYPE_TS_UPTIME);
-		__kpmap_map(&ts_realtime, &fast_clock, KPTYPE_TS_REALTIME);
-		__kpmap_map(&tsc_freq, &fast_clock, KPTYPE_TSC_FREQ);
-		if (fast_clock >= 0 && *version >= 2) {
-			__kpmap_map(&timer_base, &fast_clock, KPTYPE_TIMER_BASE);
-			__kpmap_map(&freq64_nsec, &fast_clock, KPTYPE_FREQ_NSEC);
-			__kpmap_map(&clock_base, &fast_clock, KPTYPE_CLOCK_BASE);
-			__kpmap_map(&clock_secs, &fast_clock, KPTYPE_CLOCK_SECS);
-			__kpmap_map(&ts_basetime, &fast_clock, KPTYPE_TS_BASETIME);
-		}
-		__kpmap_map(NULL, &fast_clock, 0);
-		if (fast_clock > 0 && *version >= 2) {
-			cputimer_freq = *tsc_freq;
-			/* XXX Check whether TSC is mpsafe and invariant. */
-		}
+		prepare_kpmap();
 	}
 	if (fast_clock > 0 && *version >= 2) {
 		if (tp != NULL && tzp == NULL) {
-			uint32_t delta, now;
-			uint64_t tsc;
-			int64_t conv1, conv2;
-			struct timespec bt;
+			struct timespec ts;
 
-			/* XXX Check whether tsc cputimer is used. */
-
-			conv1 = *freq64_nsec;
-			/* This does what tsc_cputimer.count() does. */
-			do {
-				w = *upticksp;
-				cpu_lfence();
-				tsc = rdtsc();
-				now = tsc + *timer_base;
-				tp->tv_sec = clock_secs[w & 1];
-				delta = now - clock_base[w & 1];
-				bt = ts_basetime[w & 1];
-				cpu_lfence();
-				w = *upticksp - w;
-			} while (w > 1);
-			conv2 = *freq64_nsec;
-			if (conv1 == 0 || conv2 == 0 || cputimer_freq == 0) {
+			if (*version < 2 || *use_tsc == 0)
 				return __sys_gettimeofday(tp, tzp);
-			}
-			if (delta >= cputimer_freq) {
-				tp->tv_sec += delta / cputimer_freq;
-				delta %= cputimer_freq;
-			}
-			tp->tv_usec = ((conv2 * delta) >> 32) / 1000;
-			tp->tv_sec += bt.tv_sec;
-			tp->tv_usec += bt.tv_nsec / 1000;
-			if (tp->tv_usec > 1000000) {
-				tp->tv_sec++;
-				tp->tv_usec -= 1000000;
-			}
+
+			res = kpmap_realtime_time(ts);
+			if (res != 0)
+				return __sys_gettimeofday(tp, tzp);
+
+			tp->tv_sec = ts.tv_sec;
+			tp->tv_usec = ts.tv_nsec / 1000;
 			res = 0;
 		} else {
 			res = __sys_gettimeofday(tp, tzp);
