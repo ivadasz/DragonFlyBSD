@@ -63,10 +63,26 @@ static int evflags = 0;
  * the parent can wake up and deal with it.
  */
 
+static int
+open_mem(int flags, int pid)
+{
+  char buf[FILENAME_MAX+10+5];
+  size_t val;
+
+  if (pid == -1) {
+    val = snprintf(buf, sizeof(buf), "%s/curproc/mem", procfs_path);
+  } else {
+    val = snprintf(buf, sizeof(buf), "%s/%d/mem", procfs_path, pid);
+  }
+  if (val >= sizeof(buf)) {
+    errx(1, "Failed to construct procfs path");
+  }
+  return open(buf, flags);
+}
+
 int
 setup_and_wait(char *command[]) {
   struct procfs_status pfs;
-  char *buf;
   int fd;
   int pid;
 
@@ -75,13 +91,9 @@ setup_and_wait(char *command[]) {
     err(1, "fork failed");
   }
   if (pid == 0) {	/* Child */
-    asprintf(&buf, "%s/curproc/mem", procfs_path);
-    if (buf == NULL)
-      err(1, "Out of memory");
-    fd = open(buf, O_WRONLY);
-    free(buf);
+    fd = open_mem(O_WRONLY, -1);
     if (fd == -1)
-      err(2, "cannot open %s", buf);
+      err(2, "cannot open %s/curproc/mem", procfs_path);
     fcntl(fd, F_SETFD, FD_CLOEXEC);
     if (ioctl(fd, PIOCBIS, S_EXEC | S_EXIT) == -1)
       err(3, "PIOCBIS");
@@ -97,15 +109,9 @@ setup_and_wait(char *command[]) {
   }
   /* Only in the parent here */
 
-  asprintf(&buf, "%s/%d/mem", procfs_path, pid);
-  if (buf == NULL)
-    err(1, "Out of memory");
-  do {
-    fd = open(buf, O_RDWR);
-  } while(fd == -1 && errno == EAGAIN);
-  free(buf);
+  fd = open_mem(O_RDWR, pid);
   if (fd == -1)
-    err(5, "cannot open %s", buf);
+    err(5, "cannot open %s/%d/mem", procfs_path, pid);
   if (ioctl(fd, PIOCWAIT, &pfs) == -1)
     err(6, "PIOCWAIT");
   if (pfs.why == S_EXIT) {
@@ -127,16 +133,9 @@ setup_and_wait(char *command[]) {
 int
 start_tracing(int pid, int flags) {
   int fd;
-  char *buf;
   struct procfs_status tmp;
 
-  asprintf(&buf, "%s/%d/mem", procfs_path, pid);
-  if (buf == NULL)
-    err(1, "Out of memory");
-  do {
-    fd = open(buf, O_RDWR);
-  } while(fd == -1 && errno == EAGAIN);
-  free(buf);
+  fd = open_mem(O_RDWR, pid);
   if (fd == -1) {
     /*
      * The process may have run away before we could start -- this
@@ -145,7 +144,7 @@ start_tracing(int pid, int flags) {
      */
     if (kill(pid, 0) == -1)
       return -1;
-    err(8, "cannot open %s", buf);
+    err(8, "cannot open %s/%d/mem", procfs_path, pid);
   }
 
   if (ioctl(fd, PIOCSTATUS, &tmp) == -1) {
