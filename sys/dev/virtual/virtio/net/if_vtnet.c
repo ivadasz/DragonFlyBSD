@@ -195,6 +195,7 @@ static struct virtio_feature_desc vtnet_feature_desc[] = {
 	{ VIRTIO_NET_F_GUEST_CSUM,	"RxChecksum"	},
 	{ VIRTIO_NET_F_CTRL_GUEST_OFFLOADS, "DynOffload"	},
 	{ VIRTIO_NET_F_MAC,		"MacAddress"	},
+	{ VIRTIO_NET_F_MTU,		"MTU"		},
 	{ VIRTIO_NET_F_GSO,		"TxAllGSO"	},
 	{ VIRTIO_NET_F_GUEST_TSO4,	"RxTSOv4"	},
 	{ VIRTIO_NET_F_GUEST_TSO6,	"RxTSOv6"	},

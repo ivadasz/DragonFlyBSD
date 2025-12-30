@@ -15,8 +15,8 @@
 #define VIRTIO_NET_F_GUEST_CSUM 0x00002 /* Guest handles pkts w/ partial csum*/
 #define VIRTIO_NET_F_CTRL_GUEST_OFFLOADS 0x00004 /* Guest can do dynamic
 					 * offloads state configuration */
+#define VIRTIO_NET_F_MTU	0x00008	/* Supports reporting maximum MTU */
 #define VIRTIO_NET_F_MAC	0x00020 /* Host has given MAC address. */
-#define VIRTIO_NET_F_GSO	0x00040 /* Host handles pkts w/ any GSO type */
 #define VIRTIO_NET_F_GUEST_TSO4	0x00080 /* Guest can handle TSOv4 in. */
 #define VIRTIO_NET_F_GUEST_TSO6	0x00100 /* Guest can handle TSOv6 in. */
 #define VIRTIO_NET_F_GUEST_ECN	0x00200 /* Guest can handle TSO[6] w/ ECN in.*/
@@ -36,6 +36,9 @@
 #define VIRTIO_NET_F_MQ		0x400000 /* Device supports Receive Flow
 					  * Steering */
 #define VIRTIO_NET_F_CTRL_MAC_ADDR 0x800000 /* Set MAC address */
+
+/* Legacy features for virito net */
+#define VIRTIO_NET_F_GSO	0x00040 /* Host handles pkts w/ any GSO type */
 
 #define VIRTIO_NET_S_LINK_UP	1	/* Link is up */
 #define VIRTIO_NET_S_ANNOUNCE	2	/* Announcement is needed */
