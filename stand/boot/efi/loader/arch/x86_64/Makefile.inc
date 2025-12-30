@@ -6,8 +6,8 @@ SRCS+=	amd64_tramp.S \
 	elf64_freebsd.c
 
 .PATH:	${.CURDIR}/../../pc32/libi386
-SRCS+=	nullconsole.c \
-	comconsole.c
+SRCS+=	nullconsole.c
+	#comconsole.c
 
 # Disable stack protector
 CFLAGS+=	-fno-stack-protector

@@ -98,6 +98,7 @@ cpy8to16(const char *src, CHAR16 *dst, size_t len)
 	*dst++ = (CHAR16)0;
 }
 
+#if 0
 static void
 cp16to8(const CHAR16 *src, char *dst, size_t len)
 {
@@ -106,6 +107,7 @@ cp16to8(const CHAR16 *src, char *dst, size_t len)
 	for (i = 0; i < len && src[i]; i++)
 		dst[i] = (char)src[i];
 }
+#endif
 
 static int
 has_keyboard(void)
@@ -241,9 +243,11 @@ main(int argc, CHAR16 *argv[])
 				case 'd':
 					howto |= RB_KDB;
 					break;
+#if 0
 				case 'h':
 					howto |= RB_SERIAL;
 					break;
+#endif
 				case 'm':
 					howto |= RB_MUTE;
 					break;
@@ -253,7 +257,9 @@ main(int argc, CHAR16 *argv[])
 				case 'P':
 					if (!has_kbd) {
 						howto &= ~(RB_MUTE|RB_VIDEO);
+#if 0
 						howto |= RB_SERIAL;
+#endif
 					}
 					break;
 				case 'r':
@@ -262,6 +268,7 @@ main(int argc, CHAR16 *argv[])
 				case 's':
 					howto |= RB_SINGLE;
 					break;
+#if 0
 				case 'S':
 					if (argv[i][j + 1] == 0) {
 						if (i + 1 == argc) {
@@ -279,6 +286,7 @@ main(int argc, CHAR16 *argv[])
 						setenv("comconsole_speed", var, 1);
 						break;
 					}
+#endif
 				case 'v':
 					howto |= RB_VERBOSE;
 					break;
@@ -304,9 +312,11 @@ main(int argc, CHAR16 *argv[])
 	for (i = 0; howto_names[i].ev != NULL; i++)
 		if (howto & howto_names[i].mask)
 			setenv(howto_names[i].ev, "YES", 1);
+#if 0
 	if (howto & RB_SERIAL) {
 		setenv("console", "comconsole" , 1);
 	}
+#endif
 
 	if (efi_copy_init()) {
 		printf("failed to allocate staging area\n");
