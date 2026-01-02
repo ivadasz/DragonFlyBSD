@@ -16,6 +16,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#define MTW_MT76XX_REV_E3		0x22
+
 #define MTW_ASIC_VER			0x0000
 #define MTW_CMB_CTRL			0x0020
 #define MTW_EFUSE_CTRL			0x0024
@@ -362,7 +364,7 @@
 #define RT2860_GPIO_D_SHIFT	8
 #define RT2860_GPIO_O_SHIFT	0
 
-/* possible flags for register MCU_DMA_ADDR 0x0230 */
+/* possible flags for register MCU_COM_REG0 0x0730 */
 #define MTW_MCU_READY		(1U <<  0)
 
 /* possible flags for register USB_DMA_CFG 0x0238 */

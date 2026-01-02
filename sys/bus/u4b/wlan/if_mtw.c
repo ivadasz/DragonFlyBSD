@@ -25,6 +25,7 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/bitops.h>
 #include <sys/bus.h>
 #include <sys/endian.h>
 #include <sys/eventhandler.h>
@@ -235,9 +236,7 @@ static void mtw_update_beacon_cb(void *);
 static void mtw_updateprot(struct ieee80211com *);
 static void mtw_updateprot_cb(void *);
 static void mtw_usb_timeout_cb(void *);
-#if 0
 static int mtw_reset(struct mtw_softc *sc);
-#endif
 static void mtw_enable_tsf_sync(struct mtw_softc *);
 
 
@@ -1118,7 +1117,7 @@ mtw_load_microcode(void *arg)
 
 	device_printf(sc->sc_dev, "version:0x%hx\n", sc->asic_ver);
 	/* is firmware already running? */
-	mtw_read_cfg(sc, MTW_MCU_DMA_ADDR, &tmp);
+	mtw_read_cfg(sc, MTW_MCU_COM_REG0, &tmp);
 	if (tmp == MTW_MCU_READY)
 		return 0;
 
@@ -1156,7 +1155,7 @@ mtw_load_microcode(void *arg)
 	if (sc->asic_ver == 0x7612) {
 		fwname = "mtw7662ufw";
 		iofs = 0x80040;
-		dofs = 0x110800;
+		dofs = 0x110000;
 	} else if (sc->asic_ver == 0x7610) {
 		fwname = "mtw7610ufw";
 		dofs = 0x80000;
@@ -1200,12 +1199,15 @@ mtw_load_microcode(void *arg)
 		goto fail;
 	}
 
-	mtw_write(sc, MTW_FCE_PDMA, 0);
+	mtw_reset(sc);
+	mtw_delay(sc, 10);
 	mtw_write(sc, MTW_FCE_PSE_CTRL, 0);
 	mtw_ucode_setup(sc);
 
 	if ((error = mtw_ucode_write(sc, fw->data, ilen, iofs)) != 0)
 		goto fail;
+	if (sc->asic_ver >= MTW_MT76XX_REV_E3)
+		dofs += 0x800;
 	if (dlen > 0 && dofs > 0) {
 		if ((error = mtw_ucode_write(sc, fw->data + ilen,
 		    dlen, dofs)) != 0)
@@ -1231,18 +1233,28 @@ mtw_load_microcode(void *arg)
 	mtw_delay(sc, 10);
 
 	for (ntries = 0; ntries < 100; ntries++) {
-		if ((error = mtw_read_cfg(sc, MTW_MCU_DMA_ADDR, &tmp)) != 0)
+		if ((error = mtw_read_cfg(sc, MTW_MCU_COM_REG0, &tmp)) != 0) {
+			device_printf(sc->sc_dev,
+			    "failed to read MCU_COM_REG0\n");
 			goto fail;
+		}
 		if (tmp & MTW_MCU_READY)
 			break;
-		mtw_delay(sc, 100);
+		mtw_delay(sc, 10);
 	}
-
 	if (ntries == 100) {
 		device_printf(sc->sc_dev,
 		    "timeout waiting for MCU to initialize\n");
 		error = ETIMEDOUT;
 	}
+
+	if ((error = mtw_read_cfg(sc, MTW_MCU_COM_REG0, &tmp)) != 0) {
+		device_printf(sc->sc_dev, "failed to read MCU_COM_REG0\n");
+		goto fail;
+	}
+	mtw_write_cfg(sc, MTW_MCU_COM_REG0, tmp | __BIT(1));
+	/* enable FCE to send in-band cmd */
+	mtw_write_cfg(sc, MTW_FCE_PSE_CTRL, 0x1);
 
 	device_printf(sc->sc_dev, "loaded firmware ver %.8x %.8x %s\n",
 	    le32toh(hdr->fw_ver), le32toh(hdr->build_ver), hdr->build_time);
@@ -1476,8 +1488,10 @@ mtw_mcu_cmd(struct mtw_softc *sc, u_int8_t cmd, void *buf, int len)
 		/* timeout */
 		return (error);
 	}
-	if (sc->fwloading == 0)
+	if (sc->fwloading == 0) {
+		device_printf(sc->sc_dev, "MCU CMD USB transfer failed\n");
 		error = ENXIO;
+	}
 
 	return (error);
 }
@@ -3974,7 +3988,6 @@ mtw_usb_timeout_cb(void *arg)
 	}
 }
 
-#if 0
 static int mtw_reset(struct mtw_softc *sc)
 {
 
@@ -3990,7 +4003,6 @@ static int mtw_reset(struct mtw_softc *sc)
 	return (usbd_do_request_flags(sc->sc_udev, &sc->sc_lock,
 				 &req, &tmp, 0, &actlen, 1000));
 }
-#endif
 
 static void
 mtw_update_promisc_locked(struct mtw_softc *sc)
