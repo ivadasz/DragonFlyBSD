@@ -460,13 +460,11 @@ readmap(pid_t pid)
 	for ( ; ; ) {
 		if ((mapbuf = realloc(mapbuf, bufsize + 1)) == NULL)
 			errx(1, "out of memory");
-		mapsize = read(mapfd, mapbuf, bufsize);
+		mapsize = pread(mapfd, mapbuf, bufsize, (off_t)0);
 		if ((mapsize != -1 || errno != EFBIG) && mapsize != bufsize) {
 			break;
 		}
 		bufsize *= 2;
-		/* This lseek shouldn't be necessary, but it is. */
-		lseek(mapfd, (off_t)0, SEEK_SET);
 	}
 	if (mapsize == -1)
 		err(1, "read error from %s", mapname);
