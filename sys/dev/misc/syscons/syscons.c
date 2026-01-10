@@ -3088,14 +3088,12 @@ exchange_scr(sc_softc_t *sc)
     sc_move_cursor(scp, scp->xpos, scp->ypos);
     if (!ISGRAPHSC(scp))
 	sc_set_cursor_image(scp);
-    if (sc->fbi == NULL) {
 #if NVGA > 0
     if (sc->fbi == NULL && ISGRAPHSC(sc->old_scp))
 	load_palette(sc->adp, sc->palette);
+#endif
     if (!ISGRAPHSC(scp) || sc->fbi == NULL)
 	sc_set_border(scp, scp->border);
-#endif
-    }
 
     /* set up the keyboard for the new screen */
     if (sc->old_scp->kbd_mode != scp->kbd_mode)
