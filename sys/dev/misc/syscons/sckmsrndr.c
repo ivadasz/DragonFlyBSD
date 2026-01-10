@@ -496,15 +496,15 @@ kms_draw_border(scr_stat *scp, int color)
 	draw_pos = sc->fbi->vaddr + scp->blk_height * scp->ysize * line_width;
 	if (pixel_size == 2) {
 		fill_rect16(scp, draw_pos, sc->fbi->width,
-		    sc->fbi->height - scp->blk_height * scp->ysize, line_width,
+		    bottompixel, line_width,
 		    colormap565[color]);
 	} else if (pixel_size == 3) {
 		fill_rect24(scp, draw_pos, sc->fbi->width,
-		    sc->fbi->height - scp->blk_height * scp->ysize, line_width,
+		    bottompixel, line_width,
 		    colormap24[color]);
 	} else {
 		fill_rect32(scp, draw_pos, sc->fbi->width,
-		    sc->fbi->height - scp->blk_height * scp->ysize, line_width,
+		    bottompixel, line_width,
 		    colormap24[color]);
 	}
 }
