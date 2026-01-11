@@ -196,8 +196,8 @@ int drm_setmaster_ioctl(struct drm_device *dev, void *data,
 	 */
 	if (dev->master) {
 		kprintf("drm_setmaster_ioctl: already has one XXX ignored\n");
-		//ret = -EINVAL;
-		//goto out_unlock;
+		ret = -EINVAL;
+		goto out_unlock;
 	}
 
 	if (!file_priv->master) {
@@ -207,7 +207,7 @@ int drm_setmaster_ioctl(struct drm_device *dev, void *data,
 	}
 
 	if (!file_priv->is_master) {
-		kprintf("drm_setmaster_ioctl: is_not master, set master");
+		//kprintf("drm_setmaster_ioctl: is_not master, set master\n");
 		ret = drm_new_set_master(dev, file_priv);
 		goto out_unlock;
 	}
@@ -238,13 +238,17 @@ int drm_dropmaster_ioctl(struct drm_device *dev, void *data,
 {
 	int ret = -EINVAL;
 
-	kprintf("drm_dropmaster_ioctl\n");
+	//kprintf("drm_dropmaster_ioctl\n");
 	mutex_lock(&dev->master_mutex);
-	if (!drm_is_current_master(file_priv))
+	if (!drm_is_current_master(file_priv)) {
+		kprintf("drm_dropmaster_ioctl: is not current master\n");
 		goto out_unlock;
+	}
 
-	if (!dev->master)
+	if (!dev->master) {
+		kprintf("drm_dropmaster_ioctl: is not master\n");
 		goto out_unlock;
+	}
 
 	if (file_priv->master->lessor != NULL) {
 		DRM_DEBUG_LEASE("Attempt to drop lessee %d as master\n", file_priv->master->lessee_id);
@@ -253,6 +257,7 @@ int drm_dropmaster_ioctl(struct drm_device *dev, void *data,
 	}
 
 	ret = 0;
+	file_priv->is_master = 0;
 	drm_drop_master(dev, file_priv);
 out_unlock:
 	mutex_unlock(&dev->master_mutex);
