@@ -2378,6 +2378,7 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 kprintf("amdgpu_device_init: start\n");
 	adev->shutdown = false;
 	adev->dev = &pdev->dev;
+	dev_set_drvdata(adev->dev, ddev);
 	adev->ddev = ddev;
 	adev->pdev = pdev;
 	adev->flags = flags;

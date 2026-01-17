@@ -38,6 +38,7 @@
 #include <linux/atomic.h>
 #include <linux/ratelimit.h>
 #include <linux/gfp.h>
+#include <linux/sysfs.h>
 
 #include <sys/bus.h>
 
@@ -60,6 +61,7 @@ struct device_driver {
 struct device_node;
 
 struct device_attribute {
+	struct attribute attr;
 };
 
 #define	dev_dbg(dev, fmt, ...)						\

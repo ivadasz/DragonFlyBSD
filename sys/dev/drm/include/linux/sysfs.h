@@ -34,18 +34,23 @@
 #include <linux/atomic.h>
 
 struct kobject;
+struct device;
+struct device_attribute;
+
+struct sysfs_ops {
+	ssize_t	(*show)(struct device *, struct device_attribute *,char *);
+	ssize_t	(*store)(struct device *,struct device_attribute *,const char *, size_t);
+};
 
 struct attribute {
 	const char *name;
 	umode_t	mode;
-};
-
-struct sysfs_ops {
-	ssize_t	(*show)(struct kobject *, struct attribute *,char *);
-	ssize_t	(*store)(struct kobject *,struct attribute *,const char *, size_t);
+	struct sysfs_ops ops;
 };
 
 struct attribute_group {
+	struct attribute **attrs;
+	umode_t (*is_visible)(struct kobject *, struct attribute *, int index);
 };
 
 static inline int

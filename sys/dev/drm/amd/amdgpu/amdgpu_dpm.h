@@ -422,7 +422,7 @@ struct amdgpu_pm {
 	struct amdgpu_i2c_chan *i2c_bus;
 	/* internal thermal controller on rv6xx+ */
 	enum amdgpu_int_thermal_type int_thermal_type;
-	struct device	        *int_hwmon_dev;
+	struct device		*int_hwmon_dev;
 	/* fan control parameters */
 	bool                    no_fan;
 	u8                      fan_pulses_per_revolution;
