@@ -35,16 +35,20 @@
 
 struct kobject;
 struct device;
-struct device_attribute;
+struct attribute;
 
 struct sysfs_ops {
-	ssize_t	(*show)(struct device *, struct device_attribute *,char *);
-	ssize_t	(*store)(struct device *,struct device_attribute *,const char *, size_t);
+	ssize_t	(*show)(struct kobject *, struct attribute *,char *);
+	ssize_t	(*store)(struct kobject *,struct attribute *,const char *, size_t);
 };
 
 struct attribute {
 	const char *name;
 	umode_t	mode;
+	/*
+	 * TODO: The ops should move to struct device_attribute, and use a
+	 *       separate devattr_ops or something.
+	 */
 	struct sysfs_ops ops;
 };
 

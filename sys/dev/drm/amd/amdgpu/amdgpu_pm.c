@@ -1075,7 +1075,7 @@ static ssize_t amdgpu_get_busy_percent(struct device *dev,
 	struct attribute dev_attr_##n = {				\
 		.name = #n,						\
 		.mode = m,						\
-		.ops = (struct sysfs_ops){read_handler,write_handler},	\
+		.ops = (struct sysfs_ops){(void*)read_handler,(void*)write_handler},	\
 	}
 
 struct sensor_device_attribute {
@@ -1090,7 +1090,7 @@ struct sensor_device_attribute {
 		.dev_attr = { .attr = {					\
 			.name = #n,					\
 			.mode = m,					\
-			.ops = (struct sysfs_ops){read_handler,write_handler}, \
+			.ops = (struct sysfs_ops){(void *)read_handler,(void *)write_handler}, \
 		}},							\
 		.index = i,						\
 	}
@@ -2107,7 +2107,7 @@ sysctl_hwmon_handle(SYSCTL_HANDLER_ARGS)
 	int error;
 
 	buffer[0] = '\n';
-	ret = a->attr->ops.show(a->dev, (struct device_attribute *)a->attr,
+	ret = a->attr->ops.show((struct kobject *)a->dev, a->attr,
 	    buffer);
 	if (IS_ERR(ret))
 		return -ret;
@@ -2123,7 +2123,7 @@ sysctl_hwmon_handle(SYSCTL_HANDLER_ARGS)
 	if (error != 0 || req->newptr == NULL)
 		return error;
 
-	ret = a->attr->ops.store(a->dev, (struct device_attribute *)a->attr,
+	ret = a->attr->ops.store((struct kobject *)a->dev, a->attr,
 	    buffer, req->newlen);
 	if (IS_ERR(ret))
 		return -ret;
