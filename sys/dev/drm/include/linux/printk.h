@@ -39,7 +39,8 @@ struct va_format {
 	va_list *va;
 };
 
-#define printk(...)	kprintf(__VA_ARGS__)
+/* TODO: Add specific tunable and sysctl for Linux-compat verbosity. */
+#define printk(v, ...)	if (v < 7 || bootverbose) kprintf("<"##v##">" __VA_ARGS__)
 
 #define KERN_CONT	""
 #define KERN_EMERG	"<0>"
