@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 François Tigeot
+ * Copyright (c) 2026 Imre Vadász
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -24,31 +24,35 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _LINUX_DELAY_H_
-#define _LINUX_DELAY_H_
+#include <linux/delay.h>
 
-#include <linux/jiffies.h>
 #include <sys/systm.h>
+#include <sys/systimer.h>
 
-void msleep(unsigned int msecs);
-
-static __inline void
-mdelay(unsigned long msecs)
+static void
+msleep_systimer(systimer_t info, int in_ipi __unused,
+    struct intrframe *frame __unused)
 {
-	int loops = msecs;
-	while (loops--)
-		DELAY(1000);
+	lwkt_schedule(info->data);
 }
 
-static inline void ndelay(unsigned long x)
+void
+msleep(unsigned int msecs)
 {
-	DELAY(howmany(x, 1000));
-}
+	if (msecs >= 10) {
+		static int dummy;
+		int delay = MAX(msecs*hz/1000, 1);
 
-static __inline void
-usleep_range(unsigned long min, unsigned long max)
-{
-	DELAY(min);
-}
+		tsleep(&dummy, 0, "linux_msleep", delay);
+	} else {
+		struct systimer info;
 
-#endif	/* _LINUX_DELAY_H_ */
+		crit_enter();
+		systimer_init_oneshot(&info, msleep_systimer, curthread,
+		    msecs*1000);
+		lwkt_deschedule_self(curthread);
+		crit_exit();
+		lwkt_switch();
+		systimer_del(&info); /* make sure it's gone */
+	}
+}
