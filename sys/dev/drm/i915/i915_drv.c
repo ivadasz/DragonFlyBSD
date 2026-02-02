@@ -1935,11 +1935,13 @@ static void intel_suspend_encoders(struct drm_i915_private *dev_priv)
 			encoder->suspend(encoder);
 	drm_modeset_unlock_all(dev);
 }
+#endif
 
 static int vlv_resume_prepare(struct drm_i915_private *dev_priv,
 			      bool rpm_resume);
 static int vlv_suspend_complete(struct drm_i915_private *dev_priv);
 
+#if 0
 static bool suspend_to_idle(struct drm_i915_private *dev_priv)
 {
 #if IS_ENABLED(CONFIG_ACPI_SLEEP)
@@ -2613,6 +2615,7 @@ static int i915_pm_restore(struct device *kdev)
 {
 	return i915_pm_resume(kdev);
 }
+#endif
 
 /*
  * Save all Gunit registers that may be lost after a D3 and a subsequent
@@ -2821,7 +2824,6 @@ static int vlv_wait_for_pw_status(struct drm_i915_private *dev_priv,
 	return wait_for((I915_READ_NOTRACE(VLV_GTLC_PW_STATUS) & mask) == val,
 			3);
 }
-#endif
 
 int vlv_force_gfx_clock(struct drm_i915_private *dev_priv, bool force_on)
 {
@@ -2849,7 +2851,6 @@ int vlv_force_gfx_clock(struct drm_i915_private *dev_priv, bool force_on)
 	return err;
 }
 
-#if 0
 static int vlv_allow_gt_wake(struct drm_i915_private *dev_priv, bool allow)
 {
 	u32 mask;
@@ -2993,7 +2994,6 @@ static int intel_runtime_suspend(struct device *kdev)
 	DRM_DEBUG_KMS("Suspending device\n");
 
 	disable_rpm_wakeref_asserts(dev_priv);
-
 	/*
 	 * We are safe here against re-faults, since the fault handler takes
 	 * an RPM reference.
@@ -3138,6 +3138,7 @@ static int intel_runtime_resume(struct device *kdev)
 }
 
 const struct dev_pm_ops i915_pm_ops = {
+#if 0
 	/*
 	 * S0ix (via system suspend) and S3 event handlers [PMSG_SUSPEND,
 	 * PMSG_RESUME]
@@ -3171,12 +3172,14 @@ const struct dev_pm_ops i915_pm_ops = {
 	.poweroff_late = i915_pm_poweroff_late,
 	.restore_early = i915_pm_restore_early,
 	.restore = i915_pm_restore,
+#endif
 
 	/* S0ix (via runtime suspend) event handlers */
 	.runtime_suspend = intel_runtime_suspend,
 	.runtime_resume = intel_runtime_resume,
 };
 
+#if 0
 static const struct vm_operations_struct i915_gem_vm_ops = {
 	.fault = i915_gem_fault,
 	.open = drm_gem_vm_open,

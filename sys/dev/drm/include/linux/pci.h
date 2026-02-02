@@ -106,6 +106,7 @@ struct pci_driver {
 	const struct pci_device_id *id_table;
 	int (*probe)(struct pci_dev *dev, const struct pci_device_id *id);
 	void (*remove)(struct pci_dev *dev);
+	struct device_driver driver;
 };
 
 #define PCI_DMA_BIDIRECTIONAL	0
@@ -117,6 +118,12 @@ struct pci_driver {
 #define PCI_EXP_DEVSTA PCIER_DEVSTS /* 10 */
 #define PCI_EXP_DEVSTA_TRPND 0x0020
 #define PCI_EXP_LNKCAP_CLKPM 0x00040000
+
+static inline struct pci_dev *
+to_pci_dev(struct device *dev)
+{
+	return container_of(dev, struct pci_dev, dev);
+}
 
 static inline int
 pci_read_config_byte(struct pci_dev *pdev, int where, u8 *val)

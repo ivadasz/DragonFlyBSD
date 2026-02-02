@@ -26,6 +26,7 @@
  */
 
 #include <linux/cpufreq.h>
+#include <linux/pm_runtime.h>
 #include <drm/drm_plane_helper.h>
 #include "i915_drv.h"
 #include "intel_drv.h"
@@ -8239,9 +8240,7 @@ void intel_init_gt_powersave(struct drm_i915_private *dev_priv)
 	 */
 	if (!sanitize_rc6(dev_priv)) {
 		DRM_INFO("RC6 disabled, disabling runtime PM support\n");
-#if 0
 		pm_runtime_get(&dev_priv->drm.pdev->dev);
-#endif
 	}
 
 	mutex_lock(&dev_priv->pcu_lock);
@@ -8292,10 +8291,8 @@ void intel_cleanup_gt_powersave(struct drm_i915_private *dev_priv)
 	if (IS_VALLEYVIEW(dev_priv))
 		valleyview_cleanup_gt_powersave(dev_priv);
 
-#if 0
 	if (!HAS_RC6(dev_priv))
 		pm_runtime_put(&dev_priv->drm.pdev->dev);
-#endif
 }
 
 /**

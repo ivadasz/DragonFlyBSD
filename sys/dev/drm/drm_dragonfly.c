@@ -24,6 +24,8 @@
  * OF THIS SOFTWARE.
  */
 
+#include <linux/pm_runtime.h>
+
 #include <sys/libkern.h>
 #include <sys/ctype.h>
 #include <drm/drmP.h>
@@ -131,6 +133,13 @@ static void drm_fill_pdev(device_t dev, struct pci_dev *pdev)
 	slot = pci_get_slot(dev);
 	func = pci_get_function(dev);
 	pdev->devfn = PCI_DEVFN(slot, func);
+
+	/* Setup initial state of Runtime PM. */
+	/* TODO: Also install a sysctl node to control Runtime PM behaviour. */
+	pm_runtime_init(&pdev->dev);
+	pm_runtime_set_active(&pdev->dev);
+	pm_runtime_forbid(&pdev->dev);
+	pm_runtime_enable(&pdev->dev);
 }
 
 void drm_init_pdev(device_t dev, struct pci_dev **pdev)

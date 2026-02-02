@@ -52,6 +52,8 @@ struct device {
 	void		*driver_data;	/* for dev_set and get_drvdata */
 
 	struct dev_pm_info power;
+
+	struct device_driver *type;
 };
 
 struct device_driver {

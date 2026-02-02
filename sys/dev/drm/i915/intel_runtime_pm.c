@@ -4038,10 +4038,6 @@ void intel_runtime_pm_get(struct drm_i915_private *dev_priv)
  */
 bool intel_runtime_pm_get_if_in_use(struct drm_i915_private *dev_priv)
 {
-#ifndef __DragonFly__
-	struct pci_dev *pdev = dev_priv->drm.pdev;
-	struct device *kdev = &pdev->dev;
-
 	if (IS_ENABLED(CONFIG_PM)) {
 		struct pci_dev *pdev = dev_priv->drm.pdev;
 		struct device *kdev = &pdev->dev;
@@ -4058,7 +4054,6 @@ bool intel_runtime_pm_get_if_in_use(struct drm_i915_private *dev_priv)
 
 	atomic_inc(&dev_priv->runtime_pm.wakeref_count);
 	assert_rpm_wakelock_held(dev_priv);
-#endif
 
 	return true;
 }
@@ -4082,15 +4077,11 @@ bool intel_runtime_pm_get_if_in_use(struct drm_i915_private *dev_priv)
  */
 void intel_runtime_pm_get_noresume(struct drm_i915_private *dev_priv)
 {
-#if 0
 	struct pci_dev *pdev = dev_priv->drm.pdev;
 	struct device *kdev = &pdev->dev;
-#endif
 
 	assert_rpm_wakelock_held(dev_priv);
-#if 0
 	pm_runtime_get_noresume(kdev);
-#endif
 
 	atomic_inc(&dev_priv->runtime_pm.wakeref_count);
 }
@@ -4127,7 +4118,6 @@ void intel_runtime_pm_put(struct drm_i915_private *dev_priv)
  */
 void intel_runtime_pm_enable(struct drm_i915_private *dev_priv)
 {
-#if 0
 	struct pci_dev *pdev = dev_priv->drm.pdev;
 	struct device *kdev = &pdev->dev;
 
@@ -4166,12 +4156,10 @@ void intel_runtime_pm_enable(struct drm_i915_private *dev_priv)
 	 * intel_power_domains_fini().
 	 */
 	pm_runtime_put_autosuspend(kdev);
-#endif
 }
 
 void intel_runtime_pm_disable(struct drm_i915_private *dev_priv)
 {
-#if 0
 	struct pci_dev *pdev = dev_priv->drm.pdev;
 	struct device *kdev = &pdev->dev;
 
@@ -4183,5 +4171,4 @@ void intel_runtime_pm_disable(struct drm_i915_private *dev_priv)
 
 	if (!HAS_RUNTIME_PM(dev_priv))
 		pm_runtime_put(kdev);
-#endif
 }

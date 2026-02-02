@@ -743,9 +743,7 @@ static struct pci_driver i915_pci_driver = {
 	.id_table = pciidlist,
 	.probe = i915_pci_probe,
 	.remove = i915_pci_remove,
-#if 0
 	.driver.pm = &i915_pm_ops,
-#endif
 };
 
 static int __init i915_init(void)
@@ -828,6 +826,7 @@ found:
 
 	/* Print the contents of pdev struct. */
 	drm_print_pdev(pdev);
+	pdev->dev.type = &i915_pci_driver.driver;
 
 	return i915_pci_probe(pdev, ent);
 }

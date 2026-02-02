@@ -33,6 +33,8 @@
 #include <linux/timer.h>
 #include <linux/completion.h>
 
+#include <sys/taskqueue.h>
+
 struct device;
 
 struct dev_pm_domain {
@@ -51,7 +53,21 @@ struct dev_pm_ops {
 };
 
 struct dev_pm_info {
-	bool	is_suspended:1;
+	struct lock lock;
+	unsigned int disable_depth;
+	unsigned int runtime_auto;
+	int runtime_status;
+	int idle_running;
+	int last_error;
+	unsigned int use_autosuspend;
+	unsigned int autosuspend_delay;
+	unsigned int timer_expires;
+	atomic_t usage_count;
+	int last_busy;	/* tick */
+	int is_suspended;
+	struct timeout_task suspend_task;
+	struct task resume_task;
+	struct task idle_task;
 };
 
 #endif	/* _LINUX_PM_H_ */
