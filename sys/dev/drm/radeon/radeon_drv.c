@@ -487,6 +487,7 @@ static int radeon_pmops_thaw(struct device *dev)
 	struct drm_device *drm_dev = pci_get_drvdata(pdev);
 	return radeon_resume_kms(drm_dev, false, true);
 }
+#endif /* DUMBBELL_WIP */
 
 static int radeon_pmops_runtime_suspend(struct device *dev)
 {
@@ -565,6 +566,7 @@ static int radeon_pmops_runtime_idle(struct device *dev)
 	return 1;
 }
 
+#ifdef DUMBBELL_WIP
 long radeon_drm_ioctl(struct file *filp,
 		      unsigned int cmd, unsigned long arg)
 {
@@ -599,19 +601,21 @@ static long radeon_kms_compat_ioctl(struct file *filp, unsigned int cmd, unsigne
 	return ret;
 }
 #endif
+#endif /* DUMBBELL_WIP */
 
 static const struct dev_pm_ops radeon_pm_ops = {
+#ifdef DUMBBELL_WIP
 	.suspend = radeon_pmops_suspend,
 	.resume = radeon_pmops_resume,
 	.freeze = radeon_pmops_freeze,
 	.thaw = radeon_pmops_thaw,
 	.poweroff = radeon_pmops_freeze,
 	.restore = radeon_pmops_resume,
+#endif /* DUMBBELL_WIP */
 	.runtime_suspend = radeon_pmops_runtime_suspend,
 	.runtime_resume = radeon_pmops_runtime_resume,
 	.runtime_idle = radeon_pmops_runtime_idle,
 };
-#endif /* DUMBBELL_WIP */
 
 static const struct file_operations radeon_driver_kms_fops = {
 	.owner = THIS_MODULE,
@@ -729,6 +733,7 @@ static int __init radeon_init(void)
 		pdriver = &radeon_kms_pci_driver;
 		driver->driver_features |= DRIVER_MODESET;
 		driver->num_ioctls = radeon_max_kms_ioctl;
+		pdriver->driver.pm = &radeon_pm_ops,
 		radeon_register_atpx_handler();
 
 	} else {
