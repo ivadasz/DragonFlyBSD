@@ -62,7 +62,7 @@ struct dev_pm_info {
 	unsigned int use_autosuspend;
 	unsigned int autosuspend_delay;
 	unsigned int timer_expires;
-	atomic_t usage_count;
+	unsigned int usage_count;
 	int last_busy;	/* tick */
 	int is_suspended;
 	struct timeout_task suspend_task;
