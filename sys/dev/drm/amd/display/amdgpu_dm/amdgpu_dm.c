@@ -4816,9 +4816,7 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 
 			if (dm_old_crtc_state->stream)
 				remove_stream(adev, acrtc, dm_old_crtc_state->stream);
-#if 0
 			pm_runtime_get_noresume(dev->dev);
-#endif
 
 			acrtc->enabled = true;
 			acrtc->hw_mode = new_crtc_state->mode;
