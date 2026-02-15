@@ -89,6 +89,7 @@ void systimer_init_periodic_nq100khz(systimer_t, systimer_func_t, void *, int64_
 void systimer_init_periodic_flags(systimer_t, systimer_func_t, void *,
 			int64_t, int);
 void systimer_adjust_periodic(systimer_t, int64_t);
+void systimer_resume_periodic(systimer_t);
 void systimer_init_oneshot(systimer_t, systimer_func_t, void *, int64_t);
 
 /*

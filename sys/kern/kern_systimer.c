@@ -415,3 +415,14 @@ systimer_changed(void)
 	}
     }
 }
+
+void
+systimer_resume_periodic(systimer_t info)
+{
+	sysclock_t time;
+	time = sys_cputimer->count();
+	if ((ssysclock_t)(info->time - time) <= 0) {
+		info->time += roundup(time - info->time + 1, info->periodic);
+	}
+	systimer_add(info);
+}

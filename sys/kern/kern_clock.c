@@ -841,6 +841,15 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 	hardclock_softtick(gd);
 
 	/*
+	 * Resume userspace scheduling if requested.
+	 */
+	if (gd->gd_schedparked &&
+	    CPUMASK_TESTBIT(usched_global_cpumask, mycpuid)) {
+		systimer_resume_periodic(&gd->gd_schedclock);
+		gd->gd_schedparked = FALSE;
+	}
+
+	/*
 	 * Rollup accumulated vmstats, copy-back for critical path checks.
 	 */
 	vmstats_rollup_cpu(gd);
@@ -887,7 +896,13 @@ adj_stathz_thiscpu(int new_stathz)
 
 	gd = mycpu;
 	crit_enter();
-	systimer_adjust_periodic(&gd->gd_statclock, new_stathz);
+	if (new_stathz == 0) {
+		systimer_del(&gd->gd_statclock);
+	} else {
+		systimer_adjust_periodic(&gd->gd_statclock, new_stathz);
+		if (!(gd->gd_statclock.flags & SYSTF_ONQUEUE))
+			systimer_resume_periodic(&gd->gd_statclock);
+	}
 	crit_exit();
 }
 
@@ -921,7 +936,7 @@ sysctl_handle_statclock(SYSCTL_HANDLER_ARGS)
         if (error != 0 || req->newptr == NULL) {
                 return (error);
         }
-	if (val <= 0 || val > 1000)
+	if (val < 0 || val > 1000)
 		return EINVAL;
 
 	adj_stathz(val);
@@ -1188,9 +1203,13 @@ schedclock(systimer_t info, int in_ipi __unused, struct intrframe *frame)
 		 * HERE.
 		 */
 		++lp->lwp_cpticks;
-		usched_schedulerclock(lp, info->periodic, info->time);
+	}
+	if (!CPUMASK_TESTBIT(usched_global_cpumask, mycpuid) && mycpuid != 0) {
+		need_user_resched();
+		systimer_del(&mycpu->gd_schedclock);
+		mycpu->gd_schedparked = TRUE;
 	} else {
-		usched_schedulerclock(NULL, info->periodic, info->time);
+		usched_schedulerclock(lp, info->periodic, info->time);
 	}
 	if ((lp = curthread->td_lwp) != NULL) {
 		/*

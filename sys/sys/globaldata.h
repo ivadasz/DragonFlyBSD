@@ -170,6 +170,7 @@ struct globaldata {
 	struct systimer gd_hardclock;		/* scheduler periodic */
 	struct systimer gd_statclock;		/* statistics periodic */
 	struct systimer gd_schedclock;		/* scheduler periodic */
+	int		gd_schedparked;		/* scheduler parked */
 	volatile __uint32_t gd_time_seconds;	/* uptime in seconds */
 	volatile sysclock_t gd_cpuclock_base;	/* cpuclock relative base */
 
