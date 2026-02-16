@@ -417,6 +417,53 @@ systimer_changed(void)
 }
 
 void
+systimer_skip_periodic(systimer_t info, int cnt)
+{
+	KKASSERT(cnt > 0);
+
+	crit_enter();
+	systimer_del(info);
+	if (!(info->flags & SYSTF_ONQUEUE)) {
+		/* This should mean we got called from the interrupt. */
+
+		sysclock_t time = sys_cputimer->count();
+
+		/* Now we need to add info->periodic ourselves. */
+		info->time += info->periodic;
+		if ((info->flags & SYSTF_NONQUEUED) &&
+		    (ssysclock_t)(info->time - time) <= 0) {
+			info->time += roundup(time - info->time + 1, info->periodic);
+		}
+	}
+	info->regulartime = info->time;
+	info->time += cnt * info->periodic;
+	systimer_add(info);
+	crit_exit();
+}
+
+/* Like systimer_resume_periodic, but returns number of skipped interrupts */
+int
+systimer_resume_periodic_count(systimer_t info)
+{
+	sysclock_t time;
+	int ret;
+
+	crit_enter();
+	time = sys_cputimer->count();
+	systimer_del(info);
+	if ((ssysclock_t)(info->regulartime - time) > 0) {
+		ret = 0;
+	} else {
+		ret = 1 + (time - info->regulartime) / info->periodic;
+	}
+	info->time = info->regulartime + ret * info->periodic;
+	systimer_add(info);
+	crit_exit();
+
+	return ret;
+}
+
+void
 systimer_resume_periodic(systimer_t info)
 {
 	sysclock_t time;

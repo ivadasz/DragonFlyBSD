@@ -57,6 +57,7 @@ typedef struct systimer {
     TAILQ_ENTRY(systimer)	node;
     systimerq_t			queue;
     sysclock_t			time;		/* absolute time next intr */
+    sysclock_t			regulartime;	/* time next regular intr without skipping */
     sysclock_t			periodic;	/* non-zero if periodic */
     systimer_func_t		func;
     void			*data;
@@ -89,6 +90,8 @@ void systimer_init_periodic_nq100khz(systimer_t, systimer_func_t, void *, int64_
 void systimer_init_periodic_flags(systimer_t, systimer_func_t, void *,
 			int64_t, int);
 void systimer_adjust_periodic(systimer_t, int64_t);
+void systimer_skip_periodic(systimer_t, int);
+int systimer_resume_periodic_count(systimer_t);
 void systimer_resume_periodic(systimer_t);
 void systimer_init_oneshot(systimer_t, systimer_func_t, void *, int64_t);
 
