@@ -115,7 +115,7 @@ SYSCTL_LONG(_debug, OID_AUTO, spinlocks_add_latency, CTLFLAG_RW,
  * particularly multi-chip systems.
  */
 /*#define SPINLOCK_NUM_POOL	8101*/
-#define SPINLOCK_NUM_POOL	8192
+#define SPINLOCK_NUM_POOL	256
 #define SPINLOCK_NUM_POOL_MASK	(SPINLOCK_NUM_POOL - 1)
 
 static __cachealign struct {

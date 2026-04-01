@@ -81,7 +81,7 @@ struct cluster_cache {
 
 typedef struct cluster_cache cluster_cache_t;
 
-#define CLUSTER_CACHE_SIZE	512
+#define CLUSTER_CACHE_SIZE	64
 #define CLUSTER_CACHE_MASK	(CLUSTER_CACHE_SIZE - 1)
 
 #define CLUSTER_ZONE		((off_t)(1024 * 1024))

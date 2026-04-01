@@ -100,7 +100,7 @@
 #define MAX_REORDERED_RPC	(16)
 #define MAX_COMMIT_COUNT	(1024 * 1024)
 
-#define NUM_HEURISTIC		1031
+#define NUM_HEURISTIC		233
 #define NHUSE_INIT		64
 #define NHUSE_INC		16
 #define NHUSE_MAX		2048

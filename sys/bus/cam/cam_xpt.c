@@ -270,15 +270,18 @@ struct xpt_softc {
 	struct lock		xpt_lock;
 };
 
+#if 0
 static const char quantum[] = "QUANTUM";
 static const char sony[] = "SONY";
 static const char west_digital[] = "WDIGTL";
 static const char samsung[] = "SAMSUNG";
 static const char seagate[] = "SEAGATE";
 static const char microp[] = "MICROP";
+#endif
 
 static struct xpt_quirk_entry xpt_quirk_table[] =
 {
+#if 0
 	{
 		/* Reports QUEUE FULL for temporary resource shortages */
 		{ T_DIRECT, SIP_MEDIA_FIXED, quantum, "XP39100*", "*" },
@@ -618,6 +621,7 @@ static struct xpt_quirk_entry xpt_quirk_table[] =
 		},
 		/*quirks*/0, /*mintags*/2, /*maxtags*/255
 	},
+#endif
 };
 
 static const int xpt_quirk_table_size = NELEM(xpt_quirk_table);

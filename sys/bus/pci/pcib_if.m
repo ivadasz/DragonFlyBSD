@@ -89,6 +89,7 @@ METHOD int route_interrupt {
 	int		pin;
 } DEFAULT null_route_interrupt;
 
+#if 0
 #
 # Allocate 'count' MSI messsages mapped onto 'count' IRQs.  'irq' points
 # to an array of at least 'count' ints.  The max number of messages this
@@ -149,3 +150,4 @@ METHOD int map_msi {
 	uint32_t	*data;
 	int		cpuid;
 };
+#endif

@@ -359,10 +359,12 @@ initializecpu(void)
 	}
 	enable_sse();
 
+#if 0
 	/* Check if we are running in a hypervisor. */
 	vmm_guest = detect_virtual();
 	if (vmm_guest == VMM_GUEST_NONE && (cpu_feature2 & CPUID2_VMM))
 		vmm_guest = VMM_GUEST_UNKNOWN;
+#endif
 
 	if (cpu_vendor_id == CPU_VENDOR_AMD) {
 		switch((cpu_id & 0xFF0000)) {
@@ -383,8 +385,10 @@ initializecpu(void)
 			 * Do not install the workaround when we are running
 			 * in a virtual machine.
 			 */
+#if 0
 			if (vmm_guest)
 				break;
+#endif
 
 			msr = rdmsr(MSR_AMD_DE_CFG);
 			if ((msr & 1) == 0) {
@@ -400,8 +404,12 @@ initializecpu(void)
 	if (cpu_feature & CPUID_CLFSH) {
 		cpu_clflush_line_size = ((cpu_procinfo >> 8) & 0xff) * 8;
 
+#if 0
 		if (hw_clflush_enable == 0 ||
 		    ((hw_clflush_enable == -1) && vmm_guest))
+#else
+		if (hw_clflush_enable == 0)
+#endif
 			cpu_feature &= ~CPUID_CLFSH;
 	}
 

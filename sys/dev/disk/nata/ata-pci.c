@@ -139,10 +139,12 @@ ata_pci_probe(device_t dev)
 	if (!ata_netcell_ident(dev))
 	    return ATA_PROBE_OK;
 	break;
+#if 0
     case ATA_NVIDIA_ID:
 	if (!ata_nvidia_ident(dev))
 	    return ATA_PROBE_OK;
 	break;
+#endif
     case ATA_PROMISE_ID:
 	if (!ata_promise_ident(dev))
 	    return ATA_PROBE_OK;
@@ -586,7 +588,9 @@ ata_pcivendor2str(device_t dev)
     case ATA_MARVELL_ID:	return "Marvell";
     case ATA_NATIONAL_ID:	return "National";
     case ATA_NETCELL_ID:	return "Netcell";
+#if 0
     case ATA_NVIDIA_ID:		return "nVidia";
+#endif
     case ATA_PROMISE_ID:	return "Promise";
     case ATA_SERVERWORKS_ID:	return "ServerWorks";
     case ATA_SILICON_IMAGE_ID:	return "SiI";

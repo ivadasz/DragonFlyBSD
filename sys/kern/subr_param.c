@@ -64,7 +64,9 @@
 #define MAXPOSIXLOCKSPERUID (maxusers * 64) /* Should be a safe value */
 #endif
 
+#if 0
 static int sysctl_kern_vmm_guest(SYSCTL_HANDLER_ARGS);
+#endif
 
 int	hz;
 int	stathz;
@@ -86,7 +88,9 @@ long	nbuf;
 long	nswbuf;
 long	maxswzone;			/* max swmeta KVA storage */
 long	maxbcache;			/* max buffer cache KVA storage */
+#if 0
 enum vmm_guest_type vmm_guest = VMM_GUEST_NONE;	/* Running as VM guest? */
+#endif
 u_quad_t	maxtsiz;			/* max text size */
 u_quad_t	dfldsiz;			/* initial data size limit */
 u_quad_t	maxdsiz;			/* max data size */
@@ -94,9 +98,11 @@ u_quad_t	dflssiz;			/* initial stack size limit */
 u_quad_t	maxssiz;			/* max stack size */
 u_quad_t	sgrowsiz;			/* amount to grow stack */
 
+#if 0
 SYSCTL_PROC(_kern, OID_AUTO, vmm_guest, CTLFLAG_RD | CTLTYPE_STRING,
     NULL, 0, sysctl_kern_vmm_guest, "A",
     "Virtual machine guest type");
+#endif
 
 /*
  * These have to be allocated somewhere; allocating
@@ -105,6 +111,7 @@ SYSCTL_PROC(_kern, OID_AUTO, vmm_guest, CTLFLAG_RD | CTLTYPE_STRING,
  */
 struct	buf *swbuf;
 
+#if 0
 struct vmm_bname {
 	const char *str;
 	enum vmm_guest_type type;
@@ -176,6 +183,7 @@ detect_virtual(void)
 	}
 	return (VMM_GUEST_NONE);
 }
+#endif
 
 /*
  * Boot time overrides that are not scaled against main memory
@@ -302,6 +310,7 @@ init_param2(int physpages)
 	TUNABLE_INT_FETCH("kern.ncallout", &ncallout);
 }
 
+#if 0
 /*
  * Sysctl stringifying handler for kern.vmm_guest.
  */
@@ -311,3 +320,4 @@ sysctl_kern_vmm_guest(SYSCTL_HANDLER_ARGS)
 	return (SYSCTL_OUT(req, vmm_guest_sysctl_names[vmm_guest], 
 	    strlen(vmm_guest_sysctl_names[vmm_guest])));
 }
+#endif

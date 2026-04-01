@@ -59,7 +59,7 @@
  * all HSIZE elements and the number of elements which might accumulate
  * within each hash chain.
  */
-#define ALLPROC_HSIZE	256
+#define ALLPROC_HSIZE	64
 #define ALLPROC_HMASK	(ALLPROC_HSIZE - 1)
 #define ALLPROC_HASH(pid)	(pid & ALLPROC_HMASK)
 #define PGRP_HASH(pid)	(pid & ALLPROC_HMASK)
@@ -72,7 +72,7 @@
  * WARNING! PIDDOM_DELAY should not be defined > 20 or so unless you change
  *	    the array from int8_t's to int16_t's.
  */
-#define PIDDOM_COUNT	10	/* 10 pids per domain - reduce array size */
+#define PIDDOM_COUNT	4	/* 10 pids per domain - reduce array size */
 #define PIDDOM_DELAY	10	/* min 10 seconds after exit before reuse */
 #define PIDSEL_DOMAINS	(PID_MAX / PIDDOM_COUNT / ALLPROC_HSIZE * ALLPROC_HSIZE)
 

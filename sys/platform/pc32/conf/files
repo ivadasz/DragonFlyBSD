@@ -180,7 +180,7 @@ cpu/i386/misc/ktr.c			optional	ktr
 cpu/i386/misc/db_disasm.c		optional	ddb
 cpu/i386/misc/i386-gdbstub.c		optional	ddb
 cpu/i386/misc/bzeront.s			standard
-cpu/i386/misc/monitor.s			standard
+#cpu/i386/misc/monitor.s			standard
 platform/pc32/i386/autoconf.c		standard
 platform/pc32/i386/bios.c		standard
 platform/pc32/i386/bioscall.s		standard
@@ -192,7 +192,7 @@ platform/pc32/i386/elan-mmcr.c		optional	cpu_elan
 platform/pc32/i386/geode.c		optional	cpu_geode
 platform/pc32/i386/cs5536.c		optional	cpu_geode
 platform/pc32/i386/exception.s		standard
-platform/pc32/i386/msi_vector.s		standard
+#platform/pc32/i386/msi_vector.s		standard
 platform/pc32/i386/ipl.s		standard
 platform/pc32/i386/ipl_funcs.c		standard		   \
 	compile-with	"${CC} -c ${CFLAGS} ${WERROR} ${DEFINED_PROF:S/^$/-fomit-frame-pointer/} ${.IMPSRC}"
@@ -240,7 +240,7 @@ platform/pc32/i386/userconfig.c		optional	userconfig
 platform/pc32/i386/vm86.c		standard
 platform/pc32/i386/vm_machdep.c		standard
 platform/pc32/i386/cpufreq_machdep.c	standard
-platform/pc32/i386/msi.c		standard
+#platform/pc32/i386/msi.c		standard
 platform/pc32/acpica/acpi_sdt.c		standard
 platform/pc32/acpica/acpi_fadt.c	standard
 platform/pc32/acpica/acpi_madt.c	standard

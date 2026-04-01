@@ -50,7 +50,7 @@
 #include <machine/intr_machdep.h>
 #include <machine/globaldata.h>
 #include <machine/smp.h>
-#include <machine/msi_var.h>
+//#include <machine/msi_var.h>
 
 #include <sys/thread2.h>
 
@@ -84,12 +84,14 @@ static inthand_t *icu_intr[ICU_HWI_VECTORS] = {
 static struct icu_irqmap {
 	int			im_type;	/* ICU_IMT_ */
 	enum intr_trigger	im_trig;
-	int			im_msi_base;
+	//int			im_msi_base;
 	uint32_t		im_flags;
 } icu_irqmaps[MAXCPU][IDT_HWI_VECTORS];
 
+#if 0
 static struct lwkt_token icu_irqmap_tok =
 	LWKT_TOKEN_INITIALIZER(icu_irqmap_token);
+#endif
 
 #define ICU_IMT_UNUSED		0	/* KEEP THIS */
 #define ICU_IMT_RESERVED	1
@@ -123,6 +125,7 @@ static int	icu_abi_legacy_intr_find(int, enum intr_trigger,
 static int	icu_abi_legacy_intr_find_bygsi(int, enum intr_trigger,
 		    enum intr_polarity);
 
+#if 0
 static int	icu_abi_msi_alloc(int [], int, int);
 static void	icu_abi_msi_release(const int [], int, int);
 static void	icu_abi_msi_map(int, uint64_t *, uint32_t *, int);
@@ -133,6 +136,7 @@ static int	icu_abi_msi_alloc_intern(int, const char *,
 		    int [], int, int);
 static void	icu_abi_msi_release_intern(int, const char *,
 		    const int [], int, int);
+#endif
 
 static void	icu_abi_finalize(void);
 static void	icu_abi_cleanup(void);
@@ -153,11 +157,13 @@ struct machintr_abi MachIntrABI_ICU = {
 	.legacy_intr_find = icu_abi_legacy_intr_find,
 	.legacy_intr_find_bygsi = icu_abi_legacy_intr_find_bygsi,
 
+#if 0
 	.msi_alloc	= icu_abi_msi_alloc,
 	.msi_release	= icu_abi_msi_release,
 	.msi_map	= icu_abi_msi_map,
 	.msix_alloc	= icu_abi_msix_alloc,
 	.msix_release	= icu_abi_msix_release,
+#endif
 
 	.finalize	= icu_abi_finalize,
 	.cleanup	= icu_abi_cleanup,
@@ -167,7 +173,7 @@ struct machintr_abi MachIntrABI_ICU = {
 	.rman_setup	= icu_abi_rman_setup
 };
 
-static int	icu_abi_msi_start;	/* NOTE: for testing only */
+//static int	icu_abi_msi_start;	/* NOTE: for testing only */
 
 /*
  * WARNING!  SMP builds can use the ICU now so this code must be MP safe.
@@ -323,8 +329,10 @@ icu_abi_initmap(void)
 {
 	int cpu;
 
+#if 0
 	kgetenv_int("hw.icu.msi_start", &icu_abi_msi_start);
 	icu_abi_msi_start &= ~0x1f;	/* MUST be 32 aligned */
+#endif
 
 	/*
 	 * NOTE: ncpus is not ready yet
@@ -357,8 +365,10 @@ icu_abi_initmap(void)
 			}
 		}
 
+#if 0
 		for (i = 0; i < IDT_HWI_VECTORS; ++i)
 			icu_irqmaps[cpu][i].im_msi_base = -1;
+#endif
 
 		icu_irqmaps[cpu][IDT_OFFSET_SYSCALL - IDT_OFFSET].im_type =
 		    ICU_IMT_SYSCALL;
@@ -451,6 +461,7 @@ icu_abi_rman_setup(struct rman *rm)
 	}
 }
 
+#if 0
 static int
 icu_abi_msi_alloc_intern(int type, const char *desc,
     int intrs[], int count, int cpuid)
@@ -681,6 +692,7 @@ icu_abi_msi_map(int intr, uint64_t *addr, uint32_t *data, int cpuid)
 
 	lwkt_reltoken(&icu_irqmap_tok);
 }
+#endif
 
 static int
 icu_abi_legacy_intr_find(int irq, enum intr_trigger trig,

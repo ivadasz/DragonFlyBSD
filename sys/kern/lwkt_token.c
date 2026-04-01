@@ -83,7 +83,7 @@
 extern int lwkt_sched_debug;
 
 #ifndef LWKT_NUM_POOL_TOKENS
-#define LWKT_NUM_POOL_TOKENS	4001	/* prime number */
+#define LWKT_NUM_POOL_TOKENS	503	/* prime number */
 #endif
 
 struct lwkt_pool_token {

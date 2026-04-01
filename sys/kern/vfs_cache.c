@@ -122,7 +122,7 @@
 #define NCHHASH(hash)		(&nchashtbl[(hash) & nchash])
 #define MINNEG			1024
 #define MINPOS			1024
-#define NCMOUNT_NUMCACHE	1009	/* prime number */
+#define NCMOUNT_NUMCACHE	233	/* prime number */
 
 MALLOC_DEFINE(M_VFSCACHE, "vfscache", "VFS name cache entries");
 

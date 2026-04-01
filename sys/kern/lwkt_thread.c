@@ -788,6 +788,7 @@ skip:
 	if (spinning < 0x7FFFFFFF)
 	    ++spinning;
 
+#if 0
 #ifndef _KERNEL_VIRTUAL
 	/*
 	 * lwkt_getalltokens() failed in sorted token mode, we can use
@@ -802,6 +803,7 @@ skip:
 			      ~RQF_IDLECHECK_WK_MASK,
 			      cpu_mwait_spin, 0);
 	}
+#endif
 #endif
 
 	/*
@@ -832,7 +834,7 @@ skip:
 
 	    while ((oseq = lwkt_cseq_rindex) != cseq) {
 		cpu_ccfence();
-#if 1
+#if 0
 		if (cpu_mi_feature & CPU_MI_MONITOR) {
 		    cpu_mmw_pause_int(&lwkt_cseq_rindex, oseq,
 			cpu_mwait_spin, 0);
@@ -840,7 +842,7 @@ skip:
 #endif
 		    cpu_pause();
 		    cpu_lfence();
-#if 1
+#if 0
 		}
 #endif
 	    }

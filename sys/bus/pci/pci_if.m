@@ -30,6 +30,7 @@
 
 INTERFACE pci;
 
+#if 0
 CODE {
 	static int
 	null_msi_count(device_t dev, device_t child)
@@ -37,6 +38,7 @@ CODE {
 		return (0);
 	}
 };
+#endif
 
 
 METHOD u_int32_t read_config {
@@ -112,6 +114,7 @@ METHOD int find_extcap {
 	int		*capreg;
 };
 
+#if 0
 METHOD int alloc_msi {
 	device_t	dev;
 	device_t	child;
@@ -148,3 +151,4 @@ METHOD int msix_count {
 	device_t	dev;
 	device_t	child;
 } DEFAULT null_msi_count;
+#endif

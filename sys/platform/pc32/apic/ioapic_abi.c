@@ -52,7 +52,7 @@
 #include <machine/md_var.h>
 #include <machine/intr_machdep.h>
 #include <machine/globaldata.h>
-#include <machine/msi_var.h>
+//#include <machine/msi_var.h>
 
 #include <machine_base/isa/isa_intr.h>
 #include <machine_base/icu/icu.h>
@@ -462,12 +462,14 @@ static struct ioapic_irqmap {
 	enum intr_trigger	im_trig;
 	enum intr_polarity	im_pola;
 	int			im_gsi;
-	int			im_msi_base;
+	//int			im_msi_base;
 	uint32_t		im_flags;	/* IOAPIC_IMF_ */
 } ioapic_irqmaps[MAXCPU][IOAPIC_HWI_VECTORS];
 
+#if 0
 static struct lwkt_token ioapic_irqmap_tok =
 	LWKT_TOKEN_INITIALIZER(ioapic_irqmap_token);
+#endif
 
 #define IOAPIC_IMT_UNUSED	0
 #define IOAPIC_IMT_RESERVED	1
@@ -501,6 +503,7 @@ static int	ioapic_abi_legacy_intr_find(int,
 static int	ioapic_abi_legacy_intr_find_bygsi(int,
 		    enum intr_trigger, enum intr_polarity);
 
+#if 0
 static int	ioapic_abi_msi_alloc(int [], int, int);
 static void	ioapic_abi_msi_release(const int [], int, int);
 static void	ioapic_abi_msi_map(int, uint64_t *, uint32_t *, int);
@@ -511,6 +514,7 @@ static int	ioapic_abi_msi_alloc_intern(int, const char *,
 		    int [], int, int);
 static void	ioapic_abi_msi_release_intern(int, const char *,
 		    const int [], int, int);
+#endif
 
 static void	ioapic_abi_finalize(void);
 static void	ioapic_abi_cleanup(void);
@@ -535,11 +539,13 @@ struct machintr_abi MachIntrABI_IOAPIC = {
 	.legacy_intr_find = ioapic_abi_legacy_intr_find,
 	.legacy_intr_find_bygsi = ioapic_abi_legacy_intr_find_bygsi,
 
+#if 0
 	.msi_alloc	= ioapic_abi_msi_alloc,
 	.msi_release	= ioapic_abi_msi_release,
 	.msi_map	= ioapic_abi_msi_map,
 	.msix_alloc	= ioapic_abi_msix_alloc,
 	.msix_release	= ioapic_abi_msix_release,
+#endif
 
 	.finalize	= ioapic_abi_finalize,
 	.cleanup	= ioapic_abi_cleanup,
@@ -552,7 +558,7 @@ struct machintr_abi MachIntrABI_IOAPIC = {
 static int	ioapic_abi_extint_irq = -1;
 static int	ioapic_abi_legacy_irq_max;
 static int	ioapic_abi_gsi_balance;
-static int	ioapic_abi_msi_start;	/* NOTE: for testing only */
+//static int	ioapic_abi_msi_start;	/* NOTE: for testing only */
 
 struct ioapic_irqinfo	ioapic_irqs[IOAPIC_HWI_VECTORS];
 
@@ -750,19 +756,23 @@ ioapic_abi_initmap(void)
 
 	kgetenv_int("hw.ioapic.gsi.balance", &ioapic_abi_gsi_balance);
 
+#if 0
 	kgetenv_int("hw.ioapic.msi_start", &ioapic_abi_msi_start);
 	ioapic_abi_msi_start &= ~0x1f;	/* MUST be 32 aligned */
+#endif
 
 	/*
 	 * NOTE: ncpus is not ready yet
 	 */
 	for (cpu = 0; cpu < MAXCPU; ++cpu) {
+#if 0
 		int i;
 
 		for (i = 0; i < IOAPIC_HWI_VECTORS; ++i) {
 			ioapic_irqmaps[cpu][i].im_gsi = -1;
 			ioapic_irqmaps[cpu][i].im_msi_base = -1;
 		}
+#endif
 		ioapic_irqmaps[cpu][IOAPIC_HWI_SYSCALL].im_type =
 		    IOAPIC_IMT_SYSCALL;
 	}
@@ -1234,6 +1244,7 @@ ioapic_abi_rman_setup(struct rman *rm)
 	}
 }
 
+#if 0
 static int
 ioapic_abi_msi_alloc_intern(int type, const char *desc,
     int intrs[], int count, int cpuid)
@@ -1465,3 +1476,4 @@ ioapic_abi_msi_map(int intr, uint64_t *addr, uint32_t *data, int cpuid)
 
 	lwkt_reltoken(&ioapic_irqmap_tok);
 }
+#endif

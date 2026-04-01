@@ -128,10 +128,12 @@ static int ata_national_chipinit(device_t dev);
 static void ata_national_setmode(device_t dev, int mode);
 static int ata_netcell_chipinit(device_t dev);
 static int ata_netcell_allocate(device_t dev);
+#if 0
 static int ata_nvidia_chipinit(device_t dev);
 static int ata_nvidia_allocate(device_t dev);
 static int ata_nvidia_status(device_t dev);
 static void ata_nvidia_reset(device_t dev);
+#endif
 static int ata_promise_chipinit(device_t dev);
 static int ata_promise_allocate(device_t dev);
 static int ata_promise_status(device_t dev);
@@ -3194,6 +3196,7 @@ ata_netcell_allocate(device_t dev)
 }
 
 
+#if 0
 /*
  * nVidia chipset support functions
  */
@@ -3362,6 +3365,7 @@ ata_nvidia_reset(device_t dev)
     if (ata_sata_phy_reset(dev))
 	ata_generic_reset(dev);
 }
+#endif
 
 
 /*

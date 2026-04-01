@@ -85,7 +85,7 @@ enum bufq_type {
 
 typedef enum bufq_type bufq_type_t;
 
-#define BD_WAKE_SIZE	16384
+#define BD_WAKE_SIZE	1024
 #define BD_WAKE_MASK	(BD_WAKE_SIZE - 1)
 
 TAILQ_HEAD(bqueues, buf);

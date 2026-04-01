@@ -108,9 +108,9 @@
 #define	com_scr		7	/* scratch register for 16450-16550 (R/W) */
 
 #define	sio_getreg(com, off) \
-	(bus_space_read_1((com)->bst, (com)->bsh, (off)))
+	(bus_space_read_1(I386_BUS_SPACE_IO, (com)->bsh, (off)))
 #define	sio_setreg(com, off, value) \
-	(bus_space_write_1((com)->bst, (com)->bsh, (off), (value)))
+	(bus_space_write_1(I386_BUS_SPACE_IO, (com)->bsh, (off), (value)))
 
 /*
  * com state bits.
@@ -456,6 +456,7 @@ static struct isa_pnp_id sio_ids[] = {
 	{0x0205d041, "Multiport serial device (non-intelligent 16550)"}, /* PNP0502 */
 	{0x1005d041, "Generic IRDA-compatible device"},	/* PNP0510 */
 	{0x1105d041, "Generic IRDA-compatible device"},	/* PNP0511 */
+#if 0
 	/* Devices that do not have a compatid */
 	{0x12206804, NULL},     /* ACH2012 - 5634BTS 56K Video Ready Modem */
 	{0x7602a904, NULL},	/* AEI0276 - 56K v.90 Fax Modem (LKT) */
@@ -531,6 +532,7 @@ static struct isa_pnp_id sio_ids[] = {
 	{0x0300695c, NULL},	/* WCI0003 - Fax/Voice/Modem/Speakphone/Asvd */
 	{0x01a0896a, NULL},	/* ZTIA001 - Zoom Internal V90 Faxmodem */
 	{0x61f7896a, NULL},	/* ZTIF761 - Zoom ComStar 33.6 */
+#endif
 	{0}
 };
 
@@ -675,6 +677,7 @@ sioprobe(device_t dev, int xrid, u_long rclk)
 	 * default after-reset value) as otherwise it's impossible to
 	 * get highest baudrates.
 	 */
+#if 0
 	if (COM_TI16754(flags)) {
 		u_char cfcr, efr;
 
@@ -692,6 +695,7 @@ sioprobe(device_t dev, int xrid, u_long rclk)
 		sio_setreg(com, com_efr, efr);
 		sio_setreg(com, com_cfcr, cfcr);
 	}
+#endif
 
 	/*
 	 * Initialize the speed and the word size and wait long enough to
@@ -1112,9 +1116,11 @@ sioattach(device_t dev, int xrid, u_long rclk)
 				com->st16650a = 1;
 				com->tx_fifo_size = 32;
 				kprintf(" ST16650A");
+#if 0
 			} else if (COM_TI16754(flags)) {
 				com->tx_fifo_size = 64;
 				kprintf(" TI16754");
+#endif
 			} else {
 				com->tx_fifo_size = COM_FIFOSIZE(flags);
 				kprintf(" 16550A");
@@ -1127,7 +1133,11 @@ sioattach(device_t dev, int xrid, u_long rclk)
 				break;
 			}
 #endif
+#if 0
 		if (!com->st16650a && !COM_TI16754(flags)) {
+#else
+		if (!com->st16650a) {
+#endif
 			if (!com->tx_fifo_size)
 				com->tx_fifo_size = 16;
 			else

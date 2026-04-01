@@ -94,7 +94,7 @@
  *	 reduce KVM overhead, but can be increased up to 32.
  */
 #ifndef SMP_MAXCPU
-#define SMP_MAXCPU	16
+#define SMP_MAXCPU	2
 #endif
 #define MAXCPU		SMP_MAXCPU
 

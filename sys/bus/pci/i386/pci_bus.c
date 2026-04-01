@@ -74,6 +74,7 @@ legacy_pcib_write_config(device_t dev, int bus, int slot, int func,
 
 /* Pass MSI requests up to the nexus. */
 
+#if 0
 static int
 legacy_pcib_alloc_msi(device_t pcib, device_t dev, int count, int maxcount,
     int *irqs, int cpuid)
@@ -104,6 +105,7 @@ legacy_pcib_map_msi(device_t pcib, device_t dev, int irq, uint64_t *addr,
 	return (PCIB_MAP_MSI(device_get_parent(bus), dev, irq, addr, data,
 	    cpuid));
 }
+#endif
 
 static const char *
 legacy_pcib_is_host_bridge(int bus, int slot, int func,
@@ -568,11 +570,13 @@ static device_method_t legacy_pcib_methods[] = {
 	DEVMETHOD(pcib_read_config,	legacy_pcib_read_config),
 	DEVMETHOD(pcib_write_config,	legacy_pcib_write_config),
 	DEVMETHOD(pcib_route_interrupt,	pcibios_pcib_route_interrupt),
+#if 0
 	DEVMETHOD(pcib_alloc_msi,	legacy_pcib_alloc_msi),
 	DEVMETHOD(pcib_release_msi,	pcib_release_msi),
 	DEVMETHOD(pcib_alloc_msix,	legacy_pcib_alloc_msix),
 	DEVMETHOD(pcib_release_msix,	pcib_release_msix),
 	DEVMETHOD(pcib_map_msi,		legacy_pcib_map_msi),
+#endif
 	DEVMETHOD_END
 };
 
@@ -661,11 +665,13 @@ static device_method_t pcibios_pcib_pci_methods[] = {
 	DEVMETHOD(pcib_read_config,	pcib_read_config),
 	DEVMETHOD(pcib_write_config,	pcib_write_config),
 	DEVMETHOD(pcib_route_interrupt,	pcibios_pcib_route_interrupt),
+#if 0
 	DEVMETHOD(pcib_alloc_msi,	pcib_alloc_msi),
 	DEVMETHOD(pcib_release_msi,	pcib_release_msi),
 	DEVMETHOD(pcib_alloc_msix,	pcib_alloc_msix),
 	DEVMETHOD(pcib_release_msix,	pcib_release_msix),
 	DEVMETHOD(pcib_map_msi,		pcib_map_msi),
+#endif
 
 	DEVMETHOD_END
 };

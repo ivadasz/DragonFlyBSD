@@ -76,11 +76,13 @@ static device_method_t pcib_methods[] = {
     DEVMETHOD(pcib_read_config,		pcib_read_config),
     DEVMETHOD(pcib_write_config,	pcib_write_config),
     DEVMETHOD(pcib_route_interrupt,	pcib_route_interrupt),
+#if 0
     DEVMETHOD(pcib_alloc_msi,		pcib_alloc_msi),
     DEVMETHOD(pcib_release_msi,		pcib_release_msi),
     DEVMETHOD(pcib_alloc_msix,		pcib_alloc_msix),
     DEVMETHOD(pcib_release_msix,	pcib_release_msix),
     DEVMETHOD(pcib_map_msi,		pcib_map_msi),
+#endif
 
     DEVMETHOD_END
 };
@@ -256,8 +258,10 @@ pcib_attach_common(device_t dev)
 	}
     }
 
+#if 0
     if (pci_msi_device_blacklisted(dev))
 	sc->flags |= PCIB_DISABLE_MSI;
+#endif
 
     /*
      * Intel 815, 845 and other chipsets say they are PCI-PCI bridges,
@@ -592,6 +596,7 @@ pcib_route_interrupt(device_t pcib, device_t dev, int pin)
     return(intnum);
 }
 
+#if 0
 /* Pass request to alloc MSI/MSI-X messages up to the parent bridge. */
 int
 pcib_alloc_msi(device_t pcib, device_t dev, int count, int maxcount,
@@ -658,6 +663,7 @@ pcib_map_msi(device_t pcib, device_t dev, int irq, uint64_t *addr,
 	pci_ht_map_msi(pcib, *addr);
 	return (0);
 }
+#endif
 
 /*
  * Try to read the bus number of a host-PCI bridge using appropriate config

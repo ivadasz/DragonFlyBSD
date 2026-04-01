@@ -43,7 +43,7 @@
 #include <sys/endian.h>
 #include <sys/machintr.h>
 
-#include <machine/msi_machdep.h>
+//#include <machine/msi_machdep.h>
 
 #include <vm/vm.h>
 #include <vm/pmap.h>
@@ -106,6 +106,7 @@ static int		pci_write_vpd_reg(device_t pcib, pcicfgregs *cfg,
 			    int reg, uint32_t data);
 #endif
 static void		pci_read_vpd(device_t pcib, pcicfgregs *cfg);
+#if 0
 static void		pci_disable_msi(device_t dev);
 static void		pci_enable_msi(device_t dev, uint64_t address,
 			    uint16_t data);
@@ -118,13 +119,16 @@ static struct msix_vector *pci_find_msix_vector(device_t dev, int rid);
 static int		pci_msi_blacklisted(void);
 static void		pci_resume_msi(device_t dev);
 static void		pci_resume_msix(device_t dev);
+#endif
 static int		pcie_slotimpl(const pcicfgregs *);
 static void		pci_print_verbose_expr(const pcicfgregs *);
 
 static void		pci_read_cap_pmgt(device_t, int, int, pcicfgregs *);
+#if 0
 static void		pci_read_cap_ht(device_t, int, int, pcicfgregs *);
 static void		pci_read_cap_msi(device_t, int, int, pcicfgregs *);
 static void		pci_read_cap_msix(device_t, int, int, pcicfgregs *);
+#endif
 static void		pci_read_cap_vpd(device_t, int, int, pcicfgregs *);
 static void		pci_read_cap_subvendor(device_t, int, int,
 			    pcicfgregs *);
@@ -174,12 +178,14 @@ static device_method_t pci_methods[] = {
 	DEVMETHOD(pci_set_powerstate,	pci_set_powerstate_method),
 	DEVMETHOD(pci_assign_interrupt,	pci_assign_interrupt_method),
 	DEVMETHOD(pci_find_extcap,	pci_find_extcap_method),
+#if 0
 	DEVMETHOD(pci_alloc_msi,	pci_alloc_msi_method),
 	DEVMETHOD(pci_release_msi,	pci_release_msi_method),
 	DEVMETHOD(pci_alloc_msix_vector, pci_alloc_msix_vector_method),
 	DEVMETHOD(pci_release_msix_vector, pci_release_msix_vector_method),
 	DEVMETHOD(pci_msi_count,	pci_msi_count_method),
 	DEVMETHOD(pci_msix_count,	pci_msix_count_method),
+#endif
 
 	DEVMETHOD_END
 };
@@ -199,9 +205,11 @@ static const struct pci_read_cap {
 	pci_read_cap_t	read_cap;
 } pci_read_caps[] = {
 	{ PCIY_PMG,		pci_read_cap_pmgt },
+#if 0
 	{ PCIY_HT,		pci_read_cap_ht },
 	{ PCIY_MSI,		pci_read_cap_msi },
 	{ PCIY_MSIX,		pci_read_cap_msix },
+#endif
 	{ PCIY_VPD,		pci_read_cap_vpd },
 	{ PCIY_SUBVENDOR,	pci_read_cap_subvendor },
 	{ PCIY_PCIX,		pci_read_cap_pcix },
@@ -225,6 +233,7 @@ struct pci_quirk pci_quirks[] = {
 	/* As does the Serverworks OSB4 (the SMBus mapping register) */
 	{ 0x02001166, PCI_QUIRK_MAP_REG,	0x90,	 0 },
 
+#if 0
 	/*
 	 * MSI doesn't work with the ServerWorks CNB20-HE Host Bridge
 	 * or the CMIC-SL (AKA ServerWorks GC_LE).
@@ -249,6 +258,7 @@ struct pci_quirk pci_quirks[] = {
 	 * bridge.
 	 */
 	{ 0x74501022, PCI_QUIRK_DISABLE_MSI,	0,	0 },
+#endif
 
 	{ 0 }
 };
@@ -258,8 +268,10 @@ struct pci_quirk pci_quirks[] = {
 #define	PCI_MAPMEMP	0x02	/* prefetchable memory map */
 #define	PCI_MAPPORT	0x04	/* port map */
 
+#if 0
 #define PCI_MSIX_RID2VEC(rid)	((rid) - 1)	/* rid -> MSI-X vector # */
 #define PCI_MSIX_VEC2RID(vec)	((vec) + 1)	/* MSI-X vector # -> rid */
+#endif
 
 struct devlist pci_devq;
 uint32_t pci_generation;
@@ -292,6 +304,7 @@ SYSCTL_INT(_hw_pci, OID_AUTO, do_power_resume, CTLFLAG_RW,
     &pci_do_power_resume, 1,
   "Transition from D3 -> D0 on resume.");
 
+#if 0
 static int pci_do_msi = 1;
 TUNABLE_INT("hw.pci.enable_msi", &pci_do_msi);
 SYSCTL_INT(_hw_pci, OID_AUTO, enable_msi, CTLFLAG_RW, &pci_do_msi, 1,
@@ -306,6 +319,7 @@ static int pci_honor_msi_blacklist = 1;
 TUNABLE_INT("hw.pci.honor_msi_blacklist", &pci_honor_msi_blacklist);
 SYSCTL_INT(_hw_pci, OID_AUTO, honor_msi_blacklist, CTLFLAG_RD,
     &pci_honor_msi_blacklist, 1, "Honor chipset blacklist for MSI");
+#endif
 
 #if defined(__i386__) || defined(__x86_64__)
 static int pci_usb_takeover = 1;
@@ -316,7 +330,9 @@ Disable this if you depend on BIOS emulation of USB devices, that is\n\
 you use USB devices (like keyboard or mouse) but do not load USB drivers");
 #endif
 
+#if 0
 static int pci_msi_cpuid;
+#endif
 
 /* Find a device_t by bus/slot/function in domain 0 */
 
@@ -644,6 +660,7 @@ pci_read_cap_pmgt(device_t pcib, int ptr, int nextptr, pcicfgregs *cfg)
 #undef REG
 }
 
+#if 0
 static void
 pci_read_cap_ht(device_t pcib, int ptr, int nextptr, pcicfgregs *cfg)
 {
@@ -729,6 +746,7 @@ pci_read_cap_msix(device_t pcib, int ptr, int nextptr, pcicfgregs *cfg)
 
 #undef REG
 }
+#endif
 
 static void
 pci_read_cap_vpd(device_t pcib, int ptr, int nextptr, pcicfgregs *cfg)
@@ -1395,6 +1413,7 @@ pci_find_extcap_method(device_t dev, device_t child, int capability,
 	return (ENOENT);
 }
 
+#if 0
 /*
  * Support for MSI-X message interrupts.
  */
@@ -2102,6 +2121,7 @@ pci_msi_count_method(device_t dev, device_t child)
 		return (msi->msi_msgnum);
 	return (0);
 }
+#endif
 
 /* kfree pcicfgregs structure and all depending data structures */
 
@@ -3270,9 +3290,13 @@ pci_setup_intr(device_t dev, device_t child, struct resource *irq, int flags,
 	}
 
 	rid = rman_get_rid(irq);
+	KKASSERT(rid == 0);
+#if 0
 	if (rid == 0) {
+#endif
 		/* Make sure that INTx is enabled */
 		pci_clear_command_bit(dev, child, PCIM_CMD_INTxDIS);
+#if 0
 	} else {
 		struct pci_devinfo *dinfo = device_get_ivars(child);
 		uint64_t addr;
@@ -3337,6 +3361,7 @@ pci_setup_intr(device_t dev, device_t child, struct resource *irq, int flags,
 			return (error);
 		}
 	}
+#endif
 	*cookiep = cookie;
 	return (0);
 }
@@ -3355,9 +3380,13 @@ pci_teardown_intr(device_t dev, device_t child, struct resource *irq,
 		return(bus_generic_teardown_intr(dev, child, irq, cookie));
 
 	rid = rman_get_rid(irq);
+	KKASSERT(rid == 0);
+#if 0
 	if (rid == 0) {
+#endif
 		/* Mask INTx */
 		pci_set_command_bit(dev, child, PCIM_CMD_INTxDIS);
+#if 0
 	} else {
 		struct pci_devinfo *dinfo = device_get_ivars(child);
 
@@ -3395,6 +3424,7 @@ pci_teardown_intr(device_t dev, device_t child, struct resource *irq,
 			mv->mv_data = 0;
 		}
 	}
+#endif
 	error = bus_generic_teardown_intr(dev, child, irq, cookie);
 	if (rid > 0)
 		KASSERT(error == 0,
@@ -3987,6 +4017,7 @@ pci_alloc_resource(device_t dev, device_t child, int type, int *rid,
 	if (device_get_parent(child) == dev) {
 		switch (type) {
 		case SYS_RES_IRQ:
+#if 0
 			/*
 			 * Can't alloc legacy interrupt once MSI messages
 			 * have been allocated.
@@ -3994,6 +4025,7 @@ pci_alloc_resource(device_t dev, device_t child, int type, int *rid,
 			if (*rid == 0 && (cfg->msi.msi_alloc > 0 ||
 			    cfg->msix.msix_alloc > 0))
 				return (NULL);
+#endif
 			/*
 			 * If the child device doesn't have an
 			 * interrupt routed and is deserving of an
@@ -4214,11 +4246,13 @@ pci_cfg_restore(device_t dev, struct pci_devinfo *dinfo)
 	pci_write_config(dev, PCIR_PROGIF, dinfo->cfg.progif, 1);
 	pci_write_config(dev, PCIR_REVID, dinfo->cfg.revid, 1);
 
+#if 0
 	/* Restore MSI and MSI-X configurations if they are present. */
 	if (dinfo->cfg.msi.msi_location != 0)
 		pci_resume_msi(dev);
 	if (dinfo->cfg.msix.msix_location != 0)
 		pci_resume_msix(dev);
+#endif
 }
 
 void
@@ -4315,6 +4349,7 @@ pci_alloc_1intr(device_t dev, int msi_enable, int *rid0, u_int *flags0)
 	type = PCI_INTR_TYPE_LEGACY;
 	flags = RF_SHAREABLE | RF_ACTIVE;
 
+#if 0
 	msi_enable = device_getenv_int(dev, "msi.enable", msi_enable);
 	if (msi_enable) {
 		int cpu;
@@ -4328,6 +4363,7 @@ pci_alloc_1intr(device_t dev, int msi_enable, int *rid0, u_int *flags0)
 			type = PCI_INTR_TYPE_MSI;
 		}
 	}
+#endif
 
 	*rid0 = rid;
 	*flags0 = flags;

@@ -304,7 +304,7 @@ updatepcpu(struct lwp *lp, int cpticks, int ttlticks)
  * tsleep/wakeup hash table parameters.  Try to find the sweet spot for
  * like addresses being slept on.
  */
-#define TABLESIZE	4001
+#define TABLESIZE	233
 #define LOOKUP(x)	(((u_int)(uintptr_t)(x)) % TABLESIZE)
 
 static cpumask_t slpque_cpumasks[TABLESIZE];

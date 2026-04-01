@@ -809,12 +809,16 @@ cpu_idle(void)
 			(cpu_idle_hlt < 3 &&
 			 gd->gd_idle_repeat < cpu_idle_repeat);
 
+#if 0
 		if (quick && (cpu_mi_feature & CPU_MI_MONITOR) &&
 		    (reqflags & RQF_IDLECHECK_WK_MASK) == 0) {
 			cpu_mmw_pause_int(&gd->gd_reqflags, reqflags,
 					  cpu_mwait_halt, 0);
 			++cpu_idle_hltcnt;
 		} else if (cpu_idle_hlt) {
+#else
+		if (cpu_idle_hlt) {
+#endif
 			__asm __volatile("cli");
 			splz();
 			if ((gd->gd_reqflags & RQF_IDLECHECK_WK_MASK) == 0) {
