@@ -4,8 +4,14 @@ version=	${GCCCOMPLETEVER}
 target_machine=	${TARGET_ARCH}-pc-dragonflybsd
 
 # try to remove next two lines
+GCC_CPU?=	${TARGET_ARCH}
+BYTESLONG=	4
+HWI_TYPE=	long long
+.if ${TARGET_ARCH} == "x86_64"
+GCC_CPU=	i386
 BYTESLONG=	8
 HWI_TYPE=	long
+.endif
 
 # from gcc/Makefile
 srcdir= ${GCCDIR}/gcc
@@ -31,7 +37,9 @@ GTFILES_SRCDIR=		$(srcdir)
 TARGET_INC=	options.h
 TARGET_INC+=	insn-constants.h
 TARGET_INC+=	config/vxworks-dummy.h
+.if ${TARGET_ARCH} == "x86_64"
 TARGET_INC+=	config/i386/biarch64.h
+.endif
 TARGET_INC+=	config/i386/i386.h
 TARGET_INC+=	config/i386/unix.h
 TARGET_INC+=	config/i386/att.h
@@ -39,7 +47,9 @@ TARGET_INC+=	config/dbxelf.h
 TARGET_INC+=	config/elfos.h
 TARGET_INC+=	config/dragonfly.h
 TARGET_INC+=	config/dragonfly-stdint.h
+.if ${TARGET_ARCH} == "x86_64"
 TARGET_INC+=	config/i386/x86-64.h
+.endif
 TARGET_INC+=	config/i386/dragonfly.h
 TARGET_INC+=	config/initfini-array.h
 TARGET_INC+=	dragonfly-native.h

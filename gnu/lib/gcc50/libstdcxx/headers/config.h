@@ -193,14 +193,21 @@
 /* Define to 1 if you have the <ieeefp.h> header file. */
 #define HAVE_IEEEFP_H 1
 
-/* Define if int64_t is available in <stdint.h>. */
-#define HAVE_INT64_T 1
+#if defined(__i386__)
+/* Define if int64_t is a long. */
+/* #undef HAVE_INT64_T_LONG */
 
+/* Define if int64_t is a long long. */
+#define HAVE_INT64_T_LONG_LONG 1
+#elif defined(__x86_64__)
 /* Define if int64_t is a long. */
 #define HAVE_INT64_T_LONG 1
 
 /* Define if int64_t is a long long. */
 /* #undef HAVE_INT64_T_LONG_LONG */
+#else
+#error Platform not supported!
+#endif
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
@@ -734,13 +741,21 @@
 /* #undef _GLIBCXX_LONG_DOUBLE_COMPAT */
 
 /* Define if ptrdiff_t is int. */
+#if defined(__i386__)
+#define _GLIBCXX_PTRDIFF_T_IS_INT 1
+#elif defined(__x86_64__)
 /* #undef _GLIBCXX_PTRDIFF_T_IS_INT */
+#endif
 
 /* Define if using setrlimit to set resource limits during "make check" */
 #define _GLIBCXX_RES_LIMITS 1
 
 /* Define if size_t is unsigned int. */
+#if defined(__i386__)
+#define _GLIBCXX_SIZE_T_IS_UINT 1
+#elif defined(__x86_64__)
 /* #undef _GLIBCXX_SIZE_T_IS_UINT */
+#endif
 
 /* Define if the compiler is configured for setjmp/longjmp exceptions. */
 /* #undef _GLIBCXX_SJLJ_EXCEPTIONS */
@@ -835,7 +850,11 @@
 /* #undef _GLIBCXX_USE_GET_NPROCS */
 
 /* Define if __int128 is supported on this host. */
+#if defined(__i386__)
+/* #undef _GLIBCXX_USE_INT128 */
+#elif defined(__x86_64__)
 #define _GLIBCXX_USE_INT128 1
+#endif
 
 /* Define if LFS support is available. */
 /* #undef _GLIBCXX_USE_LFS */
