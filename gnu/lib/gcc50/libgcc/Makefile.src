@@ -18,12 +18,21 @@ lib2funcs+=	_floatundi${f}
 nowsoft+=	extend${f}tf2
 .endfor
 
+.if ${TARGET_ARCH} == "i386"
+.for f in si di ti
+lib2funcs+=	fixtf${f}
+lib2funcs+=	fixunstf${f}
+lib2funcs+=	float${f}tf
+lib2funcs+=	floatun${f}tf
+.endfor
+.else
 .for f in si di ti
 nowsoft+=	fixtf${f}
 nowsoft+=	fixunstf${f}
 nowsoft+=	float${f}tf
 nowsoft+=	floatun${f}tf
 .endfor
+.endif
 
 LIB2_DIVMOD_FUNCS = _divdi3 _moddi3 _udivdi3 _umoddi3 _udiv_w_sdiv _udivmoddi4 
 
@@ -44,13 +53,13 @@ raise_FLAGS=		-fexceptions -fnon-call-exceptions
 raise_FLAGS_FILES=	${LIB2_DIVMOD_FUNCS:S/$/.c/}
 
 ${FUNCS:S/$/.o/}: ${GCCDIR}/libgcc/libgcc2.c
-	${CC} ${STATIC_CFLAGS} ${CFLAGS} -DL${.TARGET:R} -c ${.ALLSRC} \
+	${CC} ${STATIC_CFLAGS} ${CFLAGS} -DL${.TARGET:R} -c ${GCCDIR}/libgcc/libgcc2.c \
 		-o ${.TARGET}
 
 ${FUNCS:S/$/.po/}: ${GCCDIR}/libgcc/libgcc2.c
 	${CC} ${PO_FLAG} ${STATIC_CFLAGS} ${PO_CFLAGS} -DL${.TARGET:R} \
-		-c ${.ALLSRC} -o ${.TARGET}
+		-c ${GCCDIR}/libgcc/libgcc2.c -o ${.TARGET}
 
 ${FUNCS:S/$/.So/}: ${GCCDIR}/libgcc/libgcc2.c
 	${CC} ${PICFLAG} -DPIC ${SHARED_CFLAGS} ${CFLAGS} -DL${.TARGET:R} \
-		-c ${.ALLSRC} -o ${.TARGET}
+		-c ${GCCDIR}/libgcc/libgcc2.c -o ${.TARGET}
