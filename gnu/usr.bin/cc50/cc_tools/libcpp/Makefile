@@ -39,4 +39,4 @@ afterdepend: libcpp.na
 
 CLEANFILES=	localedir.h config.h
 
-.include "../../Makefile.intcxx_lib"
+.include "../../Makefile.hostcxx_lib"

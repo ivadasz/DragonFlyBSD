@@ -1785,7 +1785,11 @@
 
 /* Define if int64_t uses long as underlying type. */
 #ifndef USED_FOR_TARGET
+#ifdef __i386__
+#define INT64_T_IS_LONG 0
+#else
 #define INT64_T_IS_LONG 1
+#endif
 #endif
 
 
@@ -1907,7 +1911,11 @@
 
 /* The size of `long', as computed by sizeof. */
 #ifndef USED_FOR_TARGET
+#ifdef __i386__
+#define SIZEOF_LONG 4
+#else
 #define SIZEOF_LONG 8
+#endif
 #endif
 
 
