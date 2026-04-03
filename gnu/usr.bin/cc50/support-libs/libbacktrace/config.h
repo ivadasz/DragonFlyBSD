@@ -2,7 +2,11 @@
 /* config.h.in.  Generated from configure.ac by autoheader.  */
 
 /* ELF size: 32 or 64 */
+#ifdef __i386__
+#define BACKTRACE_ELF_SIZE 32
+#else
 #define BACKTRACE_ELF_SIZE 64
+#endif
 
 /* Define to 1 if you have the __atomic functions */
 #define HAVE_ATOMIC_FUNCTIONS 1

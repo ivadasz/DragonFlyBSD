@@ -65,7 +65,11 @@
 #define SIZEOF_INT 4
 
 /* The size of `long', as computed by sizeof. */
+#ifdef __i386__
+#define SIZEOF_LONG 4
+#else
 #define SIZEOF_LONG 8
+#endif
 
 /* The size of `short', as computed by sizeof. */
 /* #undef SIZEOF_SHORT */
