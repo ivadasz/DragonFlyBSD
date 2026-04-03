@@ -211,12 +211,12 @@ cpu_prepare_lwp(struct lwp *lp, struct lwp_params *params)
 	void *bad_return = NULL;
 	int error;
 
-	regs->tf_eip = (int)params->func;
-	regs->tf_esp = (int)params->stack;
+	regs->tf_eip = (int)params->lwp_func;
+	regs->tf_esp = (int)params->lwp_stack;
 	/* Set up argument for function call */
-	regs->tf_esp -= sizeof(params->arg);
-	error = 
-	    copyout(&params->arg, (void *)regs->tf_esp, sizeof(params->arg));
+	regs->tf_esp -= sizeof(params->lwp_arg);
+	error = copyout(&params->lwp_arg,
+	    (void *)regs->tf_esp, sizeof(params->lwp_arg));
 	if (error)
 		return (error);
 	/*
