@@ -28,7 +28,7 @@ LIBEXEC_BINUTILS=	${BINDIR}/..
 SCRIPTDIR=		${LIBEXEC_BINUTILS}/ldscripts
 ELF_SCR_EXT=		x xbn xc xd xdc xdw xn xr xs xsc xsw xu xw
 
-.include "Makefile.x86_64"
+.include "Makefile.${TARGET_ARCH}"
 
 # We need to overwrite CFLAGS, it's picking up bulibs's config.h first
 CFLAGS=		-I${SRCDIR}/include -I${SRCDIR}/bfd
