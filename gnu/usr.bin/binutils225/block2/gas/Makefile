@@ -1,6 +1,6 @@
 .include "../../Makefile.inc1"
 .include "../Makefile.block2"
-.include "x86_64-dragonfly/Makefile"
+.include "${TARGET_ARCH}-dragonfly/Makefile"
 
 .PATH: ${SRCDIR}/gas ${SRCDIR}/gas/config
 
@@ -40,7 +40,7 @@ SRCS+=	app.c \
 LDADD=	${STD_LDADD} ${LDADD_OPCODE} -lz
 
 CFLAGS+=	-I${SRCDIR}/gas -I${SRCDIR}/gas/config -I${SRCDIR}
-CFLAGS+=	-I${.CURDIR}/x86_64-dragonfly
+CFLAGS+=	-I${.CURDIR}/${TARGET_ARCH}-dragonfly
 
 CFLAGS+=	-DTARGET_ALIAS=\"${TARGET_ALIAS}\"
 CFLAGS+=	-DTARGET_CANONICAL=\"${TARGET_CANONICAL}\"

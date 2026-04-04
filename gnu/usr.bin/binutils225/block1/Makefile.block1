@@ -14,8 +14,18 @@ SRCDIR=	${.CURDIR}/${RELSRC}
 CFLAGS+= -I${.CURDIR} -I${.OBJDIR}
 CFLAGS+= -I${SRCDIR}/include
 
-TARGET_CANONICAL=		x86_64-just-dragonfly
 BFD_HOST_64_BIT_DEFINED?=	1
+.if ${TARGET_ARCH} == "i386"
+TARGET_CANONICAL=		i386-just-dragonfly
+BFD_HOST_64BIT_LONG?=		0
+BFD_HOST_64BIT_LONG_LONG?=	1
+BFD_HOST_64_BIT?=		long long
+BFD_HOST_U_64_BIT?=		unsigned long long
+BFD_HOSTPTR_T?=			unsigned long
+BFD_ARCH_SIZE?=			32
+BFD_DEFAULT_TARGET_SIZE?=	32
+.else
+TARGET_CANONICAL=		x86_64-just-dragonfly
 BFD_HOST_64BIT_LONG?=		1
 BFD_HOST_64BIT_LONG_LONG?=	0
 BFD_HOST_64_BIT?=		long
@@ -23,6 +33,7 @@ BFD_HOST_U_64_BIT?=		unsigned long
 BFD_HOSTPTR_T?=			unsigned long
 BFD_ARCH_SIZE?=			64
 BFD_DEFAULT_TARGET_SIZE?=	64
+.endif
 
 bfd.h: 	${SRCDIR}/bfd/bfd-in2.h
 	sed -e "s/@supports_plugins@/0/g" \
