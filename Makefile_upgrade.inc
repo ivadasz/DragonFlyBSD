@@ -2124,7 +2124,6 @@ TO_REMOVE+=/boot/kernel/if_sbni.ko
 TO_REMOVE+=/boot/kernel/if_sr.ko
 TO_REMOVE+=/boot/kernel/ng_sync_ar.ko
 TO_REMOVE+=/boot/kernel/ng_sync_sr.ko
-TO_REMOVE+=/usr/include/gnu/vfs/ext2fs/i386-bitops.h
 TO_REMOVE+=/usr/share/man/man3/ieee_test.3.gz
 TO_REMOVE+=/etc/rc.d/hostapd
 TO_REMOVE+=/usr/sbin/hostapd
