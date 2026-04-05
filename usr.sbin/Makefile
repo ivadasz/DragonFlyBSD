@@ -153,8 +153,11 @@ SUBDIR+=lpr
 SUBDIR+=nscd
 .endif
 
-.if ${MACHINE_ARCH} == "x86_64"
+.if ${TARGET_ARCH} == "i386" || ${TARGET_ARCH} == "x86_64"
 SUBDIR+=btxld \
+	apmd \
+	battd \
+	btxld \
 	kgmon \
 	lptcontrol \
 	mptable \
