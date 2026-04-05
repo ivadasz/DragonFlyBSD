@@ -34,12 +34,12 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)isa.h	5.7 (Berkeley) 5/9/91
- * $FreeBSD: src/sys/isa/isareg.h,v 1.4.2.1 2000/07/18 20:39:05 dfr Exp $
- * $DragonFly: src/sys/bus/isa/isareg.h,v 1.4 2005/06/12 20:55:14 swildner Exp $
+ * $FreeBSD: src/sys/i386/isa/isa.h,v 1.23 1999/08/28 00:44:54 peter Exp $
+ * $DragonFly: src/sys/bus/isa/i386/isa.h,v 1.5 2006/10/23 21:50:31 dillon Exp $
  */
 
-#ifndef _ISA_ISA_H_
-#define	_ISA_ISA_H_
+#ifndef _BUS_ISA_ARCH_ISA_H_
+#define	_BUS_ISA_ARCH_ISA_H_
 
 /* BEWARE:  Included in both assembler and C code */
 
@@ -154,16 +154,7 @@
 #define	IO_GSCSIZE	8		/* GeniScan GS-4500G hand scanner */
 #define	IO_ICUSIZE	16		/* 8259A interrupt controllers */
 #define	IO_KBDSIZE	16		/* 8042 Keyboard controllers */
-
-/* The following line was changed to support more architectures (simpler
-   chipsets (like those for Alpha) only use 4, but more complex controllers
-   (usually modern i386's) can use an additional 4; the probe to see if
-   the additional 4 can be used by the specific chipset is now done in the ppc
-   code by ppc_probe()... */
-
-#define IO_LPTSIZE_EXTENDED	8	/* "Extended" LPT controllers */
-#define IO_LPTSIZE_NORMAL	4	/* "Normal" LPT controllers */
-
+#define	IO_LPTSIZE	8		/* LPT controllers, some use only 4 */
 #define	IO_MDASIZE	12		/* Monochrome display controllers */
 #define	IO_NPXSIZE	16		/* 80387/80487 NPX registers */
 #define	IO_PMPSIZE	2		/* 82347 power management peripheral */
@@ -203,4 +194,4 @@
 #define	CYRIX_EMC	0xC0000000	/* Cyrix EMC */
 #endif /* !COMPAQ_RAMRELOC */
 
-#endif /* !_ISA_ISA_H_ */
+#endif /* !_BUS_ISA_ARCH_ISA_H_ */
