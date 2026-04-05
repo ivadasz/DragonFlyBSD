@@ -57,6 +57,24 @@
 
 #endif /* __i386__ */
 
+#ifdef __i386__
+
+#include <machine/clock.h>
+#include <machine/md_var.h>
+#include <machine/pc/bios.h>
+
+#include <vm/vm.h>
+#include <vm/pmap.h>
+
+#include <machine_base/isa/timerreg.h>
+
+#define BIOS_CLKED	(1 << 6)
+#define BIOS_NLKED	(1 << 5)
+#define BIOS_SLKED	(1 << 4)
+#define BIOS_ALKED	0
+
+#endif /* __i386__ */
+
 #include <dev/misc/syscons/syscons.h>
 
 #include "isareg.h"
