@@ -47,7 +47,9 @@
 #include "ext2_fs_sb.h"
 #include "fs.h"
 
-#ifdef __x86_64__
+#ifdef __i386__
+#include "i386-bitops.h"
+#else
 #include "ext2_bitops.h"
 #endif
 

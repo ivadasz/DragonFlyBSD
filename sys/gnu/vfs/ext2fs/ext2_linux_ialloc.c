@@ -48,7 +48,9 @@
 #include <sys/buf2.h>
 #include <sys/thread2.h>
 
-#ifdef __x86_64__
+#ifdef __i386__
+#include "i386-bitops.h"
+#else
 #include "ext2_bitops.h"
 #endif
 
