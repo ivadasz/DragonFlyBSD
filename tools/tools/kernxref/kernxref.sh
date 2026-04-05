@@ -8,12 +8,13 @@
 # ----------------------------------------------------------------------------
 #
 # $FreeBSD: src/tools/tools/kernxref/kernxref.sh,v 1.13 1999/08/28 00:54:30 peter Exp $
+# $DragonFly: src/tools/tools/kernxref/kernxref.sh,v 1.3 2004/03/20 16:27:41 drhodus Exp $
 #
-# This shellscript will make a cross reference of the symbols of the LINT64 
+# This shellscript will make a cross reference of the symbols of the LINT 
 # kernel.
 
 COMPILEDIR=/sys/compile
-KERNELNAME=LINT64
+KERNELNAME=LINT
 
 cd ${COMPILEDIR}/${KERNELNAME}
 
