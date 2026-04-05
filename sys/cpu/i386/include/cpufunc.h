@@ -538,6 +538,7 @@ rcr2(void)
 	return (data);
 }
 
+#ifdef _KERNEL
 static __inline u_int
 read_eflags(void)
 {
@@ -546,6 +547,7 @@ read_eflags(void)
 	__asm __volatile("pushfl; popl %0" : "=r" (ef));
 	return (ef);
 }
+#endif
 
 static __inline u_int64_t
 rdmsr(u_int msr)
@@ -605,13 +607,13 @@ cpu_wbinvd_on_all_cpus(void)
 {
 	lwkt_cpusync_simple(smp_active_mask, cpu_wbinvd_on_all_cpus_callback, NULL);
 }
-#endif
 
 static __inline void
 write_eflags(u_int ef)
 {
 	__asm __volatile("pushl %0; popfl" : : "r" (ef));
 }
+#endif
 
 static __inline void
 wrmsr(u_int msr, u_int64_t newval)

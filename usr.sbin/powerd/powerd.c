@@ -442,10 +442,14 @@ acpi_get_cpupwrdom(void)
 		}
 		if (DebugOpt) {
 			printf("dom%d cpumask: ", dom->dom_id);
+#ifdef __i386__
+			printf("%x ", dom->dom_cpumask);
+#else
 			for (i = 0; i < (int)NELEM(dom->dom_cpumask.ary); ++i) {
 				printf("%jx ",
 				    (uintmax_t)dom->dom_cpumask.ary[i]);
 			}
+#endif
 			printf("\n");
 		}
 	}
@@ -809,11 +813,17 @@ get_uschedcpus(void)
 	    NULL, 0) < 0)
 		err(1, "sysctlbyname kern.usched_global_cpumask failed");
 	if (DebugOpt) {
+#ifndef __i386__
 		int i;
+#endif
 
 		printf("usched cpumask was: ");
+#ifdef __i386__
+		printf("%x ", usched_cpu_used);
+#else
 		for (i = 0; i < (int)NELEM(usched_cpu_used.ary); ++i)
 			printf("%jx ", (uintmax_t)usched_cpu_used.ary[i]);
+#endif
 		printf("\n");
 	}
 }
@@ -822,13 +832,19 @@ static void
 set_uschedcpus(void)
 {
 	if (DebugOpt) {
+#ifndef __i386__
 		int i;
+#endif
 
 		printf("usched cpumask: ");
+#ifdef __i386__
+		printf("%x ", usched_cpu_used);
+#else
 		for (i = 0; i < (int)NELEM(usched_cpu_used.ary); ++i) {
 			printf("%jx ",
 			    (uintmax_t)usched_cpu_used.ary[i]);
 		}
+#endif
 		printf("\n");
 	}
 	sysctlbyname("kern.usched_global_cpumask", NULL, 0,
@@ -1002,7 +1018,11 @@ add_spare_cpus(const cpumask_t ocpu_used, int ncpu)
 	 * Find more cpus in the previous cpu set.
 	 */
 	xcpu_used = cpu_used;
+#ifdef __i386__
+	xcpu_used ^= ocpu_used;
+#else
 	CPUMASK_XORMASK(xcpu_used, ocpu_used);
+#endif
 	while (CPUMASK_TESTNZERO(xcpu_used)) {
 		cpu = BSFCPUMASK(xcpu_used);
 		CPUMASK_NANDBIT(xcpu_used, cpu);
@@ -1115,7 +1135,11 @@ adj_perf(cpumask_t xcpu_used, cpumask_t xcpu_pwrdom_used)
 	/*
 	 * Adjust per-cpu performance.
 	 */
+#ifdef __i386__
+	xcpu_used ^= cpu_used;
+#else
 	CPUMASK_XORMASK(xcpu_used, cpu_used);
+#endif
 	while (CPUMASK_TESTNZERO(xcpu_used)) {
 		cpu = BSFCPUMASK(xcpu_used);
 		CPUMASK_NANDBIT(xcpu_used, cpu);
@@ -1134,7 +1158,11 @@ adj_perf(cpumask_t xcpu_used, cpumask_t xcpu_pwrdom_used)
 	 * Adjust cpu power domain performance.  This could affect
 	 * a set of cpus.
 	 */
+#ifdef __i386__
+	xcpu_pwrdom_used ^= cpu_pwrdom_used;
+#else
 	CPUMASK_XORMASK(xcpu_pwrdom_used, cpu_pwrdom_used);
+#endif
 	while (CPUMASK_TESTNZERO(xcpu_pwrdom_used)) {
 		int dom;
 
