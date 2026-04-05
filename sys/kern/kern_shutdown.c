@@ -926,8 +926,8 @@ void
 dumpsys(void)
 {
 #if defined (_KERNEL_VIRTUAL)
-	/* vkernels don't support dumps */
-	kprintf("vkernels don't support dumps\n");
+	/* VKERNELs don't support dumps */
+	kprintf("VKERNEL doesn't support dumps\n");
 	return;
 #endif
 	/*

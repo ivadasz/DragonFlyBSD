@@ -326,17 +326,17 @@ and installed by
 .Dq Li "${MAKE} installkernel" .
 For example,
 .Bd -literal -offset indent
-KERNCONF=MINE DEBUG X86_64_GENERIC OTHERMACHINE
+KERNCONF=MINE DEBUG GENERIC OTHERMACHINE
 .Ed
 .Pp
 will build the kernels specified by the config files
-.Pa MINE , DEBUG , X86_64_GENERIC ,
+.Pa MINE , DEBUG , GENERIC ,
 and
 .Pa OTHERMACHINE ,
 and install the kernel specified by the config file
 .Pa MINE .
 It defaults to
-.Pa X86_64_GENERIC .
+.Pa GENERIC .
 .It Va NO_CPU_COPTFLAGS
 .Pq Vt str
 Setting this variable will prevent CPU specific compiler flags
