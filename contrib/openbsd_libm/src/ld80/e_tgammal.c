@@ -63,6 +63,13 @@
 #include "math_private.h"
 
 /*
+ * XXX: gcc47 really shouldn't warn here on i386, exclude from -Werror for now
+ */
+#if defined(__i386__) && __GNUC_PREREQ__(4, 7)
+#pragma GCC diagnostic warning "-Woverflow"
+#endif
+
+/*
 tgamma(x+2)  = tgamma(x+2) P(x)/Q(x)
 0 <= x <= 1
 Relative error

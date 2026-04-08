@@ -6,3 +6,5 @@ SRCS+=	fabs.S flt_rounds.c infinity.c \
 	_ctx_start.S _setjmp.S alloca.S \
 	mcontext.S \
 	rfork_thread.S setjmp.S sigsetjmp.S
+
+SRCS+=	isfinitel.c isnanl.c isnormall.c signbitl.c

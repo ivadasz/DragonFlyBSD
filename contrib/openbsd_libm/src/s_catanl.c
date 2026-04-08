@@ -67,6 +67,13 @@
 #include <float.h>
 #include <math.h>
 
+/*
+ * XXX: gcc47 really shouldn't warn here on i386, exclude from -Werror for now
+ */
+#if defined(__i386__) && __GNUC_PREREQ__(4, 7)
+#pragma GCC diagnostic warning "-Woverflow"
+#endif
+
 static const long double PIL = 3.141592653589793238462643383279502884197169L;
 static const long double DP1 = 3.14159265358979323829596852490908531763125L;
 static const long double DP2 = 1.6667485837041756656403424829301998703007e-19L;

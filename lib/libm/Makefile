@@ -31,7 +31,7 @@ MACHINCSDIR=	${INCLUDEDIR}/machine
 .PATH:	${OPENSRC}/src
 .PATH:	${.CURDIR}/src
 
-.if (${MACHINE_ARCH} == "x86_64")
+.if (${TARGET_ARCH} == "x86_64")
 .PATH:	${OPENSRC}/arch/amd64
 MACHINCS=   amd64/fenv.h amd64/ieee.h
 CPPFLAGS+=  -I${OPENSRC}/arch/amd64
@@ -43,6 +43,22 @@ ARCH_SRCS = e_acos.S e_asin.S e_atan2.S e_exp.S e_fmod.S e_log.S e_log10.S \
 	    s_atan.S s_atanf.S s_ceil.S s_ceilf.S s_copysign.S s_copysignf.S \
 	    s_cos.S s_cosf.S s_floor.S s_floorf.S \
 	    s_ilogb.S s_ilogbf.S s_log1p.S s_log1pf.S s_logb.S s_logbf.S \
+	    s_llrint.S s_llrintf.S s_lrint.S s_lrintf.S \
+	    s_rint.S s_rintf.S s_scalbnf.S s_significand.S \
+	    s_significandf.S s_sin.S s_sinf.S s_tan.S s_tanf.S
+.endif
+.if (${TARGET_ARCH} == "i386")
+.PATH:	${OPENSRC}/arch/i386
+MACHINCS=   i386/fenv.h i386/ieee.h
+CPPFLAGS+=  -I${OPENSRC}/arch/i386
+SYM_MAPS+=  ${.CURDIR}/Symbol.map.i386
+ARCH_SRCS = e_acos.S e_exp.S e_fmod.S e_log.S e_log10.S \
+	    e_remainder.S e_remainderf.S e_scalb.S e_sqrt.S e_sqrtf.S \
+	    e_sqrtl.S \
+	    invtrig.c \
+	    s_atan.S s_atanf.S s_ceil.S s_ceilf.S s_copysign.S s_copysignf.S \
+	    s_cos.S s_cosf.S s_floor.S s_floorf.S \
+	    s_log1p.S s_log1pf.S s_logb.S s_logbf.S \
 	    s_llrint.S s_llrintf.S s_lrint.S s_lrintf.S \
 	    s_rint.S s_rintf.S s_scalbnf.S s_significand.S \
 	    s_significandf.S s_sin.S s_sinf.S s_tan.S s_tanf.S
@@ -114,9 +130,16 @@ PAST_SRCS = imprecise.c frexp.c isfinite.c isnanf.c isnormal.c signbit.c
 SRCS=	${COMMON_SRCS} ${PURE_SRCS}
 SRCS+=	${PAST_SRCS}
 
-.if (${MACHINE_ARCH} == "x86_64")
+.if (${TARGET_ARCH} == "x86_64")
 .PATH:		${OPENSRC}/src/ld80
 .PATH:		${.CURDIR}/src/amd64
+CFLAGS+=	-I${OPENSRC}/src -I${OPENSRC}/src/ld80
+SRCS+=		${LONG_SRCS}
+PAST_SRCS+=	isfinitel.c isnanl.c isnormall.c signbitl.c
+.endif
+.if (${TARGET_ARCH} == "i386")
+.PATH:		${OPENSRC}/src/ld80
+.PATH:		${.CURDIR}/src/i386
 CFLAGS+=	-I${OPENSRC}/src -I${OPENSRC}/src/ld80
 SRCS+=		${LONG_SRCS}
 PAST_SRCS+=	isfinitel.c isnanl.c isnormall.c signbitl.c

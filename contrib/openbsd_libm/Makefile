@@ -18,19 +18,19 @@ SUBDIR = man
 .if (${MACHINE_ARCH} == "alpha")
 .PATH:	${.CURDIR}/arch/alpha
 ARCH_SRCS = s_copysign.S s_copysignf.S
-.elif (${MACHINE_ARCH} == "i386")
-.PATH:	${.CURDIR}/arch/i387
-ARCH_SRCS = e_acos.S e_asin.S e_atan2.S e_exp.S e_fmod.S e_log.S e_log10.S \
+.elif (${TARGET_ARCH} == "i386")
+.PATH:	${.CURDIR}/arch/i386
+ARCH_SRCS = e_acos.S e_exp.S e_fmod.S e_log.S e_log10.S \
 	    e_remainder.S e_remainderf.S e_scalb.S e_sqrt.S e_sqrtf.S \
 	    e_sqrtl.S \
 	    invtrig.c \
 	    s_atan.S s_atanf.S s_ceil.S s_ceilf.S s_copysign.S s_copysignf.S \
 	    s_cos.S s_cosf.S s_floor.S s_floorf.S \
-	    s_ilogb.S s_ilogbf.S s_log1p.S s_log1pf.S s_logb.S s_logbf.S \
+	    s_log1p.S s_log1pf.S s_logb.S s_logbf.S \
 	    s_llrint.S s_llrintf.S s_lrint.S s_lrintf.S s_rint.S s_rintf.S\
 	    s_scalbnf.S s_significand.S s_significandf.S \
 	    s_sin.S s_sinf.S s_tan.S s_tanf.S
-.elif (${MACHINE_ARCH} == "amd64")
+.elif (${TARGET_ARCH} == "x86_64")
 .PATH:	${.CURDIR}/arch/amd64
 CPPFLAGS+=-I${.CURDIR}/arch/amd64
 ARCH_SRCS = e_acos.S e_asin.S e_atan2.S e_exp.S e_fmod.S e_log.S e_log10.S \
@@ -155,7 +155,7 @@ PURE_SRCS = s_cabs.c s_cacos.c s_cacosh.c s_carg.c s_casin.c \
 SRCS=	${NOIEEE_SRCS} ${NOIEEE_ARCH} ${PURE_SRCS}
 .else
 SRCS=	${COMMON_SRCS} ${PURE_SRCS}
-.if (${MACHINE_ARCH} == "amd64") || (${MACHINE_ARCH} == "i386")
+.if (${TARGET_ARCH} == "amd64") || (${TARGET_ARCH} == "i386")
 .PATH:		${.CURDIR}/src/ld80
 CPPFLAGS+=	-I${.CURDIR}/src -I${.CURDIR}/src/ld80
 SRCS+=		${LONG_SRCS}
