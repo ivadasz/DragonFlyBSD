@@ -181,7 +181,7 @@ dump_blockmap(const char *label, int zone)
 				(uintmax_t)scan2,
 				layer2->zone);
 			if (VerboseOpt > 1)
-				printf("vol=%-3d L1=%-7lu L2=%-7lu ",
+				printf("vol=%-3d L1=%-7ju L2=%-7ju ",
 					HAMMER_VOL_DECODE(scan2),
 					HAMMER_BLOCKMAP_LAYER1_OFFSET(scan2),
 					HAMMER_BLOCKMAP_LAYER2_OFFSET(scan2));
