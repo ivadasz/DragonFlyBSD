@@ -262,7 +262,7 @@ hammer_dump_layer1_bits(void)
 			printf("volume=%d %p\n", i, l1_bits[i]);
 			n = (l1_max[i] + 1) * HAMMER_LAYER1_UINT64;
 			for (j = 0; j < n; j++) {
-				printf("\tblock[%d][%d]=0x%016lX\n",
+				printf("\tblock[%d][%d]=0x%016jX\n",
 					i, j << 6, *(l1_bits[i] + j));
 			}
 		}
