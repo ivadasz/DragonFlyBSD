@@ -74,6 +74,7 @@ static char *kenv_vars[] = {
 	"boot_gdb",
 	"boot_serial",
 	"boot_single",
+	"boot_userconfig",
 	"boot_verbose",
 	"boot_vidcons",
 	"bootfile",

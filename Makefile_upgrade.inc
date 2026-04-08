@@ -2126,8 +2126,6 @@ TO_REMOVE+=/usr/share/nls/no_NO.ISO8859-1
 TO_REMOVE+=/usr/share/nls/mn_MN.UTF-8
 TO_REMOVE+=/usr/share/nls/zh_CN.*
 TO_REMOVE+=/usr/share/nls/zh_hans_CN.*
-TO_REMOVE+=/usr/share/man/man8/boot_pc32.8.gz
-TO_REMOVE+=/usr/share/man/man5/kernel.conf.5.gz
 TO_REMOVE+=/usr/bin/mklocale
 TO_REMOVE+=/usr/share/man/man1/mklocale.1.gz
 TO_REMOVE+=/usr/share/locale/la_LN*
@@ -2137,6 +2135,8 @@ TO_REMOVE+=/usr/sbin/pnpinfo
 TO_REMOVE+=/usr/share/man/man8/pnpinfo.8.gz
 TO_REMOVE+=/usr/include/machine/cdk.h
 TO_REMOVE+=/usr/include/machine/comstats.h
+
+.if ${MACHINE_ARCH} == "x86_64"
 TO_REMOVE+=/usr/sbin/stlstats
 TO_REMOVE+=/usr/share/man/man8/i386/stlstats.8.gz
 TO_REMOVE+=/usr/share/man/man4/i386/stl.4.gz
@@ -2177,7 +2177,6 @@ TO_REMOVE+=/usr/share/locale/n?_NO.ISO8859-1
 TO_REMOVE+=/usr/share/locale/nl_??.ISO8859-1
 TO_REMOVE+=/usr/share/locale/pt_PT.ISO8859-1
 TO_REMOVE+=/usr/share/locale/sv_??.ISO8859-1
-TO_REMOVE+=/boot/kernel/glxsb.ko
 TO_REMOVE+=/usr/share/locale/common.UTF-8
 TO_REMOVE+=/usr/share/man/man4/vesa.4.gz
 TO_REMOVE+=/usr/share/locale/xx_Comm_US.UTF-8
