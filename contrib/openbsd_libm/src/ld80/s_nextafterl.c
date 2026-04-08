@@ -30,13 +30,25 @@ union IEEEl2bits {
 		unsigned int	manh	:32;
 		unsigned int	exp	:15;
 		unsigned int	sign	:1;
+#ifdef __i386__
+		unsigned int	junk	:16;
+#else
 		unsigned int	junkl	:16;
 		unsigned int	junkh	:32;
+#endif
 	} bits;
 	struct {
+#ifdef __i386__
+		unsigned long long man	:64;
+#else
 		unsigned long	man	:64;
+#endif
 		unsigned int	expsign	:16;
+#ifdef __i386__
+		unsigned long	junk	:16;
+#else
 		unsigned long	junk	:48;
+#endif
 	} xbits;
 };
 
