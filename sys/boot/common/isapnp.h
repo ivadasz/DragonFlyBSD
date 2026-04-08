@@ -37,6 +37,11 @@
 
 /* Maximum Number of PnP Devices.  8 should be plenty */
 #define MAX_PNP_CARDS 8
+/*
+ * the following is the maximum number of PnP Logical devices that
+ * userconfig can handle.
+ */
+#define MAX_PNP_LDN	20
 
 /* Static ports to access PnP state machine */
 #ifndef _KERNEL
@@ -233,7 +238,9 @@
 /*
  * pnp_cinfo contains Configuration Information. They are used
  * to communicate to the device driver the actual configuration
- * of the device.
+ * of the device, and also by the userconfig menu to let the
+ * operating system override any configuration set by the bios.
+ *
  */
 struct pnp_cinfo {
 	u_int vendor_id;	/* board id */
@@ -242,6 +249,7 @@ struct pnp_cinfo {
 	u_char csn;		/* assigned Card Select Number */
 	u_char ldn;		/* Logical Device Number */
 	u_char enable;		/* pnp enable */
+	u_char override;	/* override bios parms (in userconfig) */
 	u_char irq[2];		/* IRQ Number */
 	u_char irq_type[2];	/* IRQ Type */
 	u_char drq[2];
@@ -278,6 +286,7 @@ struct pnp_dlist_node {
 
 typedef struct _pnp_id pnp_id;
 extern pnp_id pnp_devices[MAX_PNP_CARDS];
+extern struct pnp_cinfo pnp_ldn_overrides[MAX_PNP_LDN];
 
 /*
  * these two functions are for use in drivers
