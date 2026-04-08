@@ -165,6 +165,10 @@ SUBDIR+=btxld \
 	sicontrol
 .endif
 
+.if ${TARGET_ARCH} == "i386"
+SUBDIR+= pnpinfo
+.endif
+
 .ifdef BOOT0CFG_SUPPORT
 SUBDIR+=boot0cfg
 .endif
