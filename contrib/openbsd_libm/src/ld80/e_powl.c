@@ -77,6 +77,13 @@
 
 #include "math_private.h"
 
+/*
+ * XXX: gcc47 really shouldn't warn here on i386, exclude from -Werror for now
+ */
+#if defined(__i386__) && __GNUC_PREREQ__(4, 7)
+#pragma GCC diagnostic warning "-Woverflow"
+#endif
+
 /* Table size */
 #define NXT 32
 /* log2(Table size) */

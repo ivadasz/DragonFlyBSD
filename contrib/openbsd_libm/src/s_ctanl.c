@@ -60,6 +60,13 @@
 #include <float.h>
 #include <math.h>
 
+/*
+ * XXX: gcc47 really shouldn't warn here on i386, exclude from -Werror for now
+ */
+#if defined(__i386__) && __GNUC_PREREQ__(4, 7)
+#pragma GCC diagnostic warning "-Woverflow"
+#endif
+
 #if	LDBL_MANT_DIG == 64
 static const long double MACHEPL= 5.42101086242752217003726400434970855712890625E-20L;
 #elif	LDBL_MANT_DIG == 113
