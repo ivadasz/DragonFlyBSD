@@ -35,8 +35,8 @@
  * SUCH DAMAGE.
  *
  *	@(#)quad.h	8.1 (Berkeley) 6/4/93
- * $FreeBSD: src/lib/libstand/quad.h,v 1.2 1999/08/28 00:05:33 peter Exp $
- * $DragonFly: src/lib/libstand/quad.h,v 1.3 2003/11/12 20:21:31 eirikn Exp $
+ * $FreeBSD: src/sys/libkern/quad.h,v 1.9 1999/08/28 00:46:36 peter Exp $
+ * $DragonFly: src/sys/libkern/quad.h,v 1.5 2003/11/09 05:15:32 dillon Exp $
  */
 
 /*
@@ -57,7 +57,8 @@
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
-#include <limits.h>
+#include <machine/endian.h>
+#include <machine/limits.h>
 
 /*
  * Depending on the desired operation, we view a `long long' (aka quad_t) in
@@ -103,6 +104,9 @@ quad_t		__moddi3 (quad_t a, quad_t b);
 u_quad_t	__qdivrem (u_quad_t u, u_quad_t v, u_quad_t *rem);
 u_quad_t	__udivdi3 (u_quad_t a, u_quad_t b);
 u_quad_t	__umoddi3 (u_quad_t a, u_quad_t b);
+int		__ucmpdi2(u_quad_t a, u_quad_t b);
+int		__cmpdi2(quad_t a, quad_t b);
+
 
 /*
  * XXX

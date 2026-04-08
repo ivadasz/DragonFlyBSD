@@ -27,6 +27,9 @@ WARNS=2
 .include "${.CURDIR}/../libc/net/Makefile.inc"
 .include "${.CURDIR}/../libc/nls/Makefile.inc"
 .include "${.CURDIR}/../libc/tre-regex/Makefile.inc"
+.if ${TARGET_ARCH} != "x86_64"
+.include "${.CURDIR}/../libc/quad/Makefile.inc"
+.endif
 .include "${.CURDIR}/../libc/resolv/Makefile.inc"
 .include "${.CURDIR}/../libc/secure/Makefile.inc"
 .include "${.CURDIR}/../libc/stdio/Makefile.inc"
