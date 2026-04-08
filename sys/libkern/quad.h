@@ -14,7 +14,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -31,8 +35,8 @@
  * SUCH DAMAGE.
  *
  *	@(#)quad.h	8.1 (Berkeley) 6/4/93
- * $FreeBSD: src/lib/libstand/quad.h,v 1.2 1999/08/28 00:05:33 peter Exp $
- * $DragonFly: src/lib/libstand/quad.h,v 1.3 2003/11/12 20:21:31 eirikn Exp $
+ * $FreeBSD: src/sys/libkern/quad.h,v 1.9 1999/08/28 00:46:36 peter Exp $
+ * $DragonFly: src/sys/libkern/quad.h,v 1.5 2003/11/09 05:15:32 dillon Exp $
  */
 
 /*
@@ -53,10 +57,8 @@
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
-#include <limits.h>
-
-_Static_assert(sizeof(quad_t) == sizeof(int) * 2,
-	"Bitwise function in libstand are broken on this architecture");
+#include <machine/endian.h>
+#include <machine/limits.h>
 
 /*
  * Depending on the desired operation, we view a `long long' (aka quad_t) in
@@ -65,8 +67,8 @@ _Static_assert(sizeof(quad_t) == sizeof(int) * 2,
 union uu {
 	quad_t	q;		/* as a (signed) quad */
 	quad_t	uq;		/* as an unsigned quad */
-	int	sl[2];		/* as two signed ints */
-	u_int	ul[2];		/* as two unsigned ints */
+	long	sl[2];		/* as two signed longs */
+	u_long	ul[2];		/* as two unsigned longs */
 };
 
 /*
@@ -82,7 +84,7 @@ union uu {
  */
 #define	QUAD_BITS	(sizeof(quad_t) * CHAR_BIT)
 #define	LONG_BITS	(sizeof(long) * CHAR_BIT)
-#define	HALF_BITS	(sizeof(int) * CHAR_BIT / 2)
+#define	HALF_BITS	(sizeof(long) * CHAR_BIT / 2)
 
 /*
  * Extract high and low shortwords from longword, and move low shortword of
@@ -102,6 +104,9 @@ quad_t		__moddi3 (quad_t a, quad_t b);
 u_quad_t	__qdivrem (u_quad_t u, u_quad_t v, u_quad_t *rem);
 u_quad_t	__udivdi3 (u_quad_t a, u_quad_t b);
 u_quad_t	__umoddi3 (u_quad_t a, u_quad_t b);
+int		__ucmpdi2(u_quad_t a, u_quad_t b);
+int		__cmpdi2(quad_t a, quad_t b);
+
 
 /*
  * XXX

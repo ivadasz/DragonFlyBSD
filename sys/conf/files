@@ -1888,8 +1888,10 @@ dev/sound/midi/sequencer.c	optional sound
 dev/sound/midi/synth_if.m	optional sound
 #
 # These files in libkern/ are those needed by all architectures.  Some
-# of the files in libkern/ are only needed on some architectures.
-# In this case, the files should be moved to platform/<arch>/conf/files.
+# of the files in libkern/ are only needed on some architectures, e.g.,
+# libkern/divdi3.c is needed by i386 but not alpha.  Also, some of these
+# routines may be optimized for a particular platform.  In either case,
+# the file should be moved to conf/files.<arch> from here.
 #
 libkern/arc4random.c			standard
 libkern/bcd.c				standard
