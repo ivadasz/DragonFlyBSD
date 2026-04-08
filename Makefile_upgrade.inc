@@ -2131,8 +2131,6 @@ TO_REMOVE+=/usr/share/man/man1/mklocale.1.gz
 TO_REMOVE+=/usr/share/locale/la_LN*
 TO_REMOVE+=/usr/share/locale/kk_KZ*
 TO_REMOVE+=/usr/share/locale/UTF-8
-TO_REMOVE+=/usr/sbin/pnpinfo
-TO_REMOVE+=/usr/share/man/man8/pnpinfo.8.gz
 
 .if ${MACHINE_ARCH} == "x86_64"
 TO_REMOVE+=/usr/include/machine/cdk.h
@@ -2249,6 +2247,7 @@ TO_REMOVE+=/usr/share/man/man8/mount_union.8.gz
 TO_REMOVE+=/usr/games/piano
 TO_REMOVE+=/usr/share/man/man6/piano.6.gz
 TO_REMOVE+=/usr/games/hide/hangman
+.endif
 
 .if !defined(WANT_INSTALLER)
 TO_REMOVE+=/usr/sbin/dfuibe_installer

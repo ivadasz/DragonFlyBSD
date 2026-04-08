@@ -166,7 +166,8 @@ SUBDIR+=btxld \
 .endif
 
 .if ${TARGET_ARCH} == "i386"
-SUBDIR+= stlstats
+SUBDIR+= stlstats \
+	pnpinfo
 .endif
 
 .ifdef BOOT0CFG_SUPPORT
