@@ -1,7 +1,4 @@
-DF402.0 {
-	/* PSEUDO syscalls */
-	_exit;
-
+DF404.0 {
 	.mcount;
 	_setjmp;
 	_longjmp;
@@ -9,16 +6,14 @@ DF402.0 {
 	fabs;
 	__flt_rounds;
 	__infinity;
+	get_mcontext;
+	getcontext;
 	makecontext;
 	rfork_thread;
 	setjmp;
 	longjmp;
 	sigsetjmp;
 	siglongjmp;
-	htonl;
-	htons;
-	ntohl;
-	ntohs;
 	exect;
 	i386_clr_watch;
 	i386_get_ioperm;
@@ -32,10 +27,13 @@ DF402.0 {
 };
 
 DFprivate_1.0 {
-	__sys_exit;
 	___longjmp;
+        __isfinitel;
+        __isnanl;
+        __isnormall;
 	__longjmp;
 	__siglongjmp;
+        __signbitl;
 	_end;
 	_brk;
 	.cerror;
