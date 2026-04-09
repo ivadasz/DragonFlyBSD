@@ -198,8 +198,7 @@ The location is also displayed in hex at the beginning of each line.
 .It Li i
 display as an instruction
 .It Li I
-alias for
-.Li i
+display as an instruction; on i386, don't round to the next long word boundary.
 .El
 .It Cm xf
 Examine forward:
@@ -449,7 +448,7 @@ with an error message.
 .Pp
 .Sy Warning :
 Attempts to watch wired kernel memory
-may cause unrecoverable error in some systems.
+may cause unrecoverable error in some systems such as i386.
 Watchpoints on user addresses work best.
 .It Cm acpidb
 If the kernel was compiled with
