@@ -96,8 +96,10 @@ static int	i686_mrt2mtrr(int flags, int oldval);
 static int	i686_mtrrconflict(int flag1, int flag2);
 static void	i686_mrstore(struct mem_range_softc *sc);
 static void	i686_mrstoreone(void *arg);
+#if SMP_MAXCPU != 1
 static void	i686_mrstoreone_cpusync(void *arg);
 static void	i686_mrAPinit_cpusync(void *arg);
+#endif
 static struct mem_range_desc *i686_mtrrfixsearch(struct mem_range_softc *sc,
 		    u_int64_t addr);
 static int	i686_mrsetlow(struct mem_range_softc *sc,
@@ -276,6 +278,9 @@ i686_mrt2mtrr(int flags, int oldval)
 static void
 i686_mrstore(struct mem_range_softc *sc)
 {
+#if SMP_MAXCPU == 1
+	i686_mrstoreone(sc);
+#else
 	/*
 	 * We should use ipi_all_but_self() to call other CPUs into a
 	 * locking gate, then call a target function to do this work.
@@ -283,13 +288,16 @@ i686_mrstore(struct mem_range_softc *sc)
 	 * implementation, not ready yet.
 	 */
 	lwkt_cpusync_simple(-1, i686_mrstoreone_cpusync, sc);
+#endif
 }
 
+#if SMP_MAXCPU != 1
 static void
 i686_mrstoreone_cpusync(void *arg)
 {
 	i686_mrstoreone(arg);
 }
+#endif
 
 /*
  * Update the current CPU's MTRRs with those represented in the
@@ -661,11 +669,13 @@ i686_mrinit(struct mem_range_softc *sc)
 	}
 }
 
+#if SMP_MAXCPU != 1
 static void
 i686_mrAPinit_cpusync(void *arg)
 {
 	i686_mrAPinit(arg);
 }
+#endif
 
 /*
  * Initialise MTRRs on an AP after the BSP has run the init code.
@@ -687,6 +697,9 @@ i686_mrAPinit(struct mem_range_softc *sc)
 static void
 i686_mrreinit(struct mem_range_softc *sc)
 {
+#if SMP_MAXCPU == 1
+	i686_mrAPinit(sc);
+#else
 	/*
 	 * We should use ipi_all_but_self() to call other CPUs into a
 	 * locking gate, then call a target function to do this work.
@@ -694,6 +707,7 @@ i686_mrreinit(struct mem_range_softc *sc)
 	 * implementation, not ready yet.
 	 */
 	lwkt_cpusync_simple(-1, i686_mrAPinit_cpusync, sc);
+#endif
 }
 
 static void

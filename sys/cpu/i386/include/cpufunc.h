@@ -605,7 +605,11 @@ void cpu_wbinvd_on_all_cpus_callback(void *arg);
 static __inline void
 cpu_wbinvd_on_all_cpus(void)
 {
+#if SMP_MAXCPU == 1
+	cpu_wbinvd_on_all_cpus_callback(NULL);
+#else
 	lwkt_cpusync_simple(smp_active_mask, cpu_wbinvd_on_all_cpus_callback, NULL);
+#endif
 }
 
 static __inline void

@@ -3801,7 +3801,9 @@ pmap_interlock_wait(struct vmspace *vm)
 		DEBUG_PUSH_INFO("pmap_interlock_wait");
 		while (pmap->pm_active_lock & CPULOCK_EXCL) {
 			cpu_ccfence();
+#if SMP_MAXCPU != 1
 			lwkt_process_ipiq();
+#endif
 		}
 		DEBUG_POP_INFO();
 		crit_exit();

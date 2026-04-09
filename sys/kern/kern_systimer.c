@@ -147,7 +147,9 @@ systimer_add(systimer_t info)
 
     KKASSERT((info->flags & SYSTF_ONQUEUE) == 0);
     crit_enter();
+#if SMP_MAXCPU != 1
     if (info->gd == gd) {
+#endif
 	systimer_t scan1;
 	systimer_t scan2;
 	scan1 = TAILQ_FIRST(&gd->gd_systimerq);
@@ -175,11 +177,13 @@ systimer_add(systimer_t info)
 	}
 	info->flags = (info->flags | SYSTF_ONQUEUE) & ~SYSTF_IPIRUNNING;
 	info->queue = &gd->gd_systimerq;
+#if SMP_MAXCPU != 1
     } else {
 	KKASSERT((info->flags & SYSTF_IPIRUNNING) == 0);
 	info->flags |= SYSTF_IPIRUNNING;
 	lwkt_send_ipiq(info->gd, (ipifunc1_t)systimer_add, info);
     }
+#endif
     crit_exit();
 }
 

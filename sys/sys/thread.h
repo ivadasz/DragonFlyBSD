@@ -44,7 +44,9 @@ struct thread;
 struct lwkt_queue;
 struct lwkt_token;
 struct lwkt_tokref;
+#if SMP_MAXCPU != 1
 struct lwkt_ipiq;
+#endif
 struct lwkt_cpu_msg;
 struct lwkt_cpu_port;
 struct lwkt_cpusync;
@@ -55,7 +57,9 @@ typedef struct lwkt_token	*lwkt_token_t;
 typedef struct lwkt_tokref	*lwkt_tokref_t;
 typedef struct lwkt_cpu_msg	*lwkt_cpu_msg_t;
 typedef struct lwkt_cpu_port	*lwkt_cpu_port_t;
+#if SMP_MAXCPU != 1
 typedef struct lwkt_ipiq	*lwkt_ipiq_t;
+#endif
 typedef struct lwkt_cpusync	*lwkt_cpusync_t;
 typedef struct thread 		*thread_t;
 
@@ -190,6 +194,7 @@ struct lwkt_tokref {
  * is called with both the data and an interrupt frame, but the ipi function
  * that is registered might only declare a data argument.
  */
+#if SMP_MAXCPU != 1
 typedef void (*ipifunc1_t)(void *arg);
 typedef void (*ipifunc2_t)(void *arg, int arg2);
 typedef void (*ipifunc3_t)(void *arg, int arg2, struct intrframe *frame);
@@ -205,6 +210,7 @@ struct lwkt_ipiq {
 	char		filler[32 - sizeof(int) - sizeof(void *) * 2];
     } ip_info[MAXCPUFIFO];
 };
+#endif
 
 /*
  * CPU Synchronization structure.  See lwkt_cpusync_start() and
@@ -483,6 +489,7 @@ extern void lwkt_migratecpu(int);
 
 extern void lwkt_giveaway(struct thread *);
 extern void lwkt_acquire(struct thread *);
+#if SMP_MAXCPU != 1
 extern int  lwkt_send_ipiq3(struct globaldata *, ipifunc3_t, void *, int);
 extern int  lwkt_send_ipiq3_passive(struct globaldata *, ipifunc3_t,
 				    void *, int);
@@ -494,14 +501,19 @@ extern void lwkt_wait_ipiq(struct globaldata *, int);
 extern int  lwkt_seq_ipiq(struct globaldata *);
 extern void lwkt_process_ipiq(void);
 extern void lwkt_process_ipiq_frame(struct intrframe *);
+#endif
 extern void lwkt_smp_stopped(void);
+#if SMP_MAXCPU != 1
 extern void lwkt_synchronize_ipiqs(const char *);
+#endif
 
 /* lwkt_cpusync_init() - inline function in sys/thread2.h */
+#if SMP_MAXCPU != 1
 extern void lwkt_cpusync_simple(cpumask_t, cpusync_func_t, void *);
 extern void lwkt_cpusync_interlock(lwkt_cpusync_t);
 extern void lwkt_cpusync_deinterlock(lwkt_cpusync_t);
 extern void lwkt_cpusync_quick(lwkt_cpusync_t);
+#endif
 
 extern void crit_panic(void) __dead2;
 extern struct lwp *lwkt_preempted_proc(void);

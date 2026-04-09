@@ -306,7 +306,9 @@ Xipiq:
 	incl	PCPU(intr_nesting_level)
 	incl	TD_CRITCOUNT(%ebx)
 	sti
+#if SMP_MAXCPU != 1
 	call	lwkt_process_ipiq_frame
+#endif
 	decl	TD_CRITCOUNT(%ebx)
 	decl	PCPU(intr_nesting_level)
 	addl	$12,%esp

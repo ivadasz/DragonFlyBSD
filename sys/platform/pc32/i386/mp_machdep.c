@@ -329,7 +329,9 @@ start_all_aps(u_int boot_addr)
 	struct privatespace *ps;
 	char *stack;
 	uintptr_t kptbase;
+#if SMP_MAXCPU != 1
 	size_t ipiq_size;
+#endif
 
 	POSTCODE(START_ALL_APS_POST);
 
@@ -436,10 +438,12 @@ start_all_aps(u_int boot_addr)
 			kmem_alloc_nofault(&kernel_map, SEG_SIZE, SEG_SIZE);
 		gd->gd_GDMAP1 = &PTD[(vm_offset_t)gd->gd_GDADDR1 >> PDRSHIFT];
 
+#if SMP_MAXCPU != 1
 		ipiq_size = sizeof(struct lwkt_ipiq) * (naps + 1);
 
 		gd->mi.gd_ipiq = (void *)kmem_alloc(&kernel_map, ipiq_size);
 		bzero(gd->mi.gd_ipiq, ipiq_size);
+#endif
 
 		/*
 		 * Setup the AP boot stack
@@ -482,9 +486,11 @@ start_all_aps(u_int boot_addr)
 	mycpu->gd_other_cpus = smp_startup_mask;
 	CPUMASK_NANDBIT(mycpu->gd_other_cpus, mycpu->gd_cpuid);
 
+#if SMP_MAXCPU != 1
 	ipiq_size = sizeof(struct lwkt_ipiq) * ncpus;
 	mycpu->gd_ipiq = (void *)kmem_alloc(&kernel_map, ipiq_size);
 	bzero(mycpu->gd_ipiq, ipiq_size);
+#endif
 
 	/* restore the warmstart vector */
 	*(u_long *) WARMBOOT_OFF = mpbioswarmvec;
@@ -766,12 +772,15 @@ smitest(void)
  * use broadcast IPIs.
  */
 
+#if SMP_MAXCPU != 1
 static cpumask_t smp_invltlb_req;
+#endif
 #define SMP_INVLTLB_DEBUG
 
 void
 smp_invltlb(void)
 {
+#if SMP_MAXCPU != 1
 	struct mdglobaldata *md = mdcpu;
 #ifdef SMP_INVLTLB_DEBUG
 	long count = 0;
@@ -846,6 +855,7 @@ again:
 	}
 	ATOMIC_CPUMASK_NANDMASK(smp_invltlb_req, md->mi.gd_cpumask);
 	crit_exit_gd(&md->mi);
+#endif
 }
 
 /*
@@ -856,6 +866,7 @@ again:
 void
 smp_invltlb_intr(void)
 {
+#if SMP_MAXCPU != 1
 	struct mdglobaldata *md = mdcpu;
 	struct mdglobaldata *omd;
 	cpumask_t mask;
@@ -870,6 +881,7 @@ smp_invltlb_intr(void)
 		omd = (struct mdglobaldata *)globaldata_find(cpu);
 		ATOMIC_CPUMASK_ORMASK(omd->gd_invltlb_ret, md->mi.gd_cpumask);
 	}
+#endif
 }
 
 void
@@ -1070,7 +1082,9 @@ ap_init(void)
 	bzero(mdcpu->gd_ipending, sizeof(mdcpu->gd_ipending));
 
 	initclocks_pcpu();	/* clock interrupts (via IPIs) */
+#if SMP_MAXCPU != 1
 	lwkt_process_ipiq();
+#endif
 
 	/*
 	 * Releasing the mp lock lets the BSP finish up the SMP init
@@ -1126,15 +1140,19 @@ cpu_send_ipiq_passive(int dcpu)
 static void
 mp_bsp_simple_setup(void)
 {
+#if SMP_MAXCPU != 1
 	size_t ipiq_size;
+#endif
 
 	/* build our map of 'other' CPUs */
 	mycpu->gd_other_cpus = smp_startup_mask;
 	CPUMASK_NANDBIT(mycpu->gd_other_cpus, mycpu->gd_cpuid);
 
+#if SMP_MAXCPU != 1
 	ipiq_size = sizeof(struct lwkt_ipiq) * ncpus;
 	mycpu->gd_ipiq = (void *)kmem_alloc(&kernel_map, ipiq_size);
 	bzero(mycpu->gd_ipiq, ipiq_size);
+#endif
 
 	pmap_set_opt();
 

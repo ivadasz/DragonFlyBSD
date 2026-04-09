@@ -445,14 +445,20 @@ lapic_timer_restart_handler(void *dummy __unused)
 static void
 lapic_timer_intr_pmfixup(struct cputimer_intr *cti __unused)
 {
+#if SMP_MAXCPU != 1
 	lwkt_send_ipiq_mask(smp_active_mask,
 			    lapic_timer_fixup_handler, NULL);
+#endif
 }
 
 static void
 lapic_timer_intr_restart(struct cputimer_intr *cti __unused)
 {
+#if SMP_MAXCPU == 1
+	lapic_timer_restart_handler(NULL);
+#else
 	lwkt_send_ipiq_mask(smp_active_mask, lapic_timer_restart_handler, NULL);
+#endif
 }
 
 
@@ -495,9 +501,11 @@ apic_ipi(int dest_type, int vector, int delivery_mode)
 	    unsigned int eflags = read_eflags();
 	    cpu_enable_intr();
 	    DEBUG_PUSH_INFO("apic_ipi");
+#if SMP_MAXCPU != 1
 	    while ((lapic->icr_lo & APIC_DELSTAT_MASK) != 0) {
 		lwkt_process_ipiq();
 	    }
+#endif
 	    DEBUG_POP_INFO();
 	    write_eflags(eflags);
 	}
@@ -520,9 +528,11 @@ single_apic_ipi(int cpu, int vector, int delivery_mode)
 	    unsigned int eflags = read_eflags();
 	    cpu_enable_intr();
 	    DEBUG_PUSH_INFO("single_apic_ipi");
+#if SMP_MAXCPU != 1
 	    while ((lapic->icr_lo & APIC_DELSTAT_MASK) != 0) {
 		lwkt_process_ipiq();
 	    }
+#endif
 	    DEBUG_POP_INFO();
 	    write_eflags(eflags);
 	}

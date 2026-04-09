@@ -1149,7 +1149,11 @@ tcp_drain(void)
 	CPUMASK_ASSBMASK(mask, ncpus2);
 	CPUMASK_ANDMASK(mask, smp_active_mask);
 	if (CPUMASK_TESTNZERO(mask))
+#if SMP_MAXCPU == 1
+		tcp_drain_ipi(NULL);
+#else
 		lwkt_send_ipiq_mask(mask, tcp_drain_ipi, NULL);
+#endif
 }
 
 /*

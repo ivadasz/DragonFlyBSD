@@ -537,6 +537,7 @@ _lwkt_enqueue_reply(lwkt_port_t port, lwkt_msg_t msg)
  * This function completes reply processing for the default case in the
  * context of the originating cpu.
  */
+#if SMP_MAXCPU != 1
 static
 void
 lwkt_thread_replyport_remote(lwkt_msg_t msg)
@@ -570,6 +571,7 @@ lwkt_thread_replyport_remote(lwkt_msg_t msg)
     if (port->mp_flags & MSGPORTF_WAITING)
 	_lwkt_schedule_msg(port->mpu_td, flags);
 }
+#endif
 
 /*
  * lwkt_thread_replyport() - Backend to lwkt_replymsg()
@@ -596,7 +598,9 @@ lwkt_thread_replyport(lwkt_port_t port, lwkt_msg_t msg)
 	 * Assume the target thread is non-preemptive, so no critical
 	 * section is required.
 	 */
+#if SMP_MAXCPU != 1
 	if (port->mpu_td->td_gd == mycpu) {
+#endif
 	    crit_enter();
 	    flags = msg->ms_flags;
 	    cpu_sfence();
@@ -604,6 +608,7 @@ lwkt_thread_replyport(lwkt_port_t port, lwkt_msg_t msg)
 	    if (port->mp_flags & MSGPORTF_WAITING)
 		_lwkt_schedule_msg(port->mpu_td, flags);
 	    crit_exit();
+#if SMP_MAXCPU != 1
 	} else {
 #ifdef INVARIANTS
 	    atomic_set_int(&msg->ms_flags, MSGF_INTRANSIT);
@@ -612,6 +617,7 @@ lwkt_thread_replyport(lwkt_port_t port, lwkt_msg_t msg)
 	    lwkt_send_ipiq(port->mpu_td->td_gd,
 			   (ipifunc1_t)lwkt_thread_replyport_remote, msg);
 	}
+#endif
     } else {
 	/*
 	 * If an asynchronous completion has been requested the message
@@ -619,12 +625,15 @@ lwkt_thread_replyport(lwkt_port_t port, lwkt_msg_t msg)
 	 *
 	 * A critical section is required to interlock the port queue.
 	 */
+#if SMP_MAXCPU != 1
 	if (port->mpu_td->td_gd == mycpu) {
+#endif
 	    crit_enter();
 	    _lwkt_enqueue_reply(port, msg);
 	    if (port->mp_flags & MSGPORTF_WAITING)
 		_lwkt_schedule_msg(port->mpu_td, msg->ms_flags);
 	    crit_exit();
+#if SMP_MAXCPU != 1
 	} else {
 #ifdef INVARIANTS
 	    atomic_set_int(&msg->ms_flags, MSGF_INTRANSIT);
@@ -633,6 +642,7 @@ lwkt_thread_replyport(lwkt_port_t port, lwkt_msg_t msg)
 	    lwkt_send_ipiq(port->mpu_td->td_gd,
 			   (ipifunc1_t)lwkt_thread_replyport_remote, msg);
 	}
+#endif
     }
 }
 
@@ -672,6 +682,7 @@ lwkt_thread_dropmsg(lwkt_port_t port, lwkt_msg_t msg)
  *
  * The message must already have cleared MSGF_DONE and MSGF_REPLY
  */
+#if SMP_MAXCPU != 1
 static
 void
 lwkt_thread_putport_remote(lwkt_msg_t msg)
@@ -700,6 +711,7 @@ lwkt_thread_putport_remote(lwkt_msg_t msg)
     if (port->mp_flags & MSGPORTF_WAITING)
 	_lwkt_schedule_msg(port->mpu_td, msg->ms_flags);
 }
+#endif
 
 static
 int
@@ -708,12 +720,15 @@ lwkt_thread_putport(lwkt_port_t port, lwkt_msg_t msg)
     KKASSERT((msg->ms_flags & (MSGF_DONE | MSGF_REPLY)) == 0);
 
     msg->ms_target_port = port;
+#if SMP_MAXCPU != 1
     if (port->mpu_td->td_gd == mycpu) {
+#endif
 	crit_enter();
 	_lwkt_pushmsg(port, msg);
 	if (port->mp_flags & MSGPORTF_WAITING)
 	    _lwkt_schedule_msg(port->mpu_td, msg->ms_flags);
 	crit_exit();
+#if SMP_MAXCPU != 1
     } else {
 #ifdef INVARIANTS
 	/*
@@ -728,6 +743,7 @@ lwkt_thread_putport(lwkt_port_t port, lwkt_msg_t msg)
 	lwkt_send_ipiq(port->mpu_td->td_gd,
 			(ipifunc1_t)lwkt_thread_putport_remote, msg);
     }
+#endif
     return (EASYNC);
 }
 

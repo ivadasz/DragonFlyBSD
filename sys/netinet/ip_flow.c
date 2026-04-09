@@ -441,7 +441,11 @@ ipflow_slowtimo(void)
 	}
 	CPUMASK_ANDMASK(mask, smp_active_mask);
 	if (CPUMASK_TESTNZERO(mask))
+#if SMP_MAXCPU == 1
+		ipflow_timo_ipi(NULL);
+#else
 		lwkt_send_ipiq_mask(mask, ipflow_timo_ipi, NULL);
+#endif
 }
 
 void

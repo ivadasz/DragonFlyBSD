@@ -139,7 +139,9 @@ static void dfly_changeqcpu_locked(struct lwp *lp,
 static dfly_pcpu_t dfly_choose_best_queue(struct lwp *lp);
 static dfly_pcpu_t dfly_choose_worst_queue(dfly_pcpu_t dd);
 static dfly_pcpu_t dfly_choose_queue_simple(dfly_pcpu_t dd, struct lwp *lp);
+#if SMP_MAXCPU != 1
 static void dfly_need_user_resched_remote(void *dummy);
+#endif
 static struct lwp *dfly_chooseproc_locked(dfly_pcpu_t rdd, dfly_pcpu_t dd,
 					  struct lwp *chklp, int worst);
 static void dfly_remrunqueue_locked(dfly_pcpu_t dd, struct lwp *lp);
@@ -718,7 +720,11 @@ dfly_setrunqueue_dd(dfly_pcpu_t rdd, struct lwp *lp)
 			rdd->uschedcp->lwp_rrcount = usched_dfly_rrinterval - 1;
 		}
 		spin_unlock(&rdd->spin);
+#if SMP_MAXCPU != 1
 	} else if (rgd == mycpu) {
+#else
+	} else {
+#endif
 		/*
 		 * We should interrupt the currently running thread, which
 		 * is on the current cpu.  However, if DIDYIELD is set we
@@ -729,6 +735,7 @@ dfly_setrunqueue_dd(dfly_pcpu_t rdd, struct lwp *lp)
 			wakeup_mycpu(&rdd->helper_thread); /* XXX */
 		if ((lp->lwp_thread->td_mpflags & TDF_MP_DIDYIELD) == 0)
 			need_user_resched();
+#if SMP_MAXCPU != 1
 	} else {
 		/*
 		 * We should interrupt the currently running thread, which
@@ -736,6 +743,7 @@ dfly_setrunqueue_dd(dfly_pcpu_t rdd, struct lwp *lp)
 		 */
 		spin_unlock(&rdd->spin);
 		lwkt_send_ipiq(rgd, dfly_need_user_resched_remote, NULL);
+#endif
 	}
 }
 
@@ -1143,15 +1151,19 @@ dfly_resetpriority(struct lwp *lp)
 		    (checkpri == 0 ||
 		     (rdd->upri & ~PRIMASK) >
 		     (lp->lwp_priority & ~PRIMASK))) {
+#if SMP_MAXCPU != 1
 			if (rcpu == mycpu->gd_cpuid) {
+#endif
 				spin_unlock(&rdd->spin);
 				need_user_resched();
+#if SMP_MAXCPU != 1
 			} else {
 				spin_unlock(&rdd->spin);
 				lwkt_send_ipiq(globaldata_find(rcpu),
 					       dfly_need_user_resched_remote,
 					       NULL);
 			}
+#endif
 		} else {
 			spin_unlock(&rdd->spin);
 		}
@@ -1819,6 +1831,7 @@ found:
 	return (rdd);
 }
 
+#if SMP_MAXCPU != 1
 static
 void
 dfly_need_user_resched_remote(void *dummy)
@@ -1847,6 +1860,7 @@ dfly_need_user_resched_remote(void *dummy)
 		wakeup_mycpu(&dd->helper_thread);
 	}
 }
+#endif
 
 /*
  * dfly_remrunqueue_locked() removes a given process from the run queue

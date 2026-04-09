@@ -76,7 +76,9 @@ static int	dokillpg(int sig, int pgid, int all);
 static int	sig_ffs(sigset_t *set);
 static int	sigprop(int sig);
 static void	lwp_signotify(struct lwp *lp);
+#if SMP_MAXCPU != 1
 static void	lwp_signotify_remote(void *arg);
+#endif
 static int	kern_sigtimedwait(sigset_t set, siginfo_t *info,
 		    struct timespec *timeout);
 static void	proc_stopwait(struct proc *p);
@@ -1412,8 +1414,11 @@ lwp_signotify(struct lwp *lp)
 		/*
 		 * lwp is sitting in tsleep() with PCATCH set
 		 */
+#if SMP_MAXCPU != 1
 		if (dtd->td_gd == mycpu) {
+#endif
 			setrunnable(lp);
+#if SMP_MAXCPU != 1
 		} else {
 			/*
 			 * We can only adjust lwp_stat while we hold the
@@ -1424,12 +1429,16 @@ lwp_signotify(struct lwp *lp)
 				lp->lwp_stat = LSSLEEP;
 			lwkt_send_ipiq(dtd->td_gd, lwp_signotify_remote, lp);
 		}
+#endif
 	} else if (dtd->td_flags & TDF_SINTR) {
 		/*
 		 * lwp is sitting in lwkt_sleep() with PCATCH set.
 		 */
+#if SMP_MAXCPU != 1
 		if (dtd->td_gd == mycpu) {
+#endif
 			setrunnable(lp);
+#if SMP_MAXCPU != 1
 		} else {
 			/*
 			 * We can only adjust lwp_stat while we hold the
@@ -1440,6 +1449,7 @@ lwp_signotify(struct lwp *lp)
 				lp->lwp_stat = LSSLEEP;
 			lwkt_send_ipiq(dtd->td_gd, lwp_signotify_remote, lp);
 		}
+#endif
 	} else {
 		/*
 		 * Otherwise the lwp is either in some uninterruptible state
@@ -1453,10 +1463,12 @@ lwp_signotify(struct lwp *lp)
 		 * remote cpu will issue the cpu-local signotify() if the IPI
 		 * preempts the desired thread.
 		 */
+#if SMP_MAXCPU != 1
 		if (dtd->td_gd != mycpu) {
 			LWPHOLD(lp);
 			lwkt_send_ipiq(dtd->td_gd, lwp_signotify_remote, lp);
 		}
+#endif
 	}
 	crit_exit();
 }
@@ -1470,6 +1482,7 @@ lwp_signotify(struct lwp *lp)
  * we still are and LWP_SINTR or TDF_SINTR is set we can safely schedule
  * the target thread.
  */
+#if SMP_MAXCPU != 1
 static void
 lwp_signotify_remote(void *arg)
 {
@@ -1490,6 +1503,7 @@ lwp_signotify_remote(void *arg)
 		/* LWPHOLD() is forwarded to the target cpu */
 	}
 }
+#endif
 
 /*
  * Caller must hold p->p_token

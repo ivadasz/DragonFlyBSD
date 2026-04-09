@@ -101,7 +101,9 @@ static void bsd4_forking(struct lwp *plp, struct lwp *lp);
 static void bsd4_exiting(struct lwp *lp, struct proc *);
 static void bsd4_uload_update(struct lwp *lp);
 static void bsd4_yield(struct lwp *lp);
+#if SMP_MAXCPU != 1
 static void bsd4_need_user_resched_remote(void *dummy);
+#endif
 static int bsd4_batchy_looser_pri_test(struct lwp* lp);
 static struct lwp *bsd4_chooseproc_locked_cache_coherent(struct lwp *chklp);
 static void bsd4_kick_helper(struct lwp *lp);
@@ -869,7 +871,9 @@ bsd4_setrunqueue(struct lwp *lp)
 	    mycpu->gd_cpuid);
 
 found:
+#if SMP_MAXCPU != 1
 	if (gd == mycpu) {
+#endif
 		spin_unlock(&bsd4_spin);
 		if ((dd->upri & ~PPQMASK) > (lp->lwp_priority & ~PPQMASK)) {
 			if (dd->uschedcp == NULL) {
@@ -878,6 +882,7 @@ found:
 				need_user_resched();
 			}
 		}
+#if SMP_MAXCPU != 1
 	} else {
 		ATOMIC_CPUMASK_NANDBIT(bsd4_rdyprocmask, cpuid);
 		spin_unlock(&bsd4_spin);
@@ -886,6 +891,7 @@ found:
 		else
 			wakeup(&dd->helper_thread);
 	}
+#endif
 	crit_exit();
 }
 
@@ -1194,9 +1200,12 @@ bsd4_resetpriority(struct lwp *lp)
 		if (CPUMASK_TESTBIT(bsd4_rdyprocmask, reschedcpu) &&
 		    (checkpri == 0 ||
 		     (dd->upri & ~PRIMASK) > (lp->lwp_priority & ~PRIMASK))) {
+#if SMP_MAXCPU != 1
 			if (reschedcpu == mycpu->gd_cpuid) {
+#endif
 				spin_unlock(&bsd4_spin);
 				need_user_resched();
+#if SMP_MAXCPU != 1
 			} else {
 				spin_unlock(&bsd4_spin);
 				ATOMIC_CPUMASK_NANDBIT(bsd4_rdyprocmask,
@@ -1205,6 +1214,7 @@ bsd4_resetpriority(struct lwp *lp)
 					       bsd4_need_user_resched_remote,
 					       NULL);
 			}
+#endif
 		} else {
 			spin_unlock(&bsd4_spin);
 		}
@@ -1597,13 +1607,18 @@ bsd4_kick_helper(struct lwp *lp)
 
 	++usched_bsd4_kicks;
 	ATOMIC_CPUMASK_NANDBIT(bsd4_rdyprocmask, gd->gd_cpuid);
+#if SMP_MAXCPU != 1
 	if ((dd->upri & ~PPQMASK) > (lp->lwp_priority & ~PPQMASK)) {
 		lwkt_send_ipiq(gd, bsd4_need_user_resched_remote, NULL);
 	} else {
+#endif
 		wakeup(&dd->helper_thread);
+#if SMP_MAXCPU != 1
 	}
+#endif
 }
 
+#if SMP_MAXCPU != 1
 static
 void
 bsd4_need_user_resched_remote(void *dummy)
@@ -1616,6 +1631,7 @@ bsd4_need_user_resched_remote(void *dummy)
 	/* Call wakeup_mycpu to avoid sending IPIs to other CPUs */
 	wakeup_mycpu(&dd->helper_thread);
 }
+#endif
 
 /*
  * bsd4_remrunqueue_locked() removes a given process from the run queue

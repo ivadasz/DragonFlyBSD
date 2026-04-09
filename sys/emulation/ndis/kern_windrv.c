@@ -119,7 +119,11 @@ windrv_libinit(void)
 	    sizeof(struct tid) * ncpus, 0);
 	if (my_tids == NULL)
 		panic("failed to allocate thread info blocks");
+#if SMP_MAXCPU == 1
+	x86_newldt(NULL);
+#else
 	lwkt_cpusync_simple(-1, x86_newldt, NULL);
+#endif
 #endif
 	return (0);
 }
@@ -143,7 +147,11 @@ windrv_libfini(void)
 	lockuninit(&drvdb_lock);
 
 #ifdef __i386__
+#if SMP_MAXCPU == 1
+	x86_oldldt(NULL);
+#else
 	lwkt_cpusync_simple(-1, x86_oldldt, NULL);
+#endif
 	ExFreePool(my_tids);
 #endif
 	return (0);

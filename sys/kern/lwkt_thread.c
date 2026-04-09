@@ -97,8 +97,10 @@ static int lwkt_use_spin_port;
 static struct objcache *thread_cache;
 int cpu_mwait_spin = 0;
 
+#if SMP_MAXCPU != 1
 static void lwkt_schedule_remote(void *arg, int arg2, struct intrframe *frame);
 static void lwkt_setcpu_remote(void *arg);
+#endif
 
 /*
  * We can make all thread ports use the spin backend instead of the thread
@@ -407,6 +409,7 @@ lwkt_alloc_thread(struct thread *td, int stksize, int cpu, int flags)
  * NOTE! we have to be careful in regards to creating threads for other cpus
  * if SMP has not yet been activated.
  */
+#if SMP_MAXCPU != 1
 static void
 lwkt_init_thread_remote(void *arg)
 {
@@ -417,6 +420,7 @@ lwkt_init_thread_remote(void *arg)
      */
     TAILQ_INSERT_TAIL(&td->td_gd->gd_tdallq, td, td_allq);
 }
+#endif
 
 /*
  * lwkt core thread structural initialization.
@@ -453,13 +457,17 @@ lwkt_init_thread(thread_t td, void *stack, int stksize, int flags,
      * activated so we have to treat it as a special case.  XXX manipulation
      * of gd_tdallq requires the BGL.
      */
+#if SMP_MAXCPU != 1
     if (gd == mygd || td == &gd->gd_idlethread) {
+#endif
 	crit_enter_gd(mygd);
 	TAILQ_INSERT_TAIL(&gd->gd_tdallq, td, td_allq);
 	crit_exit_gd(mygd);
+#if SMP_MAXCPU != 1
     } else {
 	lwkt_send_ipiq(gd, lwkt_init_thread_remote, td);
     }
+#endif
     dsched_enter_thread(td);
 }
 
@@ -906,6 +914,7 @@ haveidle:
 void
 lwkt_switch_return(thread_t otd)
 {
+#if SMP_MAXCPU != 1
 	globaldata_t rgd;
 
 	/*
@@ -928,8 +937,11 @@ lwkt_switch_return(thread_t otd)
 		otd->td_flags &= ~TDF_RUNNING;
 		lwkt_send_ipiq(rgd, lwkt_setcpu_remote, otd);
 	} else {
+#endif
 		otd->td_flags &= ~TDF_RUNNING;
+#if SMP_MAXCPU != 1
 	}
+#endif
 
 	/*
 	 * Final exit validations (see lwp_wait()).  Note that otd becomes
@@ -1300,12 +1312,16 @@ _lwkt_schedule(thread_t td)
 	 * critical section).  If we do not own the thread there might
 	 * be a race but the target cpu will deal with it.
 	 */
+#if SMP_MAXCPU != 1
 	if (td->td_gd == mygd) {
+#endif
 	    _lwkt_enqueue(td);
 	    _lwkt_schedule_post(mygd, td, 1);
+#if SMP_MAXCPU != 1
 	} else {
 	    lwkt_send_ipiq3(td->td_gd, lwkt_schedule_remote, td, 0);
 	}
+#endif
     }
     crit_exit_gd(mygd);
 }
@@ -1329,6 +1345,7 @@ lwkt_schedule_noresched(thread_t td)	/* XXX not impl */
  * To allow preemption we have to drop the critical section so only
  * one is present in _lwkt_schedule_post.
  */
+#if SMP_MAXCPU != 1
 static void
 lwkt_schedule_remote(void *arg, int arg2, struct intrframe *frame)
 {
@@ -1343,6 +1360,7 @@ lwkt_schedule_remote(void *arg, int arg2, struct intrframe *frame)
 	_lwkt_schedule(ntd);
     }
 }
+#endif
 
 /*
  * Thread migration using a 'Pull' method.  The thread may or may not be
@@ -1376,11 +1394,14 @@ lwkt_acquire(thread_t td)
 {
     globaldata_t gd;
     globaldata_t mygd;
+#if SMP_MAXCPU != 1
     int retry = 10000000;
+#endif
 
     KKASSERT(td->td_flags & TDF_MIGRATING);
     gd = td->td_gd;
     mygd = mycpu;
+#if SMP_MAXCPU != 1
     if (gd != mycpu) {
 	cpu_lfence();
 	KKASSERT((td->td_flags & TDF_RUNQ) == 0);
@@ -1405,11 +1426,14 @@ lwkt_acquire(thread_t td)
 	td->td_flags &= ~TDF_MIGRATING;
 	crit_exit_gd(mygd);
     } else {
+#endif
 	crit_enter_gd(mygd);
 	TAILQ_INSERT_TAIL(&mygd->gd_tdallq, td, td_allq);
 	td->td_flags &= ~TDF_MIGRATING;
 	crit_exit_gd(mygd);
+#if SMP_MAXCPU != 1
     }
+#endif
 }
 
 /*
@@ -1426,11 +1450,15 @@ lwkt_deschedule(thread_t td)
     if (td == curthread) {
 	_lwkt_dequeue(td);
     } else {
+#if SMP_MAXCPU != 1
 	if (td->td_gd == mycpu) {
+#endif
 	    _lwkt_dequeue(td);
+#if SMP_MAXCPU != 1
 	} else {
 	    lwkt_send_ipiq(td->td_gd, (ipifunc1_t)lwkt_deschedule, td);
 	}
+#endif
     }
     crit_exit();
 }
@@ -1603,6 +1631,7 @@ lwkt_migratecpu(int cpuid)
  *
  * The thread will re-add itself to tdallq when it resumes execution.
  */
+#if SMP_MAXCPU != 1
 static void
 lwkt_setcpu_remote(void *arg)
 {
@@ -1618,6 +1647,7 @@ lwkt_setcpu_remote(void *arg)
 	    (td->td_lwp->lwp_mpflags & LWP_MP_ONRUNQ) == 0);
     _lwkt_enqueue(td);
 }
+#endif
 
 struct lwp *
 lwkt_preempted_proc(void)
@@ -1786,11 +1816,15 @@ lwkt_smp_stopped(void)
     globaldata_t gd = mycpu;
 
     if (dumping) {
+#if SMP_MAXCPU != 1
 	lwkt_process_ipiq();
+#endif
 	--gd->gd_intr_nesting_level;
 	splz();
 	++gd->gd_intr_nesting_level;
     } else {
+#if SMP_MAXCPU != 1
 	lwkt_process_ipiq();
+#endif
     }
 }

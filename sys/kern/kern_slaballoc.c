@@ -362,8 +362,10 @@ malloc_uninit(void *data)
     if (type->ks_limit == 0)
 	panic("malloc_uninit on uninitialized type");
 
+#if SMP_MAXCPU != 1
     /* Make sure that all pending kfree()s are finished. */
     lwkt_synchronize_ipiqs("muninit");
+#endif
 
 #ifdef INVARIANTS
     /*
@@ -1084,6 +1086,7 @@ kstrdup(const char *str, struct malloc_type *type)
  * we own.  RCount will be bumped so the memory should be good, but validate
  * that it really is.
  */
+#if SMP_MAXCPU != 1
 static
 void
 kfree_remote(void *ptr)
@@ -1153,6 +1156,7 @@ kfree_remote(void *ptr)
     }
     logmemory(free_rem_end, z, NULL, 0L, 0);
 }
+#endif
 
 /*
  * free (SLAB ALLOCATOR)
@@ -1172,8 +1176,10 @@ kfree(void *ptr, struct malloc_type *type)
     struct globaldata *gd;
     int *kup;
     unsigned long size;
+#if SMP_MAXCPU != 1
     SLChunk *bchunk;
     int rsignal;
+#endif
 
     logmemory_quick(free_beg);
     gd = mycpu;
@@ -1253,6 +1259,7 @@ kfree(void *ptr, struct malloc_type *type)
     KKASSERT(*kup < 0);
     KKASSERT(z->z_Magic == ZALLOC_SLAB_MAGIC);
 
+#if SMP_MAXCPU != 1
     /*
      * If we do not own the zone then use atomic ops to free to the
      * remote cpu linked list and notify the target zone using a
@@ -1324,6 +1331,7 @@ kfree(void *ptr, struct malloc_type *type)
 	logmemory_quick(free_end);
 	return;
     }
+#endif
 
     /*
      * kfree locally

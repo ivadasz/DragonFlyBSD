@@ -137,9 +137,11 @@ struct globaldata {
 	int		gd_intr_nesting_level;	/* hard code, intrs, ipis */
 	struct vmmeter	gd_cnt;
 	struct vmtotal	gd_vmtotal;
+#if SMP_MAXCPU != 1
 	cpumask_t	gd_ipimask;		/* pending ipis from cpus */
 	struct lwkt_ipiq *gd_ipiq;		/* array[ncpu] of ipiq's */
 	struct lwkt_ipiq gd_cpusyncq;		/* ipiq for cpu synchro */
+#endif
 	u_int		gd_npoll;		/* ipiq synchronization */
 	int		gd_tdrunqcount;
 	struct thread	gd_unused02B;

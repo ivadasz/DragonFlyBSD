@@ -195,7 +195,9 @@ static void
 clkintr(void *dummy, void *frame_arg)
 {
 	static sysclock_t sysclock_count;	/* NOTE! Must be static */
+#if SMP_MAXCPU != 1
 	struct globaldata *gd = mycpu;
+#endif
 	struct globaldata *gscan;
 	int n;
 
@@ -214,12 +216,16 @@ clkintr(void *dummy, void *frame_arg)
 	    gscan = globaldata_find(n);
 	    if (TAILQ_FIRST(&gscan->gd_systimerq) == NULL)
 		continue;
+#if SMP_MAXCPU != 1
 	    if (gscan != gd) {
 		lwkt_send_ipiq3(gscan, (ipifunc3_t)systimer_intr, 
 				&sysclock_count, 1);
 	    } else {
+#endif
 		systimer_intr(&sysclock_count, 0, frame_arg);
+#if SMP_MAXCPU != 1
 	    }
+#endif
 	}
 }
 
@@ -1183,6 +1189,7 @@ hw_i8254_timestamp(SYSCTL_HANDLER_ARGS)
     return(SYSCTL_OUT(req, buf, strlen(buf) + 1));
 }
 
+#if SMP_MAXCPU != 1
 static uint64_t		tsc_mpsync_target;
 
 static void
@@ -1194,23 +1201,29 @@ tsc_mpsync_test_remote(void *arg __unused)
 	if (tsc < tsc_mpsync_target)
 		tsc_mpsync = 0;
 }
+#endif
 
 static void
 tsc_mpsync_test(void)
 {
+#if SMP_MAXCPU != 1
 	struct globaldata *gd = mycpu;
 	uint64_t test_end, test_begin;
 	u_int i;
+#endif
 
 	if (!tsc_invariant) {
 		/* Not even invariant TSC */
 		return;
 	}
 
+#if SMP_MAXCPU != 1
 	if (ncpus == 1) {
+#endif
 		/* Only one CPU */
 		tsc_mpsync = 1;
 		return;
+#if SMP_MAXCPU != 1
 	}
 
 	if (cpu_vendor_id != CPU_VENDOR_INTEL) {
@@ -1263,6 +1276,7 @@ tsc_mpsync_test(void)
 			kprintf(", after %u tries", i);
 		kprintf("\n");
 	}
+#endif
 }
 SYSINIT(tsc_mpsync, SI_BOOT2_FINISH_SMP, SI_ORDER_ANY, tsc_mpsync_test, NULL);
 

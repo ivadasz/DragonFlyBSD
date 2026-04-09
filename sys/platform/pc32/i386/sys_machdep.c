@@ -259,12 +259,14 @@ set_user_TLS(void)
 		gdt[off + i].sd = td->td_tls.tls[i];
 }
 
+#if SMP_MAXCPU != 1
 static
 void
 set_user_ldt_cpusync(void *arg)
 {
 	set_user_ldt(arg);
 }
+#endif
 
 /*
  * Update the GDT entry pointing to the LDT to point to the LDT of the
@@ -437,7 +439,11 @@ ki386_set_ldt(struct lwp *lp, char *args, int *res)
 		 * reload it.  XXX we need to track which cpus might be
 		 * using the shared ldt and only signal those.
 		 */
+#if SMP_MAXCPU == 1
+		set_user_ldt(pcb);
+#else
 		lwkt_cpusync_simple(-1, set_user_ldt_cpusync, pcb);
+#endif
 	}
 
 	descs_size = uap->num * sizeof(union descriptor);

@@ -104,7 +104,9 @@ db_ps(db_expr_t dummy1, boolean_t dummy2, db_expr_t dummy3, char *dummy4)
 	for (cpuidx = 0; cpuidx < ncpus; ++cpuidx) {
 	    struct globaldata *gd = globaldata_find(cpuidx);
 	    thread_t td;
+#if SMP_MAXCPU != 1
 	    int j;
+#endif
 
 	    if (db_more(&nl) < 0)
 		return;
@@ -117,6 +119,7 @@ db_ps(db_expr_t dummy1, boolean_t dummy2, db_expr_t dummy3, char *dummy4)
 
 	    if (db_more(&nl) < 0)
 		return;
+#if SMP_MAXCPU != 1
 	    db_printf("      INCOMING IPIQS:");
 	    for (j = 0; j < ncpus; ++j) {
 		lwkt_ipiq_t ip = globaldata_find(j)->gd_ipiq;
@@ -127,6 +130,7 @@ db_ps(db_expr_t dummy1, boolean_t dummy2, db_expr_t dummy3, char *dummy4)
 		}
 	    }
 	    db_printf("\n");
+#endif
 
 	    if (db_more(&nl) < 0)
 		return;

@@ -402,10 +402,12 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 	struct proc *p;
 	struct globaldata *gd = mycpu;
 
+#if 0
 	if ((gd->gd_reqflags & RQF_IPIQ) == 0 && lwkt_need_ipiq_process(gd)) {
 		/* Defer to doreti on passive IPIQ processing */
 		need_ipiq();
 	}
+#endif
 
 	/*
 	 * Realtime updates are per-cpu.  Note that timer corrections as
@@ -435,7 +437,9 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 	 * adjustments only occur on cpu #0.  NTP adjustments are accomplished
 	 * by updating basetime.
 	 */
+#if SMP_MAXCPU != 1
 	if (gd->gd_cpuid == 0) {
+#endif
 	    struct timespec *nbt;
 	    struct timespec nts;
 	    int leap;
@@ -558,7 +562,9 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 		 * Update the time_second 'approximate time' global.
 		 */
 		time_second = nts.tv_sec;
+#if SMP_MAXCPU != 1
 	    }
+#endif
 
 	    /*
 	     * Finally, our new basetime is ready to go live!

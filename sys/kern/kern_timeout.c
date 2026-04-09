@@ -107,8 +107,10 @@ static struct softclock_pcpu softclock_pcpu_ary[MAXCPU];
 
 static void softclock_handler(void *arg);
 static void slotimer_callback(void *arg);
+#if SMP_MAXCPU != 1
 static void callout_reset_ipi(void *arg);
 static void callout_stop_ipi(void *arg, int issync, struct intrframe *frame);
+#endif
 
 
 static void
@@ -534,6 +536,9 @@ void
 callout_reset_bycpu(struct callout *c, int to_ticks, void (*ftn)(void *),
 		    void *arg, int cpuid)
 {
+#if SMP_MAXCPU == 1
+	callout_reset(c, to_ticks, ftn, arg);
+#else
 	globaldata_t gd;
 	globaldata_t tgd;
 
@@ -593,6 +598,7 @@ callout_reset_bycpu(struct callout *c, int to_ticks, void (*ftn)(void *),
 
 	lwkt_send_ipiq(tgd, callout_reset_ipi, c);
 	crit_exit_gd(gd);
+#endif
 }
 
 /*
@@ -606,6 +612,7 @@ callout_reset_bycpu(struct callout *c, int to_ticks, void (*ftn)(void *),
  * to deactivate() the flag concurrent with our installation of the
  * callout.
  */
+#if SMP_MAXCPU != 1
 static void
 callout_reset_ipi(void *arg)
 {
@@ -681,6 +688,7 @@ callout_reset_ipi(void *arg)
 	if (flags & CALLOUT_WAITING)
 		wakeup(c);
 }
+#endif
 
 /*
  * Stop a running timer and ensure that any running callout completes before
@@ -701,7 +709,9 @@ static int
 _callout_stop(struct callout *c, int issync)
 {
 	globaldata_t gd = mycpu;
+#if SMP_MAXCPU != 1
 	globaldata_t tgd;
+#endif
 	softclock_pcpu_t sc;
 	int flags;
 	int nflags;
@@ -739,6 +749,7 @@ _callout_stop(struct callout *c, int issync)
 		 * the fast path to enter the slow path.
 		 */
 		if (flags & CALLOUT_ARMED) {
+#if SMP_MAXCPU != 1
 			if (gd->gd_cpuid != cpuid) {
 				nflags = flags + 1;
 				if (atomic_cmpset_int(&c->c_flags,
@@ -748,6 +759,7 @@ _callout_stop(struct callout *c, int issync)
 				}
 				continue;	/* retry */
 			}
+#endif
 		} else {
 			cpuid = gd->gd_cpuid;
 			KKASSERT((flags & CALLOUT_IPI_MASK) == 0);
@@ -758,10 +770,12 @@ _callout_stop(struct callout *c, int issync)
 		 * Process pending IPIs and retry (only if not called from
 		 * an IPI).
 		 */
+#if SMP_MAXCPU != 1
 		if (flags & CALLOUT_IPI_MASK) {
 			lwkt_process_ipiq();
 			continue;	/* retry */
 		}
+#endif
 
 		/*
 		 * Transition to the stopped state, recover the EXECUTED
@@ -819,6 +833,7 @@ _callout_stop(struct callout *c, int issync)
 		/* retry */
 	}
 
+#if SMP_MAXCPU != 1
 	/*
 	 * Slow path (and not called via an IPI).
 	 *
@@ -843,6 +858,7 @@ _callout_stop(struct callout *c, int issync)
 			tsleep(c, PINTERLOCKED, "cstp1", 0);
 		}
 	}
+#endif
 
 skip_slow:
 
@@ -883,6 +899,7 @@ skip_slow:
 	return rc;
 }
 
+#if SMP_MAXCPU != 1
 static
 void
 callout_stop_ipi(void *arg, int issync, struct intrframe *frame)
@@ -978,6 +995,7 @@ callout_stop_ipi(void *arg, int issync, struct intrframe *frame)
 		/* retry */
 	}
 }
+#endif
 
 int
 callout_stop(struct callout *c)

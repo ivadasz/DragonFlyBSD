@@ -604,14 +604,18 @@ schednetisr(int num)
 	KASSERT((num > 0 && num <= NELEM(netisrs)),
 		("schednetisr: bad isr %d", num));
 	KKASSERT(netisrs[num].ni_handler != NULL);
+#if SMP_MAXCPU != 1
 	if (mycpu->gd_cpuid != 0) {
 		lwkt_send_ipiq(globaldata_find(0),
 			       schednetisr_remote, (void *)(intptr_t)num);
 	} else {
+#endif
 		crit_enter();
 		schednetisr_remote((void *)(intptr_t)num);
 		crit_exit();
+#if SMP_MAXCPU != 1
 	}
+#endif
 }
 
 static void

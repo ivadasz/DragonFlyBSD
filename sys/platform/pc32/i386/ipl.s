@@ -310,7 +310,9 @@ doreti_ipiq:
 	sti
 	subl	$8,%esp			/* add dummy vec and ppl */
 	pushl	%esp			/* pass frame by reference */
+#if SMP_MAXCPU != 1
 	call	lwkt_process_ipiq_frame
+#endif
 	addl	$12,%esp
 	decl	PCPU(intr_nesting_level)
 	movl	%esi,%eax		/* restore cpl for loop */
@@ -450,7 +452,9 @@ splz_ipiq:
 	andl	$~RQF_IPIQ,PCPU(reqflags)
 	sti
 	pushl	%eax
+#if SMP_MAXCPU != 1
 	call	lwkt_process_ipiq
+#endif
 	popl	%eax
 	jmp	splz_next
 

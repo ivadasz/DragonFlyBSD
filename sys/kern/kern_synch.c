@@ -897,7 +897,9 @@ _wakeup(void *ident, int domain)
 	struct thread *td;
 	struct thread *ntd;
 	globaldata_t gd;
+#if SMP_MAXCPU != 1
 	cpumask_t mask;
+#endif
 	int id;
 
 	crit_enter();
@@ -940,6 +942,7 @@ restart:
 	 * should be ok since we are passing idents in the IPI rather then
 	 * thread pointers.
 	 */
+#if SMP_MAXCPU != 1
 	if ((domain & PWAKEUP_MYCPU) == 0) {
 		mask = slpque_cpumasks[id];
 		CPUMASK_ANDMASK(mask, gd->gd_other_cpus);
@@ -948,6 +951,7 @@ restart:
 					     domain | PWAKEUP_MYCPU);
 		}
 	}
+#endif
 done:
 	logtsleep1(wakeup_end);
 	crit_exit();
@@ -1024,14 +1028,18 @@ void
 wakeup_oncpu(globaldata_t gd, const volatile void *ident)
 {
     globaldata_t mygd = mycpu;
+#if SMP_MAXCPU != 1
     if (gd == mycpu) {
+#endif
 	_wakeup(__DEALL(ident), PWAKEUP_ENCODE(0, mygd->gd_cpuid) |
 				PWAKEUP_MYCPU);
+#if SMP_MAXCPU != 1
     } else {
 	lwkt_send_ipiq2(gd, _wakeup, __DEALL(ident),
 			PWAKEUP_ENCODE(0, mygd->gd_cpuid) |
 			PWAKEUP_MYCPU);
     }
+#endif
 }
 
 /*
@@ -1042,14 +1050,18 @@ void
 wakeup_oncpu_one(globaldata_t gd, const volatile void *ident)
 {
     globaldata_t mygd = mycpu;
+#if SMP_MAXCPU != 1
     if (gd == mygd) {
+#endif
 	_wakeup(__DEALL(ident), PWAKEUP_ENCODE(0, mygd->gd_cpuid) |
 				PWAKEUP_MYCPU | PWAKEUP_ONE);
+#if SMP_MAXCPU != 1
     } else {
 	lwkt_send_ipiq2(gd, _wakeup, __DEALL(ident),
 			PWAKEUP_ENCODE(0, mygd->gd_cpuid) |
 			PWAKEUP_MYCPU | PWAKEUP_ONE);
     }
+#endif
 }
 
 /*

@@ -271,7 +271,9 @@ ifsq_stage_insert(struct ifsubq_stage_head *head, struct ifsubq_stage *stage)
 static void
 ifsq_ifstart_schedule(struct ifaltq_subque *ifsq, int force)
 {
+#if SMP_MAXCPU != 1
 	int cpu;
+#endif
 
 	if (!force && curthread->td_type == TD_TYPE_NETISR &&
 	    ifsq_stage_cntmax > 0) {
@@ -285,10 +287,12 @@ ifsq_ifstart_schedule(struct ifaltq_subque *ifsq, int force)
 		return;
 	}
 
+#if SMP_MAXCPU != 1
 	cpu = ifsq_get_cpuid(ifsq);
 	if (cpu != mycpuid)
 		lwkt_send_ipiq(globaldata_find(cpu), ifsq_ifstart_ipifunc, ifsq);
 	else
+#endif
 		ifsq_ifstart_ipifunc(ifsq);
 }
 
@@ -1005,7 +1009,9 @@ if_detach(struct ifnet *ifp)
 
 	kfree(ifp->if_addrheads, M_IFADDR);
 
+#if SMP_MAXCPU != 1
 	lwkt_synchronize_ipiqs("if_detach");
+#endif
 	ifq_stage_detach(&ifp->if_snd);
 
 	for (q = 0; q < ifp->if_snd.altq_subq_cnt; ++q) {

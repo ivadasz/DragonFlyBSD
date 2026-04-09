@@ -92,16 +92,22 @@ pmap_inval_interlock(pmap_inval_info_t info, pmap_t pmap, vm_offset_t va)
 	nlock = olock | CPULOCK_EXCL;
 	if (atomic_cmpset_int(&pmap->pm_active_lock, olock, nlock))
 		break;
+#if SMP_MAXCPU != 1
 	lwkt_process_ipiq();
+#endif
 	cpu_pause();
     }
     DEBUG_POP_INFO();
     KKASSERT((info->pir_flags & PIRF_CPUSYNC) == 0);
     info->pir_va = va;
     info->pir_flags = PIRF_CPUSYNC;
+#if SMP_MAXCPU == 1
+    pmap_inval_callback(info);
+#else
     lwkt_cpusync_init(&info->pir_cpusync, pmap->pm_active,
 		      pmap_inval_callback, info);
     lwkt_cpusync_interlock(&info->pir_cpusync);
+#endif
 }
 
 void
@@ -109,7 +115,9 @@ pmap_inval_deinterlock(pmap_inval_info_t info, pmap_t pmap)
 {
     KKASSERT(info->pir_flags & PIRF_CPUSYNC);
     atomic_clear_int(&pmap->pm_active_lock, CPULOCK_EXCL);
+#if SMP_MAXCPU != 1
     lwkt_cpusync_deinterlock(&info->pir_cpusync);
+#endif
     info->pir_flags = 0;
 }
 

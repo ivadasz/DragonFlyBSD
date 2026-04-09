@@ -396,7 +396,11 @@ igmp_fasttimo_ipi(void *arg __unused)
 void
 igmp_fasttimo(void)
 {
+#if SMP_MAXCPU == 1
+	igmp_fasttimo_ipi(NULL);
+#else
 	lwkt_send_ipiq_bycpu(0, igmp_fasttimo_ipi, NULL);
+#endif
 }
 
 static void
@@ -446,7 +450,11 @@ igmp_slowtimo_ipi(void *arg __unused)
 void
 igmp_slowtimo(void)
 {
+#if SMP_MAXCPU == 1
+	igmp_slowtimo_ipi(NULL);
+#else
 	lwkt_send_ipiq_bycpu(0, igmp_slowtimo_ipi, NULL);
+#endif
 }
 
 static void

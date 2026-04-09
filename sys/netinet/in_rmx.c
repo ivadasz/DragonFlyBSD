@@ -424,7 +424,11 @@ in_rtqdrain(void)
 	CPUMASK_ASSBMASK(mask, ncpus);
 	CPUMASK_ANDMASK(mask, smp_active_mask);
 	if (CPUMASK_TESTNZERO(mask))
+#if SMP_MAXCPU == 1
+		in_rtqdrain_ipi(NULL);
+#else
 		lwkt_send_ipiq_mask(mask, in_rtqdrain_ipi, NULL);
+#endif
 }
 
 /*

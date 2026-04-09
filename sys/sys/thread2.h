@@ -288,6 +288,7 @@ lwkt_cpusync_init(lwkt_cpusync_t cs, cpumask_t mask,
  * interfaces for simpler callbacks... the basic IPI messaging function as
  * used by the kernel takes a single argument.
  */
+#if 0
 static __inline int
 lwkt_send_ipiq(globaldata_t target, ipifunc1_t func, void *arg)
 {
@@ -361,6 +362,7 @@ lwkt_need_ipiq_process(globaldata_t gd)
     ipiq = &gd->gd_cpusyncq;
     return (ipiq->ip_rindex != ipiq->ip_windex);
 }
+#endif
 
 #endif	/* _KERNEL */
 #endif	/* _SYS_THREAD2_H_ */

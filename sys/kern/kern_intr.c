@@ -513,11 +513,13 @@ next_registered_randintr(int intr)
  * We are NOT in a critical section, which will allow the scheduled
  * interrupt to preempt us.  The MP lock might *NOT* be held here.
  */
+#if 0
 static void
 sched_ithd_remote(void *arg)
 {
     sched_ithd_intern(arg);
 }
+#endif
 
 static void
 sched_ithd_intern(struct intr_info *info)
@@ -527,15 +529,19 @@ sched_ithd_intern(struct intr_info *info)
 	if (info->i_reclist == NULL) {
 	    report_stray_interrupt(info, "sched_ithd");
 	} else {
+#if 0
 	    if (info->i_thread->td_gd == mycpu) {
+#endif
 		if (info->i_running == 0) {
 		    info->i_running = 1;
 		    if (info->i_state != ISTATE_LIVELOCKED)
 			lwkt_schedule(info->i_thread); /* MIGHT PREEMPT */
 		}
+#if 0
 	    } else {
 		lwkt_send_ipiq(info->i_thread->td_gd, sched_ithd_remote, info);
 	    }
+#endif
 	}
     } else {
 	report_stray_interrupt(info, "sched_ithd");
