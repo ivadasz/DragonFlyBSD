@@ -72,7 +72,7 @@
 #include <vm/vm_param.h>
 #include <machine/param.h>
 #include <machine/pmap.h>
-#ifdef __x86_64__
+#if defined(__i386__) || defined(__amd64__)
 #include <machine/specialreg.h>
 #endif
 #include <machine/sysarch.h>
