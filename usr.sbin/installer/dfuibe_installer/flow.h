@@ -39,12 +39,16 @@
 #ifndef __FLOW_H_
 #define __FLOW_H_
 
-#define	DISK_MIN	4096
+#define	DISK_MIN	2048
 #define	HAMMER_WARN	51200
 #define	HAMMER_MIN	10240
 
 #define	SWAP_MIN	256	/* suggested minimum */
+#if defined(__i386__)
+#define	SWAP_MAX	32768
+#elif defined(__x86_64__)
 #define	SWAP_MAX	524288
+#endif
 #define BUILD_MIN	10240	/* suggested */
 #define BUILD_MAX	20480	/* suggested */
 
