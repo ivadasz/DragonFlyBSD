@@ -438,24 +438,6 @@ got_common_bi_size:
 	rep
 	movsb
 
-#ifdef NFS_ROOT
-#ifndef BOOTP_NFSV3
-	/*
-	 * If we have a nfs_diskless structure copy it in
-	 */
-	movl	BI_NFS_DISKLESS(%ebx),%esi
-	cmpl	$0,%esi
-	je	olddiskboot
-	movl	$R(nfs_diskless),%edi
-	movl	$NFSDISKLESS_SIZE,%ecx
-	cld
-	rep
-	movsb
-	movl	$R(nfs_diskless_valid),%edi
-	movl	$1,(%edi)
-#endif
-#endif
-
 	/*
 	 * The old style disk boot.
 	 *	(*btext)(howto, bootdev, cyloffset, esym);
