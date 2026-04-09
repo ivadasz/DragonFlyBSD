@@ -145,6 +145,7 @@ static struct task unp_defdiscard_task;
 
 static struct	sockaddr sun_noname = { sizeof(sun_noname), AF_LOCAL };
 static ino_t	unp_ino = 1;		/* prototype for fake inode numbers */
+static struct spinlock unp_ino_spin = SPINLOCK_INITIALIZER(&unp_ino_spin, "unp_ino_spin");
 
 static int     unp_attach (struct socket *, struct pru_attach_info *);
 static void    unp_detach (struct unpcb *);
@@ -819,9 +820,9 @@ uipc_sense(netmsg_t msg)
 	sb->st_blksize = so->so_snd.ssb_hiwat;
 	sb->st_dev = NOUDEV;
 	if (unp->unp_ino == 0) {	/* make up a non-zero inode number */
-		unp->unp_ino = atomic_fetchadd_long(&unp_ino, 1);
-		if (__predict_false(unp->unp_ino == 0))
-			unp->unp_ino = atomic_fetchadd_long(&unp_ino, 1);
+		spin_lock(&unp_ino_spin);
+		unp->unp_ino = unp_ino++;
+		spin_unlock(&unp_ino_spin);
 	}
 	sb->st_ino = unp->unp_ino;
 	error = 0;
