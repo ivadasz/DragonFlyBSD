@@ -755,7 +755,7 @@ print_record(hammer_btree_elm_t elm)
 	rel_buffer(data_buffer);
 }
 
-static __inline
+static
 unsigned long
 _strtoul(const char *p, int base)
 {
@@ -768,7 +768,7 @@ _strtoul(const char *p, int base)
 	return retval;
 }
 
-static __inline
+static
 unsigned long long
 _strtoull(const char *p, int base)
 {
