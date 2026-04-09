@@ -47,8 +47,15 @@
 #endif
 
 __BEGIN_DECLS
+
+/*
+ * When included in the kernel build, setjmp() and longjmp() are already
+ * declared in sys/systm.h
+ */
+#ifndef _KERNEL
 int	setjmp (jmp_buf) __returns_twice;
 void	longjmp (jmp_buf, int) __dead2;
+#endif
 
 #if __POSIX_VISIBLE
 int	sigsetjmp (sigjmp_buf, int) __returns_twice;
