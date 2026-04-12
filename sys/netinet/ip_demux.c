@@ -59,11 +59,6 @@
 #include <netinet/udp.h>
 #include <netinet/udp_var.h>
 
-struct initport_index {
-	uint32_t	port_index;
-} __cachealign;
-static struct initport_index	initport_indices[MAXCPU];
-
 /*
  * Toeplitz hash functions - the idea is to match the hardware.
  */
@@ -444,28 +439,14 @@ udp_ctlport(int cmd, struct sockaddr *sa, void *vip, int *cpuid)
 	}
 }
 
-static __inline struct lwkt_port *
-initport_ncpus2(void)
-{
-	int cpu = mycpuid;
-
-	if (cpu < ncpus2) {
-		return netisr_cpuport(cpu);
-	} else {
-		return netisr_cpuport(
-		    ((initport_indices[cpu].port_index++) + (uint32_t)cpu) &
-		    ncpus2_mask);
-	}
-}
-
 struct lwkt_port *
 tcp_initport(void)
 {
-	return initport_ncpus2();
+	return netisr_cpuport(mycpuid & ncpus2_mask);
 }
 
 struct lwkt_port *
 udp_initport(void)
 {
-	return initport_ncpus2();
+	return netisr_cpuport(mycpuid & ncpus2_mask);
 }
