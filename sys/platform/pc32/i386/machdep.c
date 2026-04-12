@@ -2474,10 +2474,9 @@ outb(u_int port, u_char data)
 struct spinlock_deprecated imen_spinlock;
 
 /* critical region for old style disable_intr/enable_intr */
+#if defined(K6_MEM) || defined(PMC)
 struct spinlock_deprecated mpintr_spinlock;
-
-/* critical region around INTR() routines */
-struct spinlock_deprecated intr_spinlock;
+#endif
 
 /* lock region used by kernel profiling */
 struct spinlock_deprecated mcount_spinlock;
@@ -2500,13 +2499,14 @@ init_locks(void)
 	 */
 	cpu_get_initial_mplock();
 	/* DEPRECATED */
-	spin_lock_init(&mcount_spinlock);
-	spin_lock_init(&intr_spinlock);
-	spin_lock_init(&mpintr_spinlock);
-	spin_lock_init(&imen_spinlock);
-	spin_lock_init(&smp_rv_spinlock);
-	spin_lock_init(&com_spinlock);
-	spin_lock_init(&clock_spinlock);
+	spin_init_deprecated(&mcount_spinlock);
+#if defined(K6_MEM) || defined(PMC)
+	spin_init_deprecated(&mpintr_spinlock);
+#endif
+	spin_init_deprecated(&imen_spinlock);
+	spin_init_deprecated(&smp_rv_spinlock);
+	spin_init_deprecated(&com_spinlock);
+	spin_init_deprecated(&clock_spinlock);
 
 	/* our token pool needs to work early */
 	lwkt_token_pool_init();
