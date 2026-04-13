@@ -35,6 +35,7 @@
  */
 
 #include <machine/asm.h>
+#include <cpu/specialreg.h>
 #include <asmcontext.h>
 
 	/*
@@ -63,30 +64,73 @@ ENTRY(_getcontext)
 	 */
 	movl	4(%esp),%eax
 	movl	%eax,%ecx		/* save ucontext_t in %ecx */
+	movl	$0,UC_LINK(%eax)	/* make sure UC_LINK is clear */
 	movl	(%esp),%edx		/* save return PC in %edx */
 	addl	$UC_MCONTEXT,%eax
-	pushl	%eax
-	call	get_mcontext		/* returns non-zero on resume */
-	addl	$4,%esp
-	cmpl	$0,%eax
-	je	2f
+
+	movl	$0,0*4(%eax)
+	movl	%edx,16*4(%eax)
+	movw	%gs,1*4(%eax)
+	movw	%fs,2*4(%eax)
+	movw	%es,3*4(%eax)
+	/*	%ds,4*4(%eax)	*/
+	movl	%edi,5*4(%eax)
+	movl	%esi,6*4(%eax)
+	movl	%ebp,7*4(%eax)
+	/*	%isp,8*4(%eax)	*/
+	movl	%ebx,9*4(%eax)
+	movl	%edx,10*4(%eax)
+	movl	%ecx,11*4(%eax)
+	/* movl	%cs,17*4(%eax) */
+
+	pushfl
+	popl	18*4(%eax)
+
+	/* movl	%ss,20*4(%eax) */
+
 	/*
-	 * On resume, resave the stale return pc and restore the signal
-	 * mask (signals are blocked right now from the setcontext call).
+	 * FP registers are scratch, do not save or restore, but make
+	 * sure the context can be restored by a signal handler (where
+	 * they might not be) by properly initializing the FP control
+	 * fields.
 	 */
-	movl	%edx,(%esp)		/* re-save the return PC */
-	addl	$UC_SIGMASK,%ecx
-	PIC_PROLOGUE
-	pushl	$0
-	pushl	%ecx
-	pushl	$SIG_SETMASK
-	call	PIC_PLT(_sigprocmask)	/* retrieve & save signal mask */
-	addl	$12,%esp
-	PIC_EPILOGUE
-2:
-	movl	$0,%eax			/* return success */
+	movl	$_MC_FPFMT_NODEV,22*4(%eax)
+	movl	$_MC_FPOWNED_NONE,23*4(%eax)
+/*
+	movq	%rdi,%rsi
+	movq	$CPU_XFEATURE_X87 | CPU_XFEATURE_SSE,%eax
+	movq	$0,%rdx
+	xsave	MC_FPREGS(%rsi)
+	movq	%rsi,%rdi
+*/
+
+	/*
+	 * Saved stack pointer as if we had returned from this
+	 * procedure.
+	 */
+	movl	%esp,19*4(%eax)
+	addl	$4,19*4(%eax)
+
+	/*
+	 * On restore as if procedure returned the value 1
+	 */
+	movl	$1,12*4(%eax)
+	/*
+	 * Set MC_LEN
+	 */
+	movl	$SIZEOF_MCONTEXT_T,21*4(%eax)
+
+	/*
+	 * Return 0
+	 */
+	xorl	%eax,%eax
 	ret
 
+#if 0
 1:
 	PIC_PROLOGUE
 	jmp	PIC_PLT(HIDENAME(cerror))
+#endif
+END(_getcontext)
+
+	.section .note.GNU-stack,"",%progbits
