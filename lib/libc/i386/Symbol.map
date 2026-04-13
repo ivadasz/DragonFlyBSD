@@ -6,9 +6,11 @@ DF404.0 {
 	fabs;
 	__flt_rounds;
 	__infinity;
-	get_mcontext;
 	getcontext;
 	makecontext;
+	makecontext_quick;
+	setcontext_quick;
+	swapcontext_quick;
 	rfork_thread;
 	setjmp;
 	longjmp;
@@ -36,6 +38,9 @@ DFprivate_1.0 {
         __signbitl;
 	_end;
 	_brk;
+	_makecontext_quick;
+	_setcontext_quick;
+	_swapcontext_quick;
 	.cerror;
 	.curbrk;
 	.minbrk;

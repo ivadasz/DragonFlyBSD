@@ -32,7 +32,13 @@
 #include <sys/signal.h>
 #include <sys/ucontext.h>
 
+#include <machine/frame.h>
+#include <machine/tss.h>
+#include <machine/segments.h>
+
+#include <signal.h>
 #include <errno.h>
+#include <string.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -170,6 +176,12 @@ _makecontext(ucontext_t *ucp, void (*start)(void), int argc, ...)
 		ucp->uc_mcontext.mc_ebp = 0;
 		ucp->uc_mcontext.mc_esp = (int)stack_top + sizeof(caddr_t);
 		ucp->uc_mcontext.mc_eip = (int)_ctx_start;
+		ucp->uc_mcontext.mc_ownedfp = _MC_FPOWNED_NONE;
+		ucp->uc_mcontext.mc_fpformat = _MC_FPFMT_NODEV;
+		//ucp->uc_mcontext.mc_cs = GSEL(GUCODE_SEL, SEL_UPL);
+		//ucp->uc_mcontext.mc_ss = GSEL(GUDATA_SEL, SEL_UPL);
+		ucp->uc_mcontext.mc_onstack = 0;
+		ucp->uc_mcontext.mc_err = 0;
 	}
 }
 

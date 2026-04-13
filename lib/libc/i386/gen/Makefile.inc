@@ -4,7 +4,7 @@
 SRCS+=	fabs.S flt_rounds.c infinity.c \
 	makecontext.c \
 	_ctx_start.S _setjmp.S alloca.S \
-	mcontext.S \
+	qcontext.S quickcontext.c \
 	rfork_thread.S setjmp.S sigsetjmp.S
 
 SRCS+=	isfinitel.c isnanl.c isnormall.c signbitl.c

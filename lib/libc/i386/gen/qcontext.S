@@ -1,6 +1,4 @@
 /*
- * Copyright (c) 2007 Matthew T. Emmerton <matt@gsicomp.on.ca>
- * All rights reserved.
  * Copyright (c) 2007 Matthew Dillon <dillon@backplane.com>
  * All rights reserved.
  *
@@ -27,87 +25,29 @@
  *
  * $DragonFly: src/lib/libc/i386/gen/mcontext.S,v 1.2 2007/04/13 12:12:27 corecode Exp $
  */
-
+/*
+ * swapcontext_quick() and setcontext_quick().  There is *NO*
+ * getcontext_quick() routine on purpose.
+ *
+ * Quick routines are not required to save or resetore scratch registers,
+ * FP regs (which are scratch), or flags.
+ */
 #include <machine/asm.h>
+#include <cpu/specialreg.h>
 #include <asmcontext.h>
 
 	/*
-	 * int get_mcontext(mcontext_t *mcp)
-	 *
-	 * Copy the caller's context into the mcontext, %eax excepted.
-	 */
-        .weak   get_mcontext
-        .set    get_mcontext,_get_mcontext
-ENTRY(_get_mcontext)
-	movl	4(%esp),%eax
-	/*	mc_onstack,0*4(%eax)	*/
-	movw	%gs,1*4(%eax)
-	movw	%fs,2*4(%eax)
-	movw	%es,3*4(%eax)
-	/*	%ds,4*4(%eax)	*/
-	movl	%edi,5*4(%eax)
-	movl	%esi,6*4(%eax)
-	movl	%ebp,7*4(%eax)
-	/*	%isp,8*4(%eax)	*/
-	movl	%ebx,9*4(%eax)
-	movl	%edx,10*4(%eax)
-	movl	%ecx,11*4(%eax)
-	/*	mc_eax:		12*4(%eax)	*/
-	/*	mc_xflags:	13*4(%eax)	*/
-	/*	mc_trapno:	14*4(%eax)	*/
-	/*	mc_err:		15*4(%eax)	*/
-	/*	mc_eip:		16*4(%eax)	*/
-	/*	mc_cs:		17*4(%eax)	*/
-	/*	mc_eflags:	18*4(%eax)	*/
-	/*	mc_esp:		19*4(%eax)	*/
-
-	/*
-	 * Saved stack pointer as if we had returned from this
-	 * procedure.
-	 */
-	movl	%esp,19*4(%eax)
-	addl	$4,19*4(%eax)
-
-	/*
-	 * Save eflags
-	 */
-	pushfl
-	popl	18*4(%eax)
-
-	/*
-	 * Saved instruction pointer as if we had returned from
-	 * this procedure.
-	 */
-	movl	(%esp),%edx
-	movl	%edx,16*4(%eax)
-
-	/*
-	 * On restore as if procedure returned the value 1
-	 */
-	movl	$1,12*4(%eax)	
-
-	/*
-	 * Set MC_LEN
-	 */
-	movl    $SIZEOF_MCONTEXT_T,MC_LEN(%eax)
-
-	/*
-	 * Return 0
-	 */
-	xorl	%eax,%eax
-	ret
-
-
-	/*
-	 * int set_mcontext(mcontext_t *mcp)
+	 * void setcontext_quick(ucontext_t *ucp)
 	 *
 	 * Load the register context, effectively switching to the
 	 * new context.
 	 */
-        .weak   set_mcontext
-        .set    set_mcontext,_set_mcontext
-ENTRY(_set_mcontext)
+        .weak   setcontext_quick
+        .set    setcontext_quick,_setcontext_quick
+ENTRY(_setcontext_quick)
 	movl	4(%esp),%eax
+	addl	$UC_MCONTEXT,%eax
+
 	/*	0*4(%eax),mc_onstack	*/
 	movw	1*4(%eax),%gs
 	movw	2*4(%eax),%fs
@@ -130,23 +70,83 @@ ENTRY(_set_mcontext)
 	/*	mc_esp:		19*4(%eax)	*/
 
 	/*
-	 * Load the new stack pointer
-	 */
-	movl	19*4(%eax),%esp
-
-	/*
-	 * Restore the flags
+	 * Restore eflags
 	 */
 	pushl	18*4(%eax)
 	popfl
 
 	/*
-	 * Push the return pc so we can 'ret' to it.
+	 * Load the new stack pointer
 	 */
-	pushl	16*4(%eax)
+	movl	19*4(%eax),%esp
 
 	/*
-	 * Load %eax last, and return.
+	 * Use %eax to hold the return pc.  function returns void.  Do
+	 * not mess with the target stack (particularly not the red-zone!).
 	 */
-	movl	12*4(%eax),%eax
-	ret
+	movl	16*4(%eax),%eax
+	jmp	*%eax
+END(_setcontext_quick)
+
+
+	/*
+	 * void swapcontext_quick(ucontex_t *oucp, ucontext_t *nucp)
+	 *
+	 * Save the current state in oucp and switch to nucp.
+	 */
+	.weak	swapcontext_quick
+	.set	swapcontext_quick,_swapcontext_quick
+ENTRY(_swapcontext_quick)
+	/*
+	 * Save
+	 */
+	movl	1*4(%esp),%eax
+	addl	$UC_MCONTEXT,%eax
+
+	/* Pop the return PC, we'll return by jmp. */
+	popl	%edx	/* return pc */
+
+	movl	%edx,16*4(%eax)
+	/*	mc_onstack,0*4(%eax)	*/
+	movw	%gs,1*4(%eax)
+	movw	%fs,2*4(%eax)
+	movw	%es,3*4(%eax)
+	/*	%ds,4*4(%eax)	*/
+	movl	%edi,5*4(%eax)
+	movl	%esi,6*4(%eax)
+	movl	%ebp,7*4(%eax)
+	/*	%isp,8*4(%eax)	*/
+	movl	%ebx,9*4(%eax)
+	movl	%edx,10*4(%eax)
+	movl	%ecx,11*4(%eax)
+	movl	%esp,19*4(%eax)
+
+	/*
+	 * Restore (copy of setcontext above)
+	 */
+	movl	2*4(%esp),%eax
+	addl	$UC_MCONTEXT,%eax
+
+	/*	0*4(%eax),mc_onstack	*/
+	movw	1*4(%eax),%gs
+	movw	2*4(%eax),%fs
+	movw	3*4(%eax),%es
+	/*	4*4(%eax),%ds	*/
+	movl	5*4(%eax),%edi
+	movl	6*4(%eax),%esi
+	movl	7*4(%eax),%ebp
+	/*	8*4(%eax),%isp	*/
+	movl	9*4(%eax),%ebx
+	movl	10*4(%eax),%edx
+	movl	11*4(%eax),%ecx
+	movl	19*4(%eax),%esp
+
+	/*
+	 * Use %eax to hold the return pc.  function returns void.  Do
+	 * not mess with the target stack (particularly not the red-zone!).
+	 */
+	movl	16*4(%eax),%eax
+	jmp	*%eax
+END(_swapcontext_quick)
+
+	.section .note.GNU-stack,"",%progbits
