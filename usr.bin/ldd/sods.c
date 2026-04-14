@@ -72,12 +72,12 @@ void dump_file(const char *);
 
 static void dump_rels(const char *, const struct relocation_info *,
     unsigned long, const char *(*)(unsigned long), unsigned char *);
-static void dump_segs();
-static void dump_sods();
+static void dump_segs(void);
+static void dump_sods(void);
 static void dump_sym(const struct nlist *);
-static void dump_syms();
+static void dump_syms(void);
 
-static void dump_rtsyms();
+static void dump_rtsyms(void);
 
 static const char *rtsym_name(unsigned long);
 static const char *sym_name(unsigned long);
@@ -178,7 +178,7 @@ dump_file(const char *fname)
 
     file_base = (const char *) objbase;	/* Makes address arithmetic easier */
 
-    if (IS_ELF(*(Elf32_Ehdr*) file_base)) {
+    if (IS_ELF(*(const Elf32_Ehdr*) file_base)) {
 	warnx("%s: this is an ELF program; use objdump to examine", fname);
 	++error_count;
 	munmap(objbase, sb.st_size);
@@ -282,13 +282,13 @@ dump_file(const char *fname)
 	    (const struct relocation_info *) (text_addr + sdt->sdt_rel);
 	rtrel_count = (sdt->sdt_hash - sdt->sdt_rel) / sizeof rtrel_base[0];
 	assert(rtrel_count * sizeof rtrel_base[0] ==
-	    sdt->sdt_hash - sdt->sdt_rel);
+	    (unsigned long)(sdt->sdt_hash - sdt->sdt_rel));
 
 	rtsym_base = (const struct nzlist *) (text_addr + sdt->sdt_nzlist);
 	rtsym_count = (sdt->sdt_strings - sdt->sdt_nzlist) /
 	    sizeof rtsym_base[0];
 	assert(rtsym_count * sizeof rtsym_base[0] ==
-	    sdt->sdt_strings - sdt->sdt_nzlist);
+	    (unsigned long)(sdt->sdt_strings - sdt->sdt_nzlist));
 
 	if (rtsym_count != 0) {
 	    rtsym_used = (unsigned char *) calloc(rtsym_count,
@@ -334,8 +334,8 @@ dump_rels(const char *label, const struct relocation_info *base,
 
 	size = 1u << r->r_length;
 
-	if (origin <= r->r_address
-	  && r->r_address < origin + ex->a_text + ex->a_data
+	if (origin <= (unsigned long)r->r_address
+	  && (unsigned long)r->r_address < origin + ex->a_text + ex->a_data
 	  && 1 <= size && size <= 4) {
 	    /*
 	     * XXX - This can cause unaligned accesses.  OK for the
@@ -344,15 +344,15 @@ dump_rels(const char *label, const struct relocation_info *base,
 	    switch (size) {
 	    case 1:
 		snprintf(contents, sizeof contents, "      [%02x]",
-		  *(unsigned char *)(text_addr + r->r_address));
+		  *(const unsigned char *)(text_addr + r->r_address));
 		break;
 	    case 2:
 		snprintf(contents, sizeof contents, "    [%04x]",
-		  *(unsigned short *)(text_addr + r->r_address));
+		  *(const unsigned short *)(text_addr + r->r_address));
 		break;
 	    case 4:
 		snprintf(contents, sizeof contents, "[%08lx]",
-		  *(unsigned long *)(text_addr + r->r_address));
+		  *(const unsigned long *)(text_addr + r->r_address));
 		break;
 	    }
 	} else
@@ -438,7 +438,7 @@ dump_sods(void)
     paths_offset = sdt->sdt_paths;
     printf("  Shared object additional paths:\n");
     if (paths_offset != 0) {
-	char *path = (char *)(text_addr + paths_offset);
+	const char *path = (const char *)(text_addr + paths_offset);
 	printf("    %s\n", path);
     } else {
 	printf("    (none)\n");
