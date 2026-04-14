@@ -657,7 +657,7 @@ handle_excess_big(void)
 				MASSERT((big->bytes & PAGE_MASK) == 0);
 				munmap((char *)big->base + big->active,
 				       big->bytes - big->active);
-				atomic_add_long(&excess_alloc,
+				atomic_add_ptr(&excess_alloc,
 						big->active - big->bytes);
 				big->bytes = big->active;
 			}
@@ -997,7 +997,7 @@ _slaballoc(size_t size, int flags)
 
 		bigp = bigalloc_lock(chunk);
 		if (big->active < big->bytes) {
-			atomic_add_long(&excess_alloc,
+			atomic_add_ptr(&excess_alloc,
 					big->bytes - big->active);
 		}
 		big->next = *bigp;
@@ -1214,7 +1214,7 @@ _slabrealloc(void *ptr, size_t size)
 				if (size >= (bigbytes >> 1) &&
 				    size <= bigbytes) {
 					if (big->active != size) {
-						atomic_add_long(&excess_alloc,
+						atomic_add_ptr(&excess_alloc,
 								big->active -
 								size);
 					}
@@ -1251,7 +1251,7 @@ _slabrealloc(void *ptr, size_t size)
 						    MAP_TRYFIXED,
 						    -1, 0);
 					if (addr == (char *)ptr + bigbytes) {
-						atomic_add_long(&excess_alloc,
+						atomic_add_ptr(&excess_alloc,
 								big->active -
 								big->bytes +
 								chunking -
@@ -1283,7 +1283,7 @@ _slabrealloc(void *ptr, size_t size)
 				if (size > bigbytes)
 					size = bigbytes;
 				bcopy(ptr, nptr, size);
-				atomic_add_long(&excess_alloc, big->active -
+				atomic_add_ptr(&excess_alloc, big->active -
 							       big->bytes);
 				_slabfree(ptr, FASTSLABREALLOC, &big);
 
@@ -1376,7 +1376,7 @@ _slabfree(void *ptr, int flags, bigalloc_t *rbigp)
 		while ((big = *bigp) != NULL) {
 			if (big->base == ptr) {
 				*bigp = big->next;
-				atomic_add_long(&excess_alloc, big->active -
+				atomic_add_ptr(&excess_alloc, big->active -
 							       big->bytes);
 				bigalloc_unlock(ptr);
 
