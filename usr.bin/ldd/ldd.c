@@ -47,7 +47,7 @@ static void	usage(void);
 static void
 usage(void)
 {
-	fprintf(stderr, "usage: ldd [-av] [-f format] program ...\n");
+	fprintf(stderr, "usage: ldd [-a] [-v] [-f format] program ...\n");
 	exit(1);
 }
 
@@ -57,10 +57,10 @@ main(int argc, char **argv)
 	char		*fmt1 = NULL, *fmt2 = NULL;
 	int		rval;
 	int		c;
-	int		aflag;
+	int		aflag, vflag;
 
-	aflag = 0;
-	while ((c = getopt(argc, argv, "af:v")) != -1) {
+	aflag = vflag = 0;
+	while ((c = getopt(argc, argv, "avf:")) != -1) {
 		switch (c) {
 		case 'a':
 			aflag++;
@@ -74,6 +74,7 @@ main(int argc, char **argv)
 				fmt1 = optarg;
 			break;
 		case 'v':
+			vflag++;
 			break;
 		default:
 			usage();
@@ -83,10 +84,21 @@ main(int argc, char **argv)
 	argc -= optind;
 	argv += optind;
 
+	if (vflag && fmt1)
+		errx(1, "-v may not be used with -f");
+
 	if (argc <= 0) {
 		usage();
 		/* NOTREACHED */
 	}
+
+#ifdef __i386__
+	if (vflag) {
+		for (c = 0; c < argc; c++)
+			dump_file(argv[c]);
+		exit(error_count == 0 ? EXIT_SUCCESS : EXIT_FAILURE);
+	}
+#endif
 
 	/* ld.so magic */
 	if (setenv("LD_TRACE_LOADED_OBJECTS", "yes", 1) == -1)

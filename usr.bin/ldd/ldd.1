@@ -50,14 +50,16 @@ object.
 .Pp
 The
 .Fl v
-option is left for compatibility and has no effect.
+option displays a verbose listing of the dynamic linking headers
+encoded in the executable.
+See the source code and include
+files for the definitive meaning of all the fields.
 .Sh EXAMPLES
 The following is an example of a shell pipeline which uses the
 .Fl f
 option.
 It will print a report of all ELF binaries in the current directory,
 which link against libc.so.6:
-.Pp
 .Dl "find . -type f | xargs -n1 file -F ' ' | grep ELF | cut -f1 -d' ' | xargs ldd -f '%A %o\en' | grep libc.so.6"
 .Sh SEE ALSO
 .Xr ld 1 ,
@@ -68,3 +70,8 @@ A
 .Nm
 utility first appeared in SunOS 4.0, it appeared in its current form in
 .Fx 1.1 .
+.Pp
+The
+.Fl v
+support is based on code written by
+.An John Polstra Aq Mt jdp@polstra.com .
