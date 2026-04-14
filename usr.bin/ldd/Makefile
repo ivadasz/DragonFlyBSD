@@ -5,6 +5,6 @@ SRCS=		ldd.c
 .if ${TARGET_ARCH} == "i386"
 SRCS+=		sods.c
 .endif
-WARNS?=	2
+WARNS?=	6
 
 .include <bsd.prog.mk>

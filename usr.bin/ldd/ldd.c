@@ -42,6 +42,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+extern void	dump_file(const char *);
+extern int	error_count;
 static void	usage(void);
 
 static void
@@ -116,6 +118,7 @@ main(int argc, char **argv)
 	for ( ;  argc > 0;  argc--, argv++) {
 		int	fd;
 		union {
+			struct exec aout;
 			Elf_Ehdr elf;
 		} hdr;
 		ssize_t	n;
@@ -130,14 +133,24 @@ main(int argc, char **argv)
 		}
 		if ((n = read(fd, &hdr, sizeof hdr)) == -1) {
 			warn("%s: can't read program header", *argv);
-			close(fd);
+			(void)close(fd);
 			rval |= 1;
 			continue;
 		}
 
 		file_ok = 1;
 		is_shlib = 0;
-		if ((size_t)n >= sizeof hdr.elf && IS_ELF(hdr.elf)) {
+		if ((size_t)n >= sizeof hdr.aout && !N_BADMAG(hdr.aout)) {
+			/* a.out file */
+			if ((N_GETFLAG(hdr.aout) & EX_DPMASK) != EX_DYNAMIC
+#if 1 /* Compatibility */
+			    || hdr.aout.a_entry < __LDPGSZ
+#endif
+				) {
+				warnx("%s: not a dynamic executable", *argv);
+				file_ok = 0;
+			}
+		} else if ((size_t)n >= sizeof hdr.elf && IS_ELF(hdr.elf)) {
 			Elf_Ehdr ehdr;
 			Elf_Phdr phdr;
 			int dynamic = 0, i;
