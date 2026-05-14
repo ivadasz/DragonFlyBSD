@@ -49,6 +49,8 @@
 
 #include <sys/rman.h>
 
+#include <machine/cpu.h>
+
 #include <bus/pci/pcivar.h>
 #include <bus/pci/pcireg.h>
 #include <bus/smbus/smbconf.h>
@@ -340,6 +342,8 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 		}
 	}
 
+	cpu_inhibit_deep_sleep(1);
+
 	/*
 	 * Issue START or RESTART with next data byte, clear any previous
 	 * abort condition that may have been holding the txfifo in reset.
@@ -479,6 +483,7 @@ smb_transaction(ig4iic_softc_t *sc, char cmd, int op,
 	error = 0;
 done:
 	set_intr_mask(sc, 0);
+	cpu_inhibit_deep_sleep(0);
 	/* XXX wait for xmit buffer to become empty */
 	last = reg_read(sc, IG4_REG_TX_ABRT_SOURCE);
 
