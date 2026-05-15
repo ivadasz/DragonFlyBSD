@@ -33,12 +33,14 @@
 
 #include <sys/param.h>
 #include <sys/efi.h>
+#include <sys/eventhandler.h>
 #include <sys/kernel.h>
 #include <sys/linker.h>
 #include <sys/lock.h>
 #include <sys/malloc.h>
 #include <sys/module.h>
 #include <sys/proc.h>
+#include <sys/reboot.h>
 #include <sys/sched.h>
 #include <sys/sysctl.h>
 #include <sys/systm.h>
@@ -367,6 +369,20 @@ efi_leave(void)
 	lockmgr(&efi_lock, LK_RELEASE);
 }
 
+static void
+efi_shutdown_final(void *arg, int howto)
+{
+	int error;
+
+	if ((howto & RB_HALT) == 0) {
+		error = efi_reset_system();
+		if (error)
+			kprintf("EFI Reset failed: %d\n", error);
+		DELAY(1000000);
+		kprintf("Reset failed - timeout\n");
+	}
+}
+
 static int
 efi_init(void)
 {
@@ -427,6 +443,10 @@ efi_init(void)
 		efi_destroy_1t1_map();
 		return (ENXIO);
 	}
+
+	// Lower priority than ACPI Reset
+	EVENTHANDLER_REGISTER(shutdown_final, efi_shutdown_final, NULL,
+	    SHUTDOWN_PRI_LAST+1);
 
 	return (0);
 }
