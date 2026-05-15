@@ -34,7 +34,10 @@
 /*
  * Command dispatcher.
  */
+#ifndef _KERNEL_VIRTUAL
 #include "use_acpi.h"
+#include "opt_efirt.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/linker_set.h>
@@ -49,7 +52,10 @@
 
 #include <machine/md_var.h>	/* needed for db_reset() */
 #include <machine/setjmp.h>
-#if NACPI > 0
+#ifdef EFIRT
+#include <machine/efi.h>	/* needed for db_reset() */
+#endif
+#if !defined(_KERNEL_VIRTUAL) && NACPI > 0
 #include "opt_acpi.h"
 #include <acpi.h>
 #endif
@@ -627,7 +633,11 @@ db_gdb(db_expr_t dummy1, boolean_t dummy2, db_expr_t dummy3, char *dummy4)
 static void
 db_reset(db_expr_t dummy1, boolean_t dummy2, db_expr_t dummy3, char * dummy4)
 {
-#if NACPI > 0
+#ifdef EFIRT
+	int error;
+#endif
+
+#if !defined(_KERNEL_VIRTUAL) && NACPI > 0
 	// We may need to add a flag that AcpiInitializeTables() was run.
 	// But technically, AcpiReset() should simply fail with AE_NOT_EXIST
 	// when called in early boot.
@@ -641,6 +651,20 @@ db_reset(db_expr_t dummy1, boolean_t dummy2, db_expr_t dummy3, char * dummy4)
 	kprintf("ACPI reset did not work, attempting next method\n");
 	DELAY(1000000);
 no_acpi_reset:
+#endif
+#ifdef EFIRT
+	// This should return ENXIO in early boot before efirt initialization,
+	// or if running without EFI.
+	error = efi_reset_system();
+	if (error == ENXIO) {
+		goto no_efi_reset;
+	} else if (error != 0) {
+		kprintf("EFI Reset failed\n");
+	}
+	DELAY(500000);
+	kprintf("EFI reset did not work, attempting next method\n");
+	DELAY(1000000);
+no_efi_reset:
 #endif
 	cpu_reset();
 }
