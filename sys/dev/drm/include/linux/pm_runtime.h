@@ -32,6 +32,8 @@
 #include <linux/pm.h>
 #include <linux/jiffies.h>
 
+TASKQUEUE_DECLARE(pm_runtime);
+
 enum rpm_status {
 	RPM_SUSPENDED = 0,
 	RPM_SUSPENDING,
@@ -63,7 +65,7 @@ static inline int
 pm_request_idle(struct device *dev)
 {
 	kprintf("%s: Requesting pm_runtime_idle()\n", __func__);
-	taskqueue_enqueue(taskqueue_thread[0], &dev->power.idle_task);
+	taskqueue_enqueue(taskqueue_pm_runtime, &dev->power.idle_task);
 	return 0;
 }
 
@@ -71,7 +73,7 @@ static inline void
 pm_request_resume(struct device *dev)
 {
 	kprintf("%s: Requesting pm_runtime_resume()\n", __func__);
-	taskqueue_enqueue(taskqueue_thread[0], &dev->power.resume_task);
+	taskqueue_enqueue(taskqueue_pm_runtime, &dev->power.resume_task);
 }
 
 static inline void

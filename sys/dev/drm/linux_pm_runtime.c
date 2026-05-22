@@ -36,10 +36,14 @@ static int __pm_runtime_resume_sync_locked(struct device *dev);
 static int __pm_runtime_idle_locked(struct device *dev);
 static int __pm_request_autosuspend_locked(struct device *dev);
 
+TASKQUEUE_DEFINE_THREAD(pm_runtime);
+
 static int
 __pm_runtime_resume_locked(struct device *dev)
 {
+#if 1
 	kprintf("%s: Running resume\n", __func__);
+#endif
 
 	BUG_ON(dev->type == NULL);
 	if (dev->power.disable_depth != 0)
@@ -69,7 +73,9 @@ pm_runtime_suspend(struct device *dev)
 {
 	int ret = 0;
 
+#if 0
 	kprintf("%s: Running suspend\n", __func__);
+#endif
 	BUG_ON(dev->type == NULL);
 	lockmgr(&dev->power.lock, LK_EXCLUSIVE);
 	if (dev->power.disable_depth != 0) {
@@ -119,13 +125,17 @@ done:
 static int
 __pm_request_autosuspend_locked(struct device *dev)
 {
+#if 0
 	kprintf("%s: Requesting autosuspend use_autosuspend=%d autosuspend_delay=%d runtime_status=%d\n",
 	    __func__, dev->power.use_autosuspend, dev->power.autosuspend_delay,
 	    dev->power.runtime_status);
+#endif
 	if (dev->power.use_autosuspend && dev->power.autosuspend_delay > 0 &&
 	    dev->power.runtime_status == RPM_ACTIVE) {
+#if 0
 		kprintf("%s: Enqueueing autosuspend\n", __func__);
-		taskqueue_enqueue_timeout(taskqueue_thread[0],
+#endif
+		taskqueue_enqueue_timeout(taskqueue_pm_runtime,
 		    &dev->power.suspend_task,
 		    dev->power.autosuspend_delay/(1000/hz));
 	}
@@ -248,19 +258,19 @@ __pm_runtime_resume_sync_locked(struct device *dev)
 	if (dev->power.runtime_status == RPM_SUSPENDING) {
 		kprintf("%s: Waiting for suspend to finish\n", __func__);
 		lockmgr(&dev->power.lock, LK_RELEASE);
-		taskqueue_drain_timeout(taskqueue_thread[0],
+		taskqueue_drain_timeout(taskqueue_pm_runtime,
 		    &dev->power.suspend_task);
 		lockmgr(&dev->power.lock, LK_EXCLUSIVE);
 	}
 	if (dev->power.runtime_status == RPM_SUSPENDED) {
-		kprintf("%s: Enqueueing resume\n", __func__);
-		print_backtrace(-1);
+		//kprintf("%s: Enqueueing resume\n", __func__);
+		//print_backtrace(-1);
 		dev->power.runtime_status = RPM_RESUMING;
-		taskqueue_enqueue(taskqueue_thread[0], &dev->power.resume_task);
+		taskqueue_enqueue(taskqueue_pm_runtime, &dev->power.resume_task);
 	}
 	if (dev->power.runtime_status == RPM_RESUMING) {
 		lockmgr(&dev->power.lock, LK_RELEASE);
-		taskqueue_drain(taskqueue_thread[0], &dev->power.resume_task);
+		taskqueue_drain(taskqueue_pm_runtime, &dev->power.resume_task);
 		lockmgr(&dev->power.lock, LK_EXCLUSIVE);
 	}
 	if (dev->power.runtime_status == RPM_ACTIVE) {
@@ -407,7 +417,7 @@ pm_runtime_init(struct device *dev)
 	dev->power.timer_expires = 0;
 	dev->power.use_autosuspend = 0;
 	lockinit(&dev->power.lock, "rpm", 0, 0);
-	TIMEOUT_TASK_INIT(taskqueue_thread[0], &dev->power.suspend_task, 0,
+	TIMEOUT_TASK_INIT(taskqueue_pm_runtime, &dev->power.suspend_task, 0,
 	    run_suspend, dev);
 	TASK_INIT(&dev->power.resume_task, 0, run_resume, dev);
 	TASK_INIT(&dev->power.idle_task, 0, run_idle, dev);
