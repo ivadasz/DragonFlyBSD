@@ -51,6 +51,7 @@
 
 #include "acpi_if.h"
 
+struct rman;
 struct apm_clone_data;
 struct acpi_softc {
     device_t		acpi_dev;
@@ -399,6 +400,8 @@ struct acpi_parse_resource_set {
 		    int count, int trig, int pol);
     void	(*set_drq)(device_t dev, void *context, uint8_t *drq,
 		    int count);
+    void	(*set_i2c)(device_t dev, void *context, uint16_t addr,
+		    int count, uint32_t maxhz);
     void	(*set_start_dependent)(device_t dev, void *context,
 		    int preference);
     void	(*set_end_dependent)(device_t dev, void *context);
@@ -411,6 +414,7 @@ ACPI_STATUS	acpi_lookup_irq_resource(device_t dev, int rid,
 		    struct resource *res, ACPI_RESOURCE *acpi_res);
 ACPI_STATUS	acpi_parse_resources(device_t dev, ACPI_HANDLE handle,
 		    struct acpi_parse_resource_set *set, void *arg);
+void		acpi_register_rman(struct rman *rm, int type);
 
 /* ACPI event handling */
 UINT32		acpi_event_power_button_sleep(void *context);

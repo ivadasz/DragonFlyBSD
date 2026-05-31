@@ -283,6 +283,19 @@ acpi_parse_resource(ACPI_RESOURCE *res, void *context)
 	    res->Data.Irq.InterruptCount, res->Data.Irq.Triggering,
 	    res->Data.Irq.Polarity);
 	break;
+    case ACPI_RESOURCE_TYPE_SERIAL_BUS:
+	if (res->Data.I2cSerialBus.Type != ACPI_RESOURCE_SERIAL_TYPE_I2C)
+	    break;
+	/* XXX Ignore 10bit addressing for now */
+	if (res->Data.I2cSerialBus.AccessMode != ACPI_I2C_7BIT_MODE)
+	    break;
+
+	/* TODO: Resolve res->Data.I2cSerialBus.ResourceSource */
+
+	set->set_i2c(dev, arc->context,
+	    res->Data.I2cSerialBus.SlaveAddress, 1,
+	    res->Data.I2cSerialBus.ConnectionSpeed);
+	break;
     case ACPI_RESOURCE_TYPE_DMA:
 	/*
 	 * from 1.0b 6.4.3 
@@ -456,6 +469,8 @@ static void	acpi_res_set_ext_irq(device_t dev, void *context,
 				 uint32_t *irq, int count, int trig, int pol);
 static void	acpi_res_set_drq(device_t dev, void *context, uint8_t *drq,
 				 int count);
+static void	acpi_res_set_i2c(device_t dev, void *context, uint16_t addr,
+				 int count, uint32_t speed);
 static void	acpi_res_set_start_dependent(device_t dev, void *context,
 					     int preference);
 static void	acpi_res_set_end_dependent(device_t dev, void *context);
@@ -470,6 +485,7 @@ struct acpi_parse_resource_set acpi_res_parse_set = {
     acpi_res_set_irq,
     acpi_res_set_ext_irq,
     acpi_res_set_drq,
+    acpi_res_set_i2c,
     acpi_res_set_start_dependent,
     acpi_res_set_end_dependent
 };
@@ -613,6 +629,21 @@ acpi_res_set_drq(device_t dev, void *context, uint8_t *drq, int count)
 	return;
 
     bus_set_resource(dev, SYS_RES_DRQ, cp->ar_ndrq++, *drq, 1, -1);
+}
+
+static void
+acpi_res_set_i2c(device_t dev, void *context, uint16_t addr, int count,
+		 uint32_t maxhz)
+{
+    struct acpi_res_context	*cp = (struct acpi_res_context *)context;
+
+    if (cp == NULL)
+	return;
+
+    if (count != 1)
+	return;
+
+    bus_set_resource(dev, SYS_RES_I2C, cp->ar_nio++, addr, 1, -1);
 }
 
 static void

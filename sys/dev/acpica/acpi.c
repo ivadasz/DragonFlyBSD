@@ -234,6 +234,13 @@ ACPI_SERIAL_DECL(acpi, "ACPI serializer");
 /* Local pools for managing system resources for ACPI child devices. */
 static struct rman acpi_rman_io, acpi_rman_mem;
 
+struct acpi_rman_provided {
+	struct rman			*rm;
+	SLIST_ENTRY(acpi_rman_provided)	link;
+};
+static SLIST_HEAD(, acpi_rman_provided) acpi_rmans_i2c =
+    SLIST_HEAD_INITIALIZER(acpi_rmans);
+
 #define ACPI_MINIMUM_AWAKETIME	5
 
 static const char* sleep_state_names[] = {
@@ -1094,6 +1101,19 @@ acpi_sysres_alloc(device_t dev)
     return (0);
 }
 
+void
+acpi_register_rman(struct rman *rm, int type)
+{
+	struct acpi_rman_provided *e =
+	    kmalloc(sizeof(struct acpi_rman_provided), M_ACPIDEV,
+	    M_WAITOK | M_ZERO);
+	e->rm = rm;
+	if (type == SYS_RES_I2C) {
+	    SLIST_INSERT_HEAD(&acpi_rmans_i2c, e, link);
+	}
+}
+
+
 static struct resource *
 acpi_alloc_resource(device_t bus, device_t child, int type, int *rid,
     u_long start, u_long end, u_long count, u_int flags, int cpuid)
@@ -1141,9 +1161,19 @@ acpi_alloc_resource(device_t bus, device_t child, int type, int *rid,
      * the request from our system resource regions.  If we can't, pass the
      * request up to the parent.
      */
-    if (start + count - 1 == end && rm != NULL)
+    if (start + count - 1 == end && rm != NULL) {
 	res = rman_reserve_resource(rm, start, end, count, flags & ~RF_ACTIVE,
 	    child);
+    } else if (start + count - 1 == end && rm == NULL && type == SYS_RES_I2C) {
+	struct acpi_rman_provided *e;
+
+	SLIST_FOREACH(e, &acpi_rmans_i2c, link) {
+	    res = rman_reserve_resource(e->rm, start, end, count,
+		flags & ~RF_ACTIVE, child);
+	    if (res != NULL)
+		break;
+	}
+    }
     if (res == NULL) {
 	res = BUS_ALLOC_RESOURCE(device_get_parent(bus), child, type, rid,
 	    start, end, count, flags, cpuid);
