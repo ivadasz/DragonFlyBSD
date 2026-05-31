@@ -329,10 +329,6 @@ initclocks(void *dummy)
 	if (kpmap) {
 		kpmap->tsc_freq = tsc_frequency;
 		kpmap->tick_freq = hz;
-		/* This runs before tsc_cputimer is initialized. */
-		kpmap->timer_base = 0;
-		kpmap->freq64_nsec = 0;
-		/* XXX Track whether TSC cputimer is active */
 	}
 }
 
@@ -786,11 +782,9 @@ hardclock(systimer_t info, int in_ipi, struct intrframe *frame)
 		w = (kpmap->upticks + 1) & 1;
 		getnanouptime(&kpmap->ts_uptime[w]);
 		getnanotime(&kpmap->ts_realtime[w]);
-		kpmap->clock_base[w] = mycpu->gd_cpuclock_base;
-		kpmap->clock_secs[w] = mycpu->gd_time_seconds;
-		kpmap->ts_basetime[w] = basetime[basetime_index];
 		cpu_sfence();
 		++kpmap->upticks;
+		cpu_sfence();
 	    }
 
 	    /*

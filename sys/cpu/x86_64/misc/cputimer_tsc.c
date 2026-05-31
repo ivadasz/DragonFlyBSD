@@ -44,7 +44,6 @@
 #include <sys/sysctl.h>
 #include <sys/systimer.h>
 #include <sys/globaldata.h>
-#include <sys/upmap.h>
 
 #include <machine/clock.h>
 #include <machine/cputypes.h>
@@ -52,7 +51,6 @@
 static sysclock_t tsc_cputimer_count_mfence(void);
 static sysclock_t tsc_cputimer_count_lfence(void);
 static void tsc_cputimer_construct(struct cputimer *, sysclock_t);
-static void tsc_cputimer_destruct(struct cputimer *);
 
 static struct cputimer	tsc_cputimer = {
     .next		= SLIST_ENTRY_INITIALIZER,
@@ -63,7 +61,7 @@ static struct cputimer	tsc_cputimer = {
     .fromhz		= cputimer_default_fromhz,
     .fromus		= cputimer_default_fromus,
     .construct		= tsc_cputimer_construct,
-    .destruct		= tsc_cputimer_destruct,
+    .destruct		= cputimer_default_destruct,
     .freq		= 0	/* determined later */
 };
 
@@ -80,21 +78,6 @@ tsc_cputimer_construct(struct cputimer *timer, sysclock_t oldclock)
 {
 	timer->base = 0;
 	timer->base = oldclock - timer->count();
-	if (kpmap) {
-		kpmap->timer_base = timer->base;
-		cpu_sfence();
-		kpmap->freq64_nsec = timer->freq64_nsec;
-	}
-}
-
-static void
-tsc_cputimer_destruct(struct cputimer *timer)
-{
-	if (kpmap) {
-		kpmap->freq64_nsec = 0;
-		cpu_sfence();
-		kpmap->timer_base = 0;
-	}
 }
 
 static __inline sysclock_t
