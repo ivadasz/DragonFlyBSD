@@ -67,38 +67,17 @@ static int64_t *freq64_nsec;
 static uint32_t *clock_base;
 static uint32_t *clock_secs;
 static struct timespec *ts_basetime;
-static uint32_t *use_tsc;
 
 static int64_t cputimer_freq;
-
-/*
- * Calculate (a * b) / d with a 128-bit intermediate computation to
- * avoid overflow.
- */
-static __inline uint64_t
-muldivu64(uint64_t a, uint64_t b, uint64_t d)
-{
-	__uint128_t t;
-
-	t = (__uint128_t)a * b;
-#if 0
-	if (t / d > UINT64_MAX) {
-		warnx("muldivu64: overflow %lu,%lu,%lu\n", a, b, d);
-		/* TODO: Return an error instead */
-	}
-#endif
-	return (t / d);
-}
 
 static int
 kpmap_monotonic_time(struct timespec *ts)
 {
-	uint32_t tbase, cbase;
+	uint32_t tbase cbase;
 	uint32_t delta, now;
 	uint32_t tsc_ok;
 	uint64_t tsc;
 	int64_t conv;
-	int w;
 
 	/* This does what tsc_cputimer.count() does. */
 	do {
@@ -127,20 +106,19 @@ kpmap_monotonic_time(struct timespec *ts)
 		ts->tv_sec += delta / cputimer_freq;
 		delta %= cputimer_freq;
 	}
-	ts->tv_nsec = muldivu64(conv, delta, 1UL << 32);
+	ts->tv_nsec = muldivu64(conv, delta, 1 << 32);
 	return 0;
 }
 
 static int
 kpmap_realtime_time(struct timespec *ts)
 {
-	uint32_t tbase, cbase;
+	uint32_t tbase cbase;
 	uint32_t delta, now;
 	uint32_t tsc_ok;
 	uint64_t tsc;
 	int64_t conv;
 	struct timespec bt;
-	int w;
 
 	/* This does what tsc_cputimer.count() does. */
 	do {
@@ -170,7 +148,7 @@ kpmap_realtime_time(struct timespec *ts)
 		ts->tv_sec += delta / cputimer_freq;
 		delta %= cputimer_freq;
 	}
-	ts->tv_nsec = muldivu64(conv, delta, 1UL << 32);
+	ts->tv_nsec = muldivu64(conv, delta, 1 << 32);
 	ts->tv_sec += bt.tv_sec;
 	ts->tv_nsec += bt.tv_nsec;
 	if (ts->tv_nsec > 1000000000) {
@@ -194,7 +172,6 @@ prepare_kpmap(void)
 		__kpmap_map(&clock_base, &fast_clock, KPTYPE_CLOCK_BASE);
 		__kpmap_map(&clock_secs, &fast_clock, KPTYPE_CLOCK_SECS);
 		__kpmap_map(&ts_basetime, &fast_clock, KPTYPE_TS_BASETIME);
-		__kpmap_map(&use_tsc, &fast_clock, KPTYPE_USE_TSC);
 		cputimer_freq = *tsc_freq;
 	}
 	__kpmap_map(NULL, &fast_clock, 0);
@@ -222,7 +199,7 @@ __clock_gettime(clockid_t clock_id, struct timespec *ts)
 			} while (w > 1);
 			res = 0;
 			break;
-		case CLOCK_UPTIME:
+		case CLOCK_UPTIME: {
 		case CLOCK_MONOTONIC: {
 			if (*version < 2 || *use_tsc == 0) {
 				res = __sys_clock_gettime(clock_id, ts);
@@ -281,7 +258,7 @@ __gettimeofday(struct timeval *tp, struct timezone *tzp)
 			if (*version < 2 || *use_tsc == 0)
 				return __sys_gettimeofday(tp, tzp);
 
-			res = kpmap_realtime_time(&ts);
+			res = kpmap_realtime_time(ts);
 			if (res != 0)
 				return __sys_gettimeofday(tp, tzp);
 
