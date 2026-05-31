@@ -82,9 +82,8 @@ tsc_cputimer_construct(struct cputimer *timer, sysclock_t oldclock)
 	timer->base = oldclock - timer->count();
 	if (kpmap) {
 		kpmap->timer_base = timer->base;
-		kpmap->freq64_nsec = timer->freq64_nsec;
 		cpu_sfence();
-		kpmap->use_tsc = 1;
+		kpmap->freq64_nsec = timer->freq64_nsec;
 	}
 }
 
@@ -92,10 +91,9 @@ static void
 tsc_cputimer_destruct(struct cputimer *timer)
 {
 	if (kpmap) {
-		kpmap->use_tsc = 0;
+		kpmap->freq64_nsec = 0;
 		cpu_sfence();
 		kpmap->timer_base = 0;
-		kpmap->freq64_nsec = 0;
 	}
 }
 

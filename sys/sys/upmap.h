@@ -113,7 +113,6 @@ typedef struct ukpheader {
 #define KPTYPE_CLOCK_BASE	(0x8008 | UKPLEN_8)
 #define KPTYPE_CLOCK_SECS	(0x8009 | UKPLEN_8)
 #define KPTYPE_TS_BASETIME	(0x800a | UKPLEN_TS)
-#define KPTYPE_USE_TSC		(0x800b | UKPLEN_4)
 
 #if defined(_KERNEL) || defined(_KERNEL_STRUCTURES)
 
@@ -201,7 +200,6 @@ struct sys_kpmap {
 	uint32_t	timer_base;
 	uint32_t	clock_base[2];
 	uint32_t	clock_secs[2];
-	uint32_t	use_tsc;
 };
 
 #endif
