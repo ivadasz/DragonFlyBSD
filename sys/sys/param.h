@@ -265,6 +265,7 @@
  *          /usr/include/crypto
  * 600517 - add DSO_NOMBR to <sys/disk.h>
  * 600518 - remove DSO_NOMBR from <sys/disk.h>
+ * 600519 - add rm_cpuid field to struct u_rman
  */
 #undef __DragonFly_version
 #define __DragonFly_version 600518	/* propagated to newvers */
