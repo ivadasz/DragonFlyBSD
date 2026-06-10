@@ -1687,7 +1687,7 @@ static void
 acpi_probe_children(device_t bus)
 {
     device_t *children;
-    int cnt;
+    int cnt, i;
 
     ACPI_FUNCTION_TRACE((char *)(uintptr_t)__func__);
 
@@ -1705,6 +1705,24 @@ acpi_probe_children(device_t bus)
 	acpi_probe_child, NULL, bus, NULL);
     /* This gets us all the children that we added from the ACPI namespace. */
     device_get_children(bus, &children, &cnt);
+
+    for (i = 0; i < cnt; i++) {
+	device_t child = children[i];
+	ACPI_HANDLE handle = acpi_get_handle(child);
+
+	if (handle == NULL)
+	    continue;
+	if (!device_is_enabled(child))
+	    continue;
+	/*
+	 * Get the device's resource settings and attach them.
+	 * Note that if the device has _PRS but no _CRS, we need
+	 * to decide when it's appropriate to try to configure the
+	 * device.  Ignore the return value here; it's OK for the
+	 * device not to have any resources.
+	 */
+	acpi_parse_resources(child, handle, &acpi_res_parse_set, NULL);
+    }
 
     /* Pre-allocate resources for our rman from any sysresource devices. */
     acpi_sysres_alloc(bus);
@@ -1897,15 +1915,6 @@ acpi_probe_child(ACPI_HANDLE handle, UINT32 level, void *context, void **status)
 		acpi_disable_not_present(child);
 		break;
 	    }
-
-	    /*
-	     * Get the device's resource settings and attach them.
-	     * Note that if the device has _PRS but no _CRS, we need
-	     * to decide when it's appropriate to try to configure the
-	     * device.  Ignore the return value here; it's OK for the
-	     * device not to have any resources.
-	     */
-	    acpi_parse_resources(child, handle, &acpi_res_parse_set, NULL);
 	    break;
 	}
     }
