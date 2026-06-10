@@ -2625,6 +2625,7 @@ resource_list_add(struct resource_list *rl, int type, int rid,
 		rle->rid = rid;
 		rle->res = NULL;
 		rle->cpuid = -1;
+		rle->provider = NULL;
 	}
 
 	if (rle->res)
@@ -2633,6 +2634,40 @@ resource_list_add(struct resource_list *rl, int type, int rid,
 	rle->start = start;
 	rle->end = end;
 	rle->count = count;
+
+	if (cpuid != -1) {
+		if (rle->cpuid != -1 && rle->cpuid != cpuid) {
+			panic("resource_list_add: moving from cpu%d -> cpu%d",
+			    rle->cpuid, cpuid);
+		}
+		rle->cpuid = cpuid;
+	}
+}
+
+void
+resource_list_add_ext(struct resource_list *rl, int type, int rid,
+    u_long start, u_long end, u_long count, int cpuid, device_t provider)
+{
+	struct resource_list_entry *rle;
+
+	rle = resource_list_find(rl, type, rid);
+	if (rle == NULL) {
+		rle = kmalloc(sizeof(struct resource_list_entry), M_BUS,
+			     M_INTWAIT);
+		SLIST_INSERT_HEAD(rl, rle, link);
+		rle->type = type;
+		rle->rid = rid;
+		rle->res = NULL;
+		rle->cpuid = -1;
+	}
+
+	if (rle->res)
+		panic("resource_list_add: resource entry is busy");
+
+	rle->start = start;
+	rle->end = end;
+	rle->count = count;
+	rle->provider = provider;
 
 	if (cpuid != -1) {
 		if (rle->cpuid != -1 && rle->cpuid != cpuid) {

@@ -105,6 +105,7 @@ rman_init(struct rman *rm, int cpuid)
 		return ENOMEM;
 	lwkt_token_init(rm->rm_slock, "rmanslock");
 
+	rm->rm_provider = NULL;
 	rm->rm_cpuid = cpuid;
 	rm->rm_hold = 0;
 
