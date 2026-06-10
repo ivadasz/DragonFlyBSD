@@ -141,6 +141,7 @@ struct resource_list_entry {
     u_long		start;		/* start of resource range */
     u_long		end;		/* end of resource range */
     u_long		count;		/* count within range */
+    device_t		provider;	/* provider device of the resource */
     int			cpuid;		/* owner cpuid */
 };
 SLIST_HEAD(resource_list, resource_list_entry);
@@ -177,6 +178,10 @@ void	resource_list_free(struct resource_list *rl);
  */
 void	resource_list_add(struct resource_list *rl, int type, int rid,
 	    u_long start, u_long end, u_long count, int cpuid);
+
+void	resource_list_add_ext(struct resource_list *rl, int type, int rid,
+	    u_long start, u_long end, u_long count, int cpuid,
+	    device_t provider);
 
 /*
  * Find a resource entry by type and rid.

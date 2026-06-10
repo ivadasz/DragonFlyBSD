@@ -123,6 +123,7 @@ struct	rman {
 	const	char *rm_descr;	/* text descripion of this resource */
 	int	rm_cpuid;	/* owner cpuid */
 	int	rm_hold;	/* destruction interlock */
+	device_t rm_provider;	/* device which provides this resource */
 };
 
 int	rman_activate_resource(struct resource *r);
@@ -147,6 +148,7 @@ uint32_t rman_make_alignment_flags(size_t size);
 #define rman_get_flags(r)	((r)->r_flags)
 #define	rman_set_virtual(r,v)	((r)->r_virtual = (v))
 #define	rman_get_virtual(r)	((r)->r_virtual)
+#define	rman_get_provider(r)	((r)->r_rm->rm_provider)
 #define rman_set_bustag(r,t)	((r)->r_bustag = (t))
 #define rman_get_bustag(r)	((r)->r_bustag)
 #define rman_set_bushandle(r,h)	((r)->r_bushandle = (h))
