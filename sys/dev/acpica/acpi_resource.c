@@ -46,64 +46,97 @@
 #define _COMPONENT	ACPI_BUS
 ACPI_MODULE_NAME("RESOURCE")
 
-struct lookup_irq_request {
+struct lookup_resource_request {
     ACPI_RESOURCE *acpi_res;
     struct resource *res;
     int		counter;
     int		rid;
+    int		type;
     int		found;
 };
 
 static ACPI_STATUS
-acpi_lookup_irq_handler(ACPI_RESOURCE *res, void *context)
+acpi_lookup_resource_handler(ACPI_RESOURCE *res, void *context)
 {
-    struct lookup_irq_request *req;
+    struct lookup_resource_request *req =
+	(struct lookup_resource_request *)context;
     size_t len;
-    u_int irqnum;
-    u_int irq __debugvar;
+    u_int count;
+    u_int addr __debugvar;
 
     switch (res->Type) {
     case ACPI_RESOURCE_TYPE_IRQ:
-	irqnum = res->Data.Irq.InterruptCount;
-	irq = res->Data.Irq.Interrupts[0];
+	if (req->type != SYS_RES_IRQ)
+	    return (AE_OK);
+	count = res->Data.Irq.InterruptCount;
+	addr = res->Data.Irq.Interrupts[0];
 	len = ACPI_RS_SIZE(ACPI_RESOURCE_IRQ);
 	break;
     case ACPI_RESOURCE_TYPE_EXTENDED_IRQ:
-	irqnum = res->Data.ExtendedIrq.InterruptCount;
-	irq = res->Data.ExtendedIrq.Interrupts[0];
+	if (req->type != SYS_RES_IRQ)
+	    return (AE_OK);
+	count = res->Data.ExtendedIrq.InterruptCount;
+	addr = res->Data.ExtendedIrq.Interrupts[0];
 	len = ACPI_RS_SIZE(ACPI_RESOURCE_EXTENDED_IRQ);
+	break;
+    case ACPI_RESOURCE_TYPE_SERIAL_BUS:
+	if (req->type != SYS_RES_I2C)
+	    return (AE_OK);
+	if (res->Data.I2cSerialBus.Type != ACPI_RESOURCE_SERIAL_TYPE_I2C)
+	    return (AE_OK);
+	if (res->Data.I2cSerialBus.AccessMode != ACPI_I2C_7BIT_MODE)
+	    return (AE_OK);
+	count = 1;
+	addr = res->Data.I2cSerialBus.SlaveAddress;
+	len = ACPI_RS_SIZE(ACPI_RESOURCE_I2C_SERIALBUS);
+	/* TODO: Verify that ResourceName points us at the same device_t. */
+	break;
+    case ACPI_RESOURCE_TYPE_GPIO:
+	if (req->type == SYS_RES_GPIO_IRQ) {
+	    if (res->Data.Gpio.ConnectionType != ACPI_RESOURCE_GPIO_TYPE_INT)
+		return (AE_OK);
+	} else if (req->type == SYS_RES_GPIO_IO) {
+	    if (res->Data.Gpio.ConnectionType != ACPI_RESOURCE_GPIO_TYPE_IO)
+		return (AE_OK);
+	} else {
+	    return (AE_OK);
+	}
+	count = res->Data.Gpio.PinTableLength;
+	addr = res->Data.Gpio.PinTable[0];
+	len = ACPI_RS_SIZE(ACPI_RESOURCE_GPIO);
 	break;
     default:
 	return (AE_OK);
     }
-    if (irqnum != 1)
+    if (count != 1)
 	return (AE_OK);
-    req = (struct lookup_irq_request *)context;
     if (req->counter != req->rid) {
 	req->counter++;
 	return (AE_OK);
     }
     req->found = 1;
-    KASSERT(irq == rman_get_start(req->res),
-	("IRQ resources do not match"));
+    KASSERT(addr == rman_get_start(req->res),
+	("Resources do not match"));
     bcopy(res, req->acpi_res, len);
     return (AE_CTRL_TERMINATE);
 }
 
 ACPI_STATUS
-acpi_lookup_irq_resource(device_t dev, int rid, struct resource *res,
+acpi_lookup_resource(device_t dev, int rid, int type, struct resource *res,
     ACPI_RESOURCE *acpi_res)
 {
-    struct lookup_irq_request req;
+    struct lookup_resource_request req;
     ACPI_STATUS status;
 
     req.acpi_res = acpi_res;
     req.res = res;
     req.counter = 0;
     req.rid = rid;
+    req.type = type;
     req.found = 0;
+
     status = AcpiWalkResources(acpi_get_handle(dev), "_CRS",
-	acpi_lookup_irq_handler, &req);
+	acpi_lookup_resource_handler, &req);
     if (ACPI_SUCCESS(status) && req.found == 0)
 	status = AE_NOT_FOUND;
     return (status);
@@ -185,6 +218,24 @@ acpi_address_range_name(UINT8 ResourceType)
     }
 }
 #endif
+
+static ACPI_STATUS
+acpi_lookup_dev(ACPI_HANDLE handle, char *path, device_t *dev)
+{
+	ACPI_HANDLE source;
+	ACPI_STATUS status;
+
+	status = acpi_GetHandleInScope(handle, path, &source);
+	if (ACPI_FAILURE(status))
+		return status;
+
+	status = AE_OK;
+	*dev = acpi_get_device(source);
+	if (*dev == NULL)
+		status =  AE_NOT_FOUND;
+
+	return (status);
+}
 	    
 static ACPI_STATUS
 acpi_parse_resource(ACPI_RESOURCE *res, void *context)
@@ -195,7 +246,8 @@ acpi_parse_resource(ACPI_RESOURCE *res, void *context)
 #ifdef ACPI_DEBUG
     const char *name;
 #endif
-    device_t dev;
+    device_t dev, provider;
+    ACPI_STATUS status;
 
     arc = context;
     dev = arc->dev;
@@ -290,11 +342,28 @@ acpi_parse_resource(ACPI_RESOURCE *res, void *context)
 	if (res->Data.I2cSerialBus.AccessMode != ACPI_I2C_7BIT_MODE)
 	    break;
 
-	/* TODO: Resolve res->Data.I2cSerialBus.ResourceSource */
-
-	set->set_i2c(dev, arc->context,
-	    res->Data.I2cSerialBus.SlaveAddress, 1,
-	    res->Data.I2cSerialBus.ConnectionSpeed);
+	status = acpi_lookup_dev(acpi_get_handle(dev),
+	    res->Data.I2cSerialBus.ResourceSource.StringPtr, &provider);
+	if (ACPI_SUCCESS(status)) {
+	    set->set_i2c(dev, arc->context,
+		res->Data.I2cSerialBus.SlaveAddress, 1, provider);
+	}
+	break;
+    case ACPI_RESOURCE_TYPE_GPIO:
+	status = acpi_lookup_dev(acpi_get_handle(dev),
+	    res->Data.Gpio.ResourceSource.StringPtr, &provider);
+	if (ACPI_FAILURE(status))
+	    break;
+	if (res->Data.Gpio.PinTableLength > sizeof(UINT16))
+	    break;
+	if (res->Data.Gpio.ConnectionType == ACPI_RESOURCE_GPIO_TYPE_INT) {
+	    set->set_gpio_irq(dev, arc->context, res->Data.Gpio.PinTable[0], 1,
+		provider);
+	} else if (res->Data.Gpio.ConnectionType ==
+		   ACPI_RESOURCE_GPIO_TYPE_IO) {
+	    set->set_gpio_io(dev, arc->context, res->Data.Gpio.PinTable[0], 1,
+		provider);
+	}
 	break;
     case ACPI_RESOURCE_TYPE_DMA:
 	/*
@@ -470,7 +539,11 @@ static void	acpi_res_set_ext_irq(device_t dev, void *context,
 static void	acpi_res_set_drq(device_t dev, void *context, uint8_t *drq,
 				 int count);
 static void	acpi_res_set_i2c(device_t dev, void *context, uint16_t addr,
-				 int count, uint32_t speed);
+				 int count, device_t provider);
+static void	acpi_res_set_gpio_io(device_t dev, void *context, int pin,
+				     int count, device_t provider);
+static void	acpi_res_set_gpio_irq(device_t dev, void *context, int pin,
+				     int count, device_t provider);
 static void	acpi_res_set_start_dependent(device_t dev, void *context,
 					     int preference);
 static void	acpi_res_set_end_dependent(device_t dev, void *context);
@@ -486,6 +559,8 @@ struct acpi_parse_resource_set acpi_res_parse_set = {
     acpi_res_set_ext_irq,
     acpi_res_set_drq,
     acpi_res_set_i2c,
+    acpi_res_set_gpio_io,
+    acpi_res_set_gpio_irq,
     acpi_res_set_start_dependent,
     acpi_res_set_end_dependent
 };
@@ -495,6 +570,9 @@ struct acpi_res_context {
     int		ar_nmem;
     int		ar_nirq;
     int		ar_ndrq;
+    int		ar_ni2c;
+    int		ar_ngpio_io;
+    int		ar_ngpio_irq;
     void 	*ar_parent;
 };
 
@@ -631,9 +709,25 @@ acpi_res_set_drq(device_t dev, void *context, uint8_t *drq, int count)
     bus_set_resource(dev, SYS_RES_DRQ, cp->ar_ndrq++, *drq, 1, -1);
 }
 
+static int
+acpi_resource_set_ext(device_t dev, device_t child, int type, int rid,
+    u_long start, u_long count, int cpuid, device_t provider)
+{
+	struct resource_list *rl = NULL;
+
+	rl = BUS_GET_RESOURCE_LIST(dev, child);
+	if (!rl)
+		return(EINVAL);
+
+	resource_list_add_ext(rl, type, rid, start, (start + count - 1), count,
+	    cpuid, provider);
+
+	return(0);
+}
+
 static void
 acpi_res_set_i2c(device_t dev, void *context, uint16_t addr, int count,
-		 uint32_t maxhz)
+		 device_t provider)
 {
     struct acpi_res_context	*cp = (struct acpi_res_context *)context;
 
@@ -643,7 +737,48 @@ acpi_res_set_i2c(device_t dev, void *context, uint16_t addr, int count,
     if (count != 1)
 	return;
 
-    bus_set_resource(dev, SYS_RES_I2C, cp->ar_nio++, addr, 1, -1);
+    //bus_set_resource(dev, SYS_RES_I2C, cp->ar_ni2c++, pin, 1, -1);
+    // TODO: Make device_t provider a standard flag of bus_set_resource()
+    acpi_resource_set_ext(device_get_parent(dev), dev, SYS_RES_I2C,
+	cp->ar_ni2c++, addr, 1, -1, provider);
+}
+
+static void
+acpi_res_set_gpio_io(device_t dev, void *context, int pin, int count,
+		     device_t provider)
+{
+    struct acpi_res_context	*cp = (struct acpi_res_context *)context;
+
+    if (cp == NULL)
+	return;
+
+    /* TODO: Represent non-continuously numbered sets of pins here. */
+    if (count != 1)
+	return;
+
+    //bus_set_resource(dev, SYS_RES_GPIO_IO, cp->ar_ngpio_iio++, pin, 1, -1);
+    // TODO: Make device_t provider a standard flag of bus_set_resource()
+    acpi_resource_set_ext(device_get_parent(dev), dev, SYS_RES_GPIO_IO,
+	cp->ar_ngpio_io++, pin, 1, -1, provider);
+}
+
+static void
+acpi_res_set_gpio_irq(device_t dev, void *context, int pin, int count,
+    device_t provider)
+{
+    struct acpi_res_context	*cp = (struct acpi_res_context *)context;
+
+    if (cp == NULL)
+	return;
+
+    /* TODO: Represent non-continuously numbered sets of pins here. */
+    if (count != 1)
+	return;
+
+    //bus_set_resource(dev, SYS_RES_GPIO_IRQ, cp->ar_ngpio_irq++, pin, 1, -1);
+    // TODO: Make device_t provider a standard flag of bus_set_resource()
+    acpi_resource_set_ext(device_get_parent(dev), dev, SYS_RES_GPIO_IRQ,
+	cp->ar_ngpio_irq++, pin, 1, -1, provider);
 }
 
 static void

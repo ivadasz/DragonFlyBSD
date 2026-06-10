@@ -401,7 +401,11 @@ struct acpi_parse_resource_set {
     void	(*set_drq)(device_t dev, void *context, uint8_t *drq,
 		    int count);
     void	(*set_i2c)(device_t dev, void *context, uint16_t addr,
-		    int count, uint32_t maxhz);
+		    int count, device_t provider);
+    void	(*set_gpio_io)(device_t dev, void *context, int pin, int count,
+		    device_t provider);
+    void	(*set_gpio_irq)(device_t dev, void *context, int pin,
+		    int count, device_t provider);
     void	(*set_start_dependent)(device_t dev, void *context,
 		    int preference);
     void	(*set_end_dependent)(device_t dev, void *context);
@@ -410,7 +414,7 @@ struct acpi_parse_resource_set {
 extern struct	acpi_parse_resource_set acpi_res_parse_set;
 
 void		acpi_config_intr(device_t dev, ACPI_RESOURCE *res);
-ACPI_STATUS	acpi_lookup_irq_resource(device_t dev, int rid,
+ACPI_STATUS	acpi_lookup_resource(device_t dev, int rid, int type,
 		    struct resource *res, ACPI_RESOURCE *acpi_res);
 ACPI_STATUS	acpi_parse_resources(device_t dev, ACPI_HANDLE handle,
 		    struct acpi_parse_resource_set *set, void *arg);
