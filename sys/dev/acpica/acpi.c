@@ -67,6 +67,8 @@
 #include <bus/pci/pci_private.h>
 #include <machine/cputypes.h>
 
+#include "gpio_if.h"
+
 #include <vm/vm_param.h>
 
 MALLOC_DEFINE(M_ACPIDEV, "acpidev", "ACPI devices");
@@ -237,8 +239,9 @@ static struct rman acpi_rman_io, acpi_rman_mem;
 struct acpi_rman_provided {
 	struct rman			*rm;
 	SLIST_ENTRY(acpi_rman_provided)	link;
+	int				type;
 };
-static SLIST_HEAD(, acpi_rman_provided) acpi_rmans_i2c =
+static SLIST_HEAD(, acpi_rman_provided) acpi_rmans =
     SLIST_HEAD_INITIALIZER(acpi_rmans);
 
 #define ACPI_MINIMUM_AWAKETIME	5
@@ -867,6 +870,9 @@ acpi_print_child(device_t bus, device_t child)
     retval += resource_list_print_type(rl, "iomem", SYS_RES_MEMORY, "%#lx");
     retval += resource_list_print_type(rl, "irq",   SYS_RES_IRQ,    "%ld");
     retval += resource_list_print_type(rl, "drq",   SYS_RES_DRQ,    "%ld");
+    retval += resource_list_print_type(rl, "gpio_io", SYS_RES_GPIO_IO, "%ld");
+    retval += resource_list_print_type(rl, "gpio_irq", SYS_RES_GPIO_IRQ, "%ld");
+    retval += resource_list_print_type(rl, "i2c",   SYS_RES_I2C,    "%ld");
     if (device_get_flags(child))
 	retval += kprintf(" flags %#x", device_get_flags(child));
     retval += bus_print_child_footer(bus, child);
@@ -1108,11 +1114,31 @@ acpi_register_rman(struct rman *rm, int type)
 	    kmalloc(sizeof(struct acpi_rman_provided), M_ACPIDEV,
 	    M_WAITOK | M_ZERO);
 	e->rm = rm;
-	if (type == SYS_RES_I2C) {
-	    SLIST_INSERT_HEAD(&acpi_rmans_i2c, e, link);
-	}
+	e->type = type;
+	ACPI_SERIAL_BEGIN(acpi);
+	SLIST_INSERT_HEAD(&acpi_rmans, e, link);
+	ACPI_SERIAL_END(acpi);
 }
 
+static struct rman *
+acpi_find_rman(int type, u_long start, device_t provider)
+{
+	struct acpi_rman_provided *e;
+
+	ACPI_SERIAL_ASSERT(acpi);
+	SLIST_FOREACH(e, &acpi_rmans, link) {
+		if (e->rm->rm_provider == provider && e->type == type &&
+		    e->rm->rm_start <= start && e->rm->rm_end >= start) {
+			return e->rm;
+		}
+	}
+	return NULL;
+}
+
+/*
+ * TODO: Add acpi_unregister_rman(struct rman *rm, int type).
+ *       This should fail if anything is currently allocated.
+ */
 
 static struct resource *
 acpi_alloc_resource(device_t bus, device_t child, int type, int *rid,
@@ -1122,10 +1148,9 @@ acpi_alloc_resource(device_t bus, device_t child, int type, int *rid,
     struct acpi_device *ad = device_get_ivars(child);
     struct resource_list *rl = &ad->ad_rl;
     struct resource_list_entry *rle;
-    struct resource *res;
+    struct resource *res = NULL;
     struct rman *rm;
-
-    res = NULL;
+    device_t provider = NULL;
 
     /* We only handle memory and IO resources through rman. */
     switch (type) {
@@ -1154,7 +1179,10 @@ acpi_alloc_resource(device_t bus, device_t child, int type, int *rid,
 	end = rle->end;
 	count = rle->count;
 	cpuid = rle->cpuid;
+	provider = rle->provider;
     }
+    if (rm == NULL && provider != NULL)
+	rm = acpi_find_rman(type, start, provider);
 
     /*
      * If this is an allocation of a specific range, see if we can satisfy
@@ -1164,15 +1192,6 @@ acpi_alloc_resource(device_t bus, device_t child, int type, int *rid,
     if (start + count - 1 == end && rm != NULL) {
 	res = rman_reserve_resource(rm, start, end, count, flags & ~RF_ACTIVE,
 	    child);
-    } else if (start + count - 1 == end && rm == NULL && type == SYS_RES_I2C) {
-	struct acpi_rman_provided *e;
-
-	SLIST_FOREACH(e, &acpi_rmans_i2c, link) {
-	    res = rman_reserve_resource(e->rm, start, end, count,
-		flags & ~RF_ACTIVE, child);
-	    if (res != NULL)
-		break;
-	}
     }
     if (res == NULL) {
 	res = BUS_ALLOC_RESOURCE(device_get_parent(bus), child, type, rid,
@@ -1201,14 +1220,68 @@ acpi_alloc_resource(device_t bus, device_t child, int type, int *rid,
 	     * NB: Lookup failure is fine, since the device may add its
 	     * own interrupt resources, e.g. MSI or MSI-X.
 	     */
-	    if (ACPI_SUCCESS(
-		    acpi_lookup_irq_resource(child, *rid, res, &ares))) {
+	    if (ACPI_SUCCESS(acpi_lookup_resource(child, *rid,
+			     SYS_RES_IRQ, res, &ares))) {
 		acpi_config_intr(child, &ares);
 	    } else {
 		kprintf("irq resource not found\n");
 	    }
 	    break;
+	case SYS_RES_GPIO_IRQ:
+	    if (ACPI_SUCCESS(acpi_lookup_resource(child, *rid,
+			     SYS_RES_GPIO_IRQ, res, &ares))) {
+		void *cookie;
+		u_int pin = ares.Data.Gpio.PinTable[0];
+		int trigger = ares.Data.Gpio.Triggering;
+		int polarity = ares.Data.Gpio.Polarity;
+		int pinconfig = ares.Data.Gpio.PinConfig;
+
+		if (GPIO_ALLOC_INTR(provider, pin, trigger, polarity,
+		    pinconfig, &cookie) != 0) {
+		    kprintf("Failed to allocate gpio irq pin\n");
+		    goto fail_release;
+		}
+		rman_set_virtual(res, cookie);
+	    } else {
+		kprintf("gpio irq resource not found\n");
+		goto fail_release;
+	    }
+	    break;
+	case SYS_RES_GPIO_IO:
+	    if (ACPI_SUCCESS(acpi_lookup_resource(child, *rid,
+			     SYS_RES_GPIO_IO, res, &ares))) {
+		void *cookie;
+		u_int pin = ares.Data.Gpio.PinTable[0];
+		int flags;
+
+		if (ares.Data.Gpio.IoRestriction == ACPI_IO_RESTRICT_INPUT) {
+		    flags = (1U << 0);
+		} else if (ares.Data.Gpio.IoRestriction ==
+			   ACPI_IO_RESTRICT_OUTPUT) {
+		    flags = (1U << 1);
+		} else {
+		    flags = (1U << 0) | (1U << 1);
+		}
+
+		if (GPIO_ALLOC_IO_PIN(provider, pin, flags, &cookie) != 0) {
+		    kprintf("Failed to allocate gpio io pin\n");
+		    goto fail_release;
+		}
+		rman_set_virtual(res, cookie);
+	    } else {
+		kprintf("gpio irq resource not found\n");
+		goto fail_release;
+	    }
+	    break;
 	}
+    }
+goto out;
+
+fail_release:
+    if (flags & RF_ACTIVE)
+	bus_deactivate_resource(child, type, *rid, res);
+    rman_release_resource(res);
+    res = NULL;
 
 out:
     ACPI_SERIAL_END(acpi);
@@ -1236,20 +1309,29 @@ acpi_release_resource(device_t bus, device_t child, int type, int rid,
 
     ACPI_SERIAL_BEGIN(acpi);
 
+    if (rm == NULL)
+	rm = acpi_find_rman(type, r->r_start, r->r_rm->rm_provider);
+
     /*
      * If this resource belongs to one of our internal managers,
      * deactivate it and release it to the local pool.  If it doesn't,
      * pass this request up to the parent.
      */
     if (rm != NULL && rman_is_region_manager(r, rm)) {
+	if (type == SYS_RES_GPIO_IRQ) {
+	    GPIO_FREE_INTR(rm->rm_provider, rman_get_virtual(r));
+	} else if (type == SYS_RES_GPIO_IO) {
+	    GPIO_RELEASE_IO_PIN(rm->rm_provider, rman_get_virtual(r));
+	}
 	if (rman_get_flags(r) & RF_ACTIVE) {
 	    ret = bus_deactivate_resource(child, type, rid, r);
 	    if (ret != 0)
 		goto out;
 	}
 	ret = rman_release_resource(r);
-    } else
+    } else {
 	ret = BUS_RELEASE_RESOURCE(device_get_parent(bus), child, type, rid, r);
+    }
 
 out:
     ACPI_SERIAL_END(acpi);
