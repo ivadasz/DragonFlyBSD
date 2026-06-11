@@ -38,6 +38,7 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
+#include <sys/malloc.h>
 #include <sys/module.h>
 #include <sys/errno.h>
 #include <sys/lock.h>
@@ -55,6 +56,8 @@
 
 #include "gpio_if.h"
 
+MALLOC_DEFINE(M_GPIODEV, "gpio", "GPIO driver");
+
 static int	gpio_intel_probe(device_t dev);
 static int	gpio_intel_attach(device_t dev);
 static int	gpio_intel_detach(device_t dev);
@@ -63,6 +66,12 @@ static int	gpio_intel_alloc_intr(device_t dev, u_int pin, int trigger,
 static void	gpio_intel_setup_intr(device_t dev, void *cookie, void *arg,
 		    driver_intr_t *handler);
 static void	gpio_intel_teardown_intr(device_t dev, void *cookie);
+static int	gpio_intel_bus_setup_intr(device_t dev, device_t child,
+		    struct resource *irq, int flags, driver_intr_t *intr,
+		    void *arg, void **cookiep, lwkt_serialize_t serializer,
+		    const char *desc);
+static int	gpio_intel_bus_teardown_intr(device_t dev, device_t child,
+		    struct resource *irq, void *cookie);
 static void	gpio_intel_free_intr(device_t dev, void *cookie);
 static int	gpio_intel_alloc_io_pin(device_t dev, u_int pin, int flags,
 		    void **cookiep);
@@ -73,6 +82,7 @@ static void	gpio_intel_write_pin(device_t dev, void *cookie, int value);
 static void	gpio_intel_intr(void *arg);
 static int	gpio_intel_pin_exists(struct gpio_intel_softc *sc,
 		    uint16_t pin);
+static void	gpio_intel_register_rmans(struct gpio_intel_softc *sc);
 
 static char *cherryview_ids[] = { "INT33FF", NULL };
 
@@ -147,6 +157,8 @@ gpio_intel_attach(device_t dev)
 
 	sc->fns->init(sc);
 	lockmgr(&sc->lk, LK_RELEASE);
+
+	gpio_intel_register_rmans(sc);
 
 	device_add_child(dev, "gpio_acpi", -1);
 	bus_generic_attach(dev);
@@ -235,6 +247,9 @@ gpio_intel_alloc_intr(device_t dev, u_int pin, int trigger, int polarity,
 				*cookiep = map;
 				map->arg = NULL;
 				map->handler = NULL;
+				map->serializer = NULL;
+				map->name = NULL;
+				map->flags = 0;
 			}
 		}
 	} else {
@@ -258,6 +273,9 @@ gpio_intel_free_intr(device_t dev, void *cookie)
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
 	map->arg = NULL;
 	map->handler = NULL;
+	map->serializer = NULL;
+	map->name = NULL;
+	map->flags = 0;
 	sc->fns->unmap_intr(sc, map);
 	lockmgr(&sc->lk, LK_RELEASE);
 }
@@ -274,6 +292,9 @@ gpio_intel_setup_intr(device_t dev, void *cookie, void *arg,
 	lockmgr(&sc->lk, LK_EXCLUSIVE);
 	map->arg = arg;
 	map->handler = handler;
+	map->serializer = NULL;
+	map->name = "NULL";
+	map->flags = INTR_MPSAFE;
 	sc->fns->enable_intr(sc, map);
 	lockmgr(&sc->lk, LK_RELEASE);
 }
@@ -290,7 +311,56 @@ gpio_intel_teardown_intr(device_t dev, void *cookie)
 	sc->fns->disable_intr(sc, map);
 	map->arg = NULL;
 	map->handler = NULL;
+	map->serializer = NULL;
+	map->flags = 0;
 	lockmgr(&sc->lk, LK_RELEASE);
+}
+
+static int
+gpio_intel_bus_setup_intr(device_t dev, device_t child, struct resource *irq,
+    int flags, driver_intr_t *intr, void *arg, void **cookiep,
+    lwkt_serialize_t serializer, const char *desc)
+{
+	struct gpio_intel_softc *sc = device_get_softc(dev);
+	struct pin_intr_map *map = (struct pin_intr_map *)rman_get_virtual(irq);
+
+	KKASSERT(gpio_intel_pin_exists(sc, map->pin));
+
+	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	map->arg = arg;
+	map->handler = intr;
+	map->serializer = serializer;
+	if (desc)
+		map->name = desc;
+	else
+		map->name = device_get_nameunit(child);
+	map->flags = flags;
+	if ((flags & INTR_MPSAFE) == 0)
+		kprintf("interrupt uses mplock: %s\n", map->name);
+	sc->fns->enable_intr(sc, map);
+	lockmgr(&sc->lk, LK_RELEASE);
+	if (cookiep)
+		*cookiep = rman_get_virtual(irq);
+	return 0;
+}
+
+static int
+gpio_intel_bus_teardown_intr(device_t dev, device_t child,
+    struct resource *irq, void *cookie)
+{
+	struct gpio_intel_softc *sc = device_get_softc(dev);
+	struct pin_intr_map *map = (struct pin_intr_map *)cookie;
+
+	KKASSERT(gpio_intel_pin_exists(sc, map->pin));
+
+	lockmgr(&sc->lk, LK_EXCLUSIVE);
+	sc->fns->disable_intr(sc, map);
+	map->arg = NULL;
+	map->handler = NULL;
+	map->serializer = NULL;
+	map->flags = 0;
+	lockmgr(&sc->lk, LK_RELEASE);
+	return 0;
 }
 
 static int
@@ -406,11 +476,57 @@ gpio_intel_pin_exists(struct gpio_intel_softc *sc, uint16_t pin)
 	return (FALSE);
 }
 
+static void
+gpio_intel_register_rmans(struct gpio_intel_softc *sc)
+{
+	struct rman *rm;
+	int i;
+
+	for (i = 0; sc->ranges[i].start >= 0 && sc->ranges[i].end >= 0; i++) {
+		char *descr;
+
+		rm = kmalloc(2*sizeof(struct rman), M_GPIODEV, M_WAITOK|M_ZERO);
+		rm[0].rm_type = RMAN_ARRAY;
+		rm[0].rm_start = sc->ranges[i].start;
+		rm[0].rm_end = sc->ranges[i].end;
+		descr = kmalloc(RM_TEXTLEN, M_GPIODEV, M_WAITOK | M_ZERO);
+		rm[0].rm_descr = descr;
+		ksnprintf(descr, RM_TEXTLEN, "ACPI GPIO Pin: %s",
+		    device_get_nameunit(sc->dev));
+		if (rman_init(&rm[0], -1) != 0)
+			panic("acpi rman_init GPIO IO Pin failed");
+		// rman_init() defaults rm_provider to NULL
+		rm[0].rm_provider = sc->dev;
+		rman_manage_region(&rm[0],
+		    sc->ranges[i].start, sc->ranges[i].end);
+		acpi_register_rman(&rm[0], SYS_RES_GPIO_IO);
+
+		rm[1].rm_type = RMAN_ARRAY;
+		rm[1].rm_start = sc->ranges[i].start;
+		rm[1].rm_end = sc->ranges[i].end;
+		descr = kmalloc(RM_TEXTLEN, M_GPIODEV, M_WAITOK | M_ZERO);
+		rm[1].rm_descr = descr;
+		ksnprintf(descr, RM_TEXTLEN, "ACPI GPIO IRQ: %s",
+		    device_get_nameunit(sc->dev));
+		if (rman_init(&rm[1], rman_get_cpuid(sc->irq_res)) != 0)
+			panic("acpi rman_init GPIO IRQ Pin failed");
+		// rman_init() defaults rm_provider to NULL
+		rm[1].rm_provider = sc->dev;
+		rman_manage_region(&rm[1],
+		    sc->ranges[i].start, sc->ranges[i].end);
+		acpi_register_rman(&rm[1], SYS_RES_GPIO_IRQ);
+	}
+}
+
 static device_method_t gpio_intel_methods[] = {
 	/* Device interface */
 	DEVMETHOD(device_probe, gpio_intel_probe),
 	DEVMETHOD(device_attach, gpio_intel_attach),
 	DEVMETHOD(device_detach, gpio_intel_detach),
+
+	/* Bus interface */
+	DEVMETHOD(bus_setup_intr, gpio_intel_bus_setup_intr),
+	DEVMETHOD(bus_teardown_intr, gpio_intel_bus_teardown_intr),
 
 	/* GPIO methods */
 	DEVMETHOD(gpio_alloc_intr, gpio_intel_alloc_intr),

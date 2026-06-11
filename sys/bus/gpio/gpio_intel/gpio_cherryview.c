@@ -42,7 +42,8 @@
 #include <sys/errno.h>
 #include <sys/lock.h>
 #include <sys/bus.h>
-
+#include <sys/interrupt.h>
+#include <sys/mplock2.h>
 #include <sys/rman.h>
 
 #include "opt_acpi.h"
@@ -214,7 +215,8 @@ gpio_cherryview_intr(void *arg)
 	struct gpio_intel_softc *sc = (struct gpio_intel_softc *)arg;
 	struct pin_intr_map *mapping;
 	uint32_t status;
-	int i;
+	globaldata_t gd = mycpu;
+	int i, mpheld = 0;
 
 	status = chvgpio_read(sc, CHV_GPIO_REG_IS);
 	KKASSERT(NELEM(sc->intrmaps) >= 16);
@@ -225,14 +227,44 @@ gpio_cherryview_intr(void *arg)
 				chvgpio_write(sc, CHV_GPIO_REG_IS,
 				    (1U << i));
 			}
-			if (mapping->pin != -1 && mapping->handler != NULL)
-				mapping->handler(mapping->arg);
-			if (mapping->is_level) {
+			if (mapping->pin != -1 && mapping->handler != NULL) {
+				if ((!(mapping->flags & INTR_MPSAFE)) !=
+				    mpheld) {
+					if (mapping->flags & INTR_MPSAFE) {
+						rel_mplock();
+						mpheld = 0;
+					} else {
+						get_mplock();
+						mpheld = 1;
+					}
+				}
+				if (mapping->handler == NULL) {
+					kprintf("NULL HANDLER %s\n",
+					    mapping->name);
+				} else if (mapping->serializer) {
+					lwkt_serialize_handler_call(
+					    mapping->serializer,
+					    (inthand2_t *)mapping->handler,
+					    mapping->arg, NULL);
+				} else {
+					mapping->handler(mapping->arg);
+				}
+				// TODO: Use TD_INVARIANTS_TEST() assertions.
+			}
+			if (mapping->is_level && mapping->handler) {
 				chvgpio_write(sc, CHV_GPIO_REG_IS,
 				    (1U << i));
 			}
+			crit_exit_gd(gd);
+			/*
+			 * Quick exit/enter to allow higher-priority interrupt
+			 * sources to run.
+			 */
+			crit_enter_gd(gd);
 		}
 	}
+	if (mpheld)
+		rel_mplock();
 }
 
 /* XXX Add shared/exclusive argument. */
