@@ -151,8 +151,7 @@ gpioio_alloc_pins(device_t dev, device_t provider, ACPI_RESOURCE_GPIO *gpio,
 
 	if (gpio->IoRestriction == ACPI_IO_RESTRICT_INPUT) {
 		flags = (1U << 0);
-	} else if (gpio->IoRestriction ==
-	    ACPI_IO_RESTRICT_OUTPUT) {
+	} else if (gpio->IoRestriction == ACPI_IO_RESTRICT_OUTPUT) {
 		flags = (1U << 1);
 	} else {
 		flags = (1U << 0) | (1U << 1);

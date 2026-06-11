@@ -89,7 +89,7 @@ METHOD int alloc_io_pin {
 #
 # Release IO pin
 #
-METHOD int release_io_pin {
+METHOD void release_io_pin {
 	device_t dev;
 	void *cookie;
 };

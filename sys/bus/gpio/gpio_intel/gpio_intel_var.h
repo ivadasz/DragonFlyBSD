@@ -11,6 +11,9 @@ struct pin_intr_map {
 	int intidx;
 	void *arg;
 	driver_intr_t *handler;
+	lwkt_serialize_t serializer;
+	const char *name;
+	int flags;
 	int is_level;
 	uint32_t orig_intcfg;
 	uint32_t orig_gpiocfg;
