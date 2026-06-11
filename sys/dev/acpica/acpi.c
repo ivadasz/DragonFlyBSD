@@ -125,6 +125,12 @@ static int	acpi_release_resource(device_t bus, device_t child, int type,
 			int rid, struct resource *r);
 static void	acpi_delete_resource(device_t bus, device_t child, int type,
 		    int rid);
+static int	acpi_setup_intr(device_t dev, device_t child,
+		    struct resource *irq, int flags, driver_intr_t *intr,
+		    void *arg, void **cookiep, lwkt_serialize_t serializer,
+		    const char *desc);
+static int	acpi_teardown_intr(device_t dev, device_t child,
+		    struct resource *irq, void *cookie);
 static uint32_t	acpi_isa_get_logicalid(device_t dev);
 static int	acpi_isa_get_compatid(device_t dev, uint32_t *cids, int count);
 static char	*acpi_device_id_probe(device_t bus, device_t dev, char **ids);
@@ -202,8 +208,8 @@ static device_method_t acpi_methods[] = {
     DEVMETHOD(bus_child_location_str,	acpi_child_location_str_method),
     DEVMETHOD(bus_activate_resource,	bus_generic_activate_resource),
     DEVMETHOD(bus_deactivate_resource,	bus_generic_deactivate_resource),
-    DEVMETHOD(bus_setup_intr,		bus_generic_setup_intr),
-    DEVMETHOD(bus_teardown_intr,	bus_generic_teardown_intr),
+    DEVMETHOD(bus_setup_intr,		acpi_setup_intr),
+    DEVMETHOD(bus_teardown_intr,	acpi_teardown_intr),
 
     /* ACPI bus */
     DEVMETHOD(acpi_id_probe,		acpi_device_id_probe),
@@ -1357,6 +1363,34 @@ acpi_delete_resource(device_t bus, device_t child, int type, int rid)
 
     rl = acpi_get_rlist(bus, child);
     resource_list_delete(rl, type, rid);
+}
+
+static int
+acpi_setup_intr(device_t dev, device_t child, struct resource *irq,
+    int flags, driver_intr_t *intr, void *arg, void **cookiep,
+    lwkt_serialize_t serializer, const char *desc)
+{
+	/* Forward to the "provider" device of the resource if needed. */
+	if (rman_get_provider(irq) != NULL && rman_get_virtual(irq) != NULL) {
+		return BUS_SETUP_INTR(rman_get_provider(irq), child, irq,
+		    flags, intr, arg, cookiep, serializer, desc);
+	} else {
+		return bus_generic_setup_intr(dev, child, irq, flags, intr,
+		    arg, cookiep, serializer, desc);
+	}
+}
+
+static int
+acpi_teardown_intr(device_t dev, device_t child, struct resource *irq,
+    void *cookie)
+{
+	/* Forward to the "provider" device of the resource if needed. */
+	if (rman_get_provider(irq) != NULL && rman_get_virtual(irq) != NULL) {
+		return BUS_TEARDOWN_INTR(rman_get_provider(irq), child, irq,
+		    cookie);
+	} else {
+		return bus_generic_teardown_intr(dev, child, irq, cookie);
+	}
 }
 
 /* Allocate an IO port or memory resource, given its GAS. */
