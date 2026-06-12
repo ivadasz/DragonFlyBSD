@@ -55,6 +55,11 @@ struct sdhci_acpi_softc {
 
 	struct sdhci_slot slot;
 	struct resource	*mem_res;	/* Memory resource */
+
+	/* GPIO resources */
+	struct resource	*gpio_irq_res;	/* Card Insert/Remove Interrupt */
+	struct resource	*gpio_io_res;	/* Card Insertion Status */
+	// TODO: Card write-protect status GPIO IO Pin
 };
 
 static uint8_t
@@ -240,6 +245,14 @@ sdhci_acpi_attach(device_t dev)
 		goto error;
 	}
 
+	/* Allocate GPIO IRQs and IO Pins */
+	rid = 0;
+	sc->gpio_irq_res = bus_alloc_resource_any(dev, SYS_RES_GPIO_IRQ, &rid,
+		RF_ACTIVE);
+	rid = 0;
+	sc->gpio_io_res = bus_alloc_resource_any(dev, SYS_RES_GPIO_IO, &rid,
+		RF_ACTIVE);
+
 	pci_set_powerstate(dev, PCI_POWERSTATE_D0);
 
 	sc->slot.quirks = quirks;
@@ -270,6 +283,14 @@ error:
 	if (sc->mem_res != NULL) {
 		bus_release_resource(dev, SYS_RES_MEMORY,
 		    rman_get_rid(sc->mem_res), sc->mem_res);
+	}
+	if (sc->gpio_irq_res != NULL) {
+		bus_release_resource(dev, SYS_RES_GPIO_IRQ,
+		    rman_get_rid(sc->gpio_irq_res), sc->gpio_irq_res);
+	}
+	if (sc->gpio_io_res != NULL) {
+		bus_release_resource(dev, SYS_RES_GPIO_IO,
+		    rman_get_rid(sc->gpio_io_res), sc->gpio_io_res);
 	}
 	return (err);
 }
