@@ -234,6 +234,14 @@ ACPI_SERIAL_DECL(acpi, "ACPI serializer");
 /* Local pools for managing system resources for ACPI child devices. */
 static struct rman acpi_rman_io, acpi_rman_mem;
 
+struct acpi_rman_provided {
+	struct rman			*rm;
+	SLIST_ENTRY(acpi_rman_provided)	link;
+	int				type;
+};
+static SLIST_HEAD(, acpi_rman_provided) acpi_rmans =
+    SLIST_HEAD_INITIALIZER(acpi_rmans);
+
 #define ACPI_MINIMUM_AWAKETIME	5
 
 static const char* sleep_state_names[] = {
@@ -1107,6 +1115,39 @@ acpi_sysres_alloc(device_t dev)
     }
     return (0);
 }
+
+void
+acpi_register_rman(struct rman *rm, int type)
+{
+	struct acpi_rman_provided *e =
+	    kmalloc(sizeof(struct acpi_rman_provided), M_ACPIDEV,
+	    M_WAITOK | M_ZERO);
+	e->rm = rm;
+	e->type = type;
+	ACPI_SERIAL_BEGIN(acpi);
+	SLIST_INSERT_HEAD(&acpi_rmans, e, link);
+	ACPI_SERIAL_END(acpi);
+}
+
+static struct rman *
+acpi_find_rman(int type, u_long start, device_t provider)
+{
+	struct acpi_rman_provided *e;
+
+	ACPI_SERIAL_ASSERT(acpi);
+	SLIST_FOREACH(e, &acpi_rmans, link) {
+		if (e->rm->rm_provider == provider && e->type == type &&
+		    e->rm->rm_start <= start && e->rm->rm_end >= start) {
+			return e->rm;
+		}
+	}
+	return NULL;
+}
+
+/*
+ * TODO: Add acpi_unregister_rman(struct rman *rm, int type).
+ *       This should fail if anything is currently allocated.
+ */
 
 static struct resource *
 acpi_alloc_resource(device_t bus, device_t child, int type, int *rid,
