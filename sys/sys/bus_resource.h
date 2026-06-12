@@ -42,5 +42,8 @@
 #define	SYS_RES_DRQ	2	/* isa dma lines */
 #define	SYS_RES_MEMORY	3	/* i/o memory */
 #define	SYS_RES_IOPORT	4	/* i/o ports */
+#define	SYS_RES_GPIO_IO	5	/* gpio i/o pin */
+#define	SYS_RES_GPIO_IRQ 6	/* gpio pin interrupt */
+#define	SYS_RES_I2C	7	/* I2C addresses */
 
 #endif /* !_SYS_BUS_RESOURCE_H_ */

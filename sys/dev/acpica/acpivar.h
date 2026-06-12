@@ -399,6 +399,12 @@ struct acpi_parse_resource_set {
 		    int count, int trig, int pol);
     void	(*set_drq)(device_t dev, void *context, uint8_t *drq,
 		    int count);
+    void	(*set_i2c)(device_t dev, void *context, uint16_t addr,
+		    int count, device_t provider);
+    void	(*set_gpio_io)(device_t dev, void *context, int pin, int count,
+		    device_t provider);
+    void	(*set_gpio_irq)(device_t dev, void *context, int pin,
+		    int count, device_t provider);
     void	(*set_start_dependent)(device_t dev, void *context,
 		    int preference);
     void	(*set_end_dependent)(device_t dev, void *context);

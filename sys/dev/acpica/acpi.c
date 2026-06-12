@@ -871,6 +871,9 @@ acpi_print_child(device_t bus, device_t child)
     retval += resource_list_print_type(rl, "iomem", SYS_RES_MEMORY, "%#lx");
     retval += resource_list_print_type(rl, "irq",   SYS_RES_IRQ,    "%ld");
     retval += resource_list_print_type(rl, "drq",   SYS_RES_DRQ,    "%ld");
+    retval += resource_list_print_type(rl, "gpio_io", SYS_RES_GPIO_IO, "%ld");
+    retval += resource_list_print_type(rl, "gpio_irq", SYS_RES_GPIO_IRQ, "%ld");
+    retval += resource_list_print_type(rl, "i2c",   SYS_RES_I2C,    "%ld");
     if (device_get_flags(child))
 	retval += kprintf(" flags %#x", device_get_flags(child));
     retval += bus_print_child_footer(bus, child);
