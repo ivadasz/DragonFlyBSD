@@ -41,6 +41,7 @@
 #include <sys/errno.h>
 #include <sys/lock.h>
 #include <sys/bus.h>
+#include <sys/rman.h>
 
 #include "opt_acpi.h"
 #include "acpi.h"
@@ -66,6 +67,8 @@ struct smbus_acpi_softc {
 	device_t dev;
 	device_t parent;
 	struct acpi_i2c_handler_data space_handler_data;
+	struct rman rm;
+	char rman_descr[RM_TEXTLEN];
 };
 
 static int	smbus_acpi_probe(device_t dev);
@@ -260,6 +263,19 @@ smbus_acpi_attach(device_t dev)
 	sc->dev = dev;
 	sc->parent = device_get_parent(dev);
 
+	sc->rm.rm_type = RMAN_ARRAY;
+	sc->rm.rm_start = 0;
+	sc->rm.rm_end = 0x7f;
+	ksnprintf(sc->rman_descr, sizeof(sc->rman_descr),
+	    "ACPI I2C Bus: %s", device_get_nameunit(sc->parent));
+	sc->rm.rm_descr = sc->rman_descr;
+	if (rman_init(&sc->rm, -1) != 0)
+		panic("acpi rman_init I2C Serial Bus failed");
+	// rman_init() defaults rm_provider to NULL
+	sc->rm.rm_provider = sc->parent;
+	rman_manage_region(&sc->rm, 0, 0x7f);
+	acpi_register_rman(&sc->rm, SYS_RES_I2C);
+
 	smbus_acpi_install_address_space_handler(sc);
 
 	return (0);
@@ -269,6 +285,8 @@ static int
 smbus_acpi_detach(device_t dev)
 {
 	struct smbus_acpi_softc *sc = device_get_softc(dev);
+
+	/* TODO: Clean up sc->rm */
 
 	smbus_acpi_remove_address_space_handler(sc);
 
