@@ -1747,6 +1747,24 @@ sdhci_adma_irq(struct sdhci_slot *slot)
 }
 
 void
+sdhci_card_removed(struct sdhci_slot *slot, int inserted)
+{
+	SDHCI_LOCK(slot);
+	if (inserted) {
+		if (bootverbose || sdhci_debug)
+			slot_printf(slot, "Card inserted\n");
+		callout_reset(&slot->card_callout, hz / 2,
+		    sdhci_card_delay, slot);
+	} else {
+		if (bootverbose || sdhci_debug)
+			slot_printf(slot, "Card removed\n");
+		callout_stop(&slot->card_callout);
+		taskqueue_enqueue(taskqueue_swi_mp, &slot->card_task);
+	}
+	SDHCI_UNLOCK(slot);
+}
+
+void
 sdhci_generic_intr(struct sdhci_slot *slot)
 {
 	uint32_t intmask;
@@ -1767,16 +1785,10 @@ sdhci_generic_intr(struct sdhci_slot *slot)
 		    (SDHCI_INT_CARD_INSERT | SDHCI_INT_CARD_REMOVE));
 
 		if (intmask & SDHCI_INT_CARD_REMOVE) {
-			if (bootverbose || sdhci_debug)
-				slot_printf(slot, "Card removed\n");
-			callout_stop(&slot->card_callout);
-			taskqueue_enqueue(taskqueue_swi_mp, &slot->card_task);
+			sdhci_card_removed(slot, 0);
 		}
 		if (intmask & SDHCI_INT_CARD_INSERT) {
-			if (bootverbose || sdhci_debug)
-				slot_printf(slot, "Card inserted\n");
-			callout_reset(&slot->card_callout, hz / 2,
-			    sdhci_card_delay, slot);
+			sdhci_card_removed(slot, 1);
 		}
 		intmask &= ~(SDHCI_INT_CARD_INSERT | SDHCI_INT_CARD_REMOVE);
 	}
