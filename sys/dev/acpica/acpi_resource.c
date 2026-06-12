@@ -46,64 +46,97 @@
 #define _COMPONENT	ACPI_BUS
 ACPI_MODULE_NAME("RESOURCE")
 
-struct lookup_irq_request {
+struct lookup_resource_request {
     ACPI_RESOURCE *acpi_res;
     struct resource *res;
     int		counter;
     int		rid;
+    int		type;
     int		found;
 };
 
 static ACPI_STATUS
-acpi_lookup_irq_handler(ACPI_RESOURCE *res, void *context)
+acpi_lookup_resource_handler(ACPI_RESOURCE *res, void *context)
 {
-    struct lookup_irq_request *req;
+    struct lookup_resource_request *req =
+	(struct lookup_resource_request *)context;
     size_t len;
-    u_int irqnum;
-    u_int irq __debugvar;
+    u_int count;
+    u_int addr __debugvar;
 
     switch (res->Type) {
     case ACPI_RESOURCE_TYPE_IRQ:
-	irqnum = res->Data.Irq.InterruptCount;
-	irq = res->Data.Irq.Interrupts[0];
+	if (req->type != SYS_RES_IRQ)
+	    return (AE_OK);
+	count = res->Data.Irq.InterruptCount;
+	addr = res->Data.Irq.Interrupts[0];
 	len = ACPI_RS_SIZE(ACPI_RESOURCE_IRQ);
 	break;
     case ACPI_RESOURCE_TYPE_EXTENDED_IRQ:
-	irqnum = res->Data.ExtendedIrq.InterruptCount;
-	irq = res->Data.ExtendedIrq.Interrupts[0];
+	if (req->type != SYS_RES_IRQ)
+	    return (AE_OK);
+	count = res->Data.ExtendedIrq.InterruptCount;
+	addr = res->Data.ExtendedIrq.Interrupts[0];
 	len = ACPI_RS_SIZE(ACPI_RESOURCE_EXTENDED_IRQ);
+	break;
+    case ACPI_RESOURCE_TYPE_SERIAL_BUS:
+	if (req->type != SYS_RES_I2C)
+	    return (AE_OK);
+	if (res->Data.I2cSerialBus.Type != ACPI_RESOURCE_SERIAL_TYPE_I2C)
+	    return (AE_OK);
+	if (res->Data.I2cSerialBus.AccessMode != ACPI_I2C_7BIT_MODE)
+	    return (AE_OK);
+	count = 1;
+	addr = res->Data.I2cSerialBus.SlaveAddress;
+	len = ACPI_RS_SIZE(ACPI_RESOURCE_I2C_SERIALBUS);
+	/* TODO: Verify that ResourceName points us at the same device_t. */
+	break;
+    case ACPI_RESOURCE_TYPE_GPIO:
+	if (req->type == SYS_RES_GPIO_IRQ) {
+	    if (res->Data.Gpio.ConnectionType != ACPI_RESOURCE_GPIO_TYPE_INT)
+		return (AE_OK);
+	} else if (req->type == SYS_RES_GPIO_IO) {
+	    if (res->Data.Gpio.ConnectionType != ACPI_RESOURCE_GPIO_TYPE_IO)
+		return (AE_OK);
+	} else {
+	    return (AE_OK);
+	}
+	count = res->Data.Gpio.PinTableLength;
+	addr = res->Data.Gpio.PinTable[0];
+	len = ACPI_RS_SIZE(ACPI_RESOURCE_GPIO);
 	break;
     default:
 	return (AE_OK);
     }
-    if (irqnum != 1)
+    if (count != 1)
 	return (AE_OK);
-    req = (struct lookup_irq_request *)context;
     if (req->counter != req->rid) {
 	req->counter++;
 	return (AE_OK);
     }
     req->found = 1;
-    KASSERT(irq == rman_get_start(req->res),
-	("IRQ resources do not match"));
+    KASSERT(addr == rman_get_start(req->res),
+	("Resources do not match"));
     bcopy(res, req->acpi_res, len);
     return (AE_CTRL_TERMINATE);
 }
 
 ACPI_STATUS
-acpi_lookup_irq_resource(device_t dev, int rid, struct resource *res,
+acpi_lookup_resource(device_t dev, int rid, int type, struct resource *res,
     ACPI_RESOURCE *acpi_res)
 {
-    struct lookup_irq_request req;
+    struct lookup_resource_request req;
     ACPI_STATUS status;
 
     req.acpi_res = acpi_res;
     req.res = res;
     req.counter = 0;
     req.rid = rid;
+    req.type = type;
     req.found = 0;
+
     status = AcpiWalkResources(acpi_get_handle(dev), "_CRS",
-	acpi_lookup_irq_handler, &req);
+	acpi_lookup_resource_handler, &req);
     if (ACPI_SUCCESS(status) && req.found == 0)
 	status = AE_NOT_FOUND;
     return (status);

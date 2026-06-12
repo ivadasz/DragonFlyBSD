@@ -414,7 +414,7 @@ struct acpi_parse_resource_set {
 extern struct	acpi_parse_resource_set acpi_res_parse_set;
 
 void		acpi_config_intr(device_t dev, ACPI_RESOURCE *res);
-ACPI_STATUS	acpi_lookup_irq_resource(device_t dev, int rid,
+ACPI_STATUS	acpi_lookup_resource(device_t dev, int rid, int type,
 		    struct resource *res, ACPI_RESOURCE *acpi_res);
 ACPI_STATUS	acpi_parse_resources(device_t dev, ACPI_HANDLE handle,
 		    struct acpi_parse_resource_set *set, void *arg);
